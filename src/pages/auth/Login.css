@@ -1,0 +1,135 @@
+/* Bố cục tổng thể */
+.auth-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Phần form bên trái */
+.auth-form-side {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  background-color: #ffffff;
+}
+
+.auth-form-card {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* Header (Logo & Subtitle) */
+.auth-header {
+  margin-bottom: 30px;
+  text-align: left;
+}
+
+.auth-title {
+  color: #00a3ff;
+  margin: 0;
+  font-size: 36px;
+  font-weight: bold;
+}
+
+.auth-subtitle {
+  color: #00a3ff;
+  margin: 0;
+}
+
+/* Quên mật khẩu */
+.forgot-password-wrapper {
+  margin-bottom: 20px;
+  text-align: right;
+}
+
+.forgot-password-link {
+  color: #333;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.forgot-password-link:hover {
+  color: #00a3ff;
+}
+
+/* Custom Input & Buttons */
+.custom-input {
+  border-radius: 6px;
+}
+
+.btn-primary-blue {
+  background-color: #00a3ff;
+  border-color: #00a3ff;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.btn-primary-blue:hover {
+  background-color: #008be6 !important;
+  border-color: #008be6 !important;
+}
+
+/* Divider đăng nhập xã hội */
+.social-divider {
+  margin-top: 25px;
+  margin-bottom: 25px;
+  color: #666;
+  text-align: center;
+  font-size: 14px;
+}
+
+/* Nút đăng nhập mạng xã hội */
+.social-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-google, .btn-facebook {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 6px;
+}
+
+/* Nút chuyển sang đăng ký */
+.register-wrapper {
+  margin-top: 30px;
+  text-align: center;
+}
+
+.register-link {
+  color: #333;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.register-link:hover {
+  color: #00a3ff;
+}
+
+/* Phần hình ảnh bên phải */
+.auth-image-side {
+  flex: 1;
+  background-color: #f0f2f5; /* Màu nền tạm thời */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.image-placeholder {
+  color: #999;
+  font-size: 18px;
+}
+
+/* Responsive cơ bản cho màn hình nhỏ */
+@media (max-width: 768px) {
+  .auth-image-side {
+    display: none; /* Ẩn hình ảnh trên điện thoại */
+  }
+}

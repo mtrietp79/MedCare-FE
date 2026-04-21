@@ -1,0 +1,132 @@
+/* Doctors.css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg-main: #f8f9fa;
+  --bg-sidebar: #ffffff;
+  --bg-card: #ffffff;
+  --text-primary: #1a1b1f;
+  --text-secondary: #6b7280;
+  --border-color: #e5e7eb;
+  --primary-blue: #0ea5e9;
+  --primary-blue-hover: #0284c7;
+  --success-green: #10b981;
+  --success-bg: #d1fae5;
+  --star-yellow: #f59e0b;
+  --font-family: 'Inter', sans-serif;
+}
+
+/* Kế thừa các style chung từ các trang trước */
+.dashboard-container { display: flex; height: 100vh; overflow: hidden; }
+.main-content { flex: 1; display: flex; flex-direction: column; overflow-y: auto; background-color: var(--bg-main); }
+.content-wrapper { padding: 32px; display: flex; flex-direction: column; gap: 24px; }
+
+/* Header & Controls */
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.page-title-group h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+.page-title-group p { color: var(--text-secondary); font-size: 14px; }
+
+.controls-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+}
+
+.search-box svg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 16px 10px 42px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+
+.filter-select {
+  padding: 10px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: white;
+  font-size: 14px;
+  color: var(--text-primary);
+  min-width: 180px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Doctor Table Styles */
+.doctor-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.doctor-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background-color: #f3f4f6;
+  border: 1px solid var(--border-color);
+}
+
+.rating-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.star-icon {
+  color: var(--star-yellow);
+  fill: var(--star-yellow);
+}
+
+.appointment-count {
+  background-color: #f1f5f9;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #64748b;
+  display: inline-block;
+}
+
+.status-active {
+  background-color: var(--success-bg);
+  color: #047857;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Buttons (Re-use from previous) */
+.btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--primary-blue);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.action-btns { display: flex; gap: 8px; }
+.btn-icon { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 6px; border-radius: 6px; }
+.btn-icon:hover { background-color: #f1f5f9; }
+.btn-icon.delete:hover { color: #ef4444; background-color: #fee2e2; }

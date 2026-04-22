@@ -1,0 +1,31 @@
+/* Patient Chart Styles */
+.chartContainer {
+  height: 400px;
+}
+
+.chartLabel {
+  font-size: 12px;
+}
+
+/* Axis and grid styling */
+.axisStroke {
+  stroke: #6b7280;
+}
+
+.gridStroke {
+  stroke: #e5e7eb;
+}
+
+/* Bar styling */
+.barRadius {
+  border-radius: 8px 8px 0 0;
+}
+
+/* Tooltip styling */
+.tooltipFormat {
+  font-size: 13px;
+  padding: 8px;
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}

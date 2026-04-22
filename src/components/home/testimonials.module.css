@@ -1,0 +1,119 @@
+/* Testimonials Section Styles */
+.testimonialsContainer {
+  padding: 3rem 1rem;
+  background-color: hsl(var(--background));
+}
+
+.testimonialsContent {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.testimonialsHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.testimonialsTitle {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: hsl(var(--foreground));
+}
+
+.testimonialsDescription {
+  font-size: 1rem;
+  color: hsl(var(--muted-foreground));
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.testimonialGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+.testimonialCard {
+  padding: 2rem;
+  border-radius: 0.75rem;
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.testimonialHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.testimonialAvatar {
+  width: 3rem;
+  height: 3rem;
+  background-color: hsl(var(--primary) / 0.1);
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: hsl(var(--primary));
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+.testimonialInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.testimonialName {
+  font-weight: 700;
+  color: hsl(var(--foreground));
+}
+
+.testimonialRole {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.testimonialRating {
+  display: flex;
+  gap: 0.25rem;
+  color: #fbbf24;
+}
+
+.testimonialText {
+  font-size: 0.95rem;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.6;
+  font-style: italic;
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .testimonialsContainer {
+    padding: 4rem 1rem;
+  }
+
+  .testimonialsTitle {
+    font-size: 2.25rem;
+  }
+
+  .testimonialGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .testimonialsContainer {
+    padding: 5rem 1rem;
+  }
+
+  .testimonialGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

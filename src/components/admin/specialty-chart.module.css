@@ -1,0 +1,34 @@
+/* Specialty Chart Styles */
+.chartContainer {
+  height: 400px;
+}
+
+.pieChart {
+  width: 100%;
+  height: 100%;
+}
+
+/* Pie styling */
+.pieLabelLine {
+  display: none;
+}
+
+.pieLabel {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Tooltip styling */
+.tooltipFormat {
+  font-size: 13px;
+  padding: 8px;
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+/* Legend styling */
+.legend {
+  padding-top: 16px;
+  font-size: 12px;
+}

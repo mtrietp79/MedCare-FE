@@ -1,0 +1,103 @@
+/* Specialty Section Styles */
+.specialtyContainer {
+  padding: 3rem 1rem;
+  background-color: hsl(var(--background));
+}
+
+.specialtyContent {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.specialtyHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.specialtyTitle {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: hsl(var(--foreground));
+}
+
+.specialtyDescription {
+  font-size: 1rem;
+  color: hsl(var(--muted-foreground));
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.specialtyGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1.5rem;
+}
+
+.specialtyCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  border-radius: 0.75rem;
+  border: 1px solid hsl(var(--border));
+  background-color: hsl(var(--card));
+  transition: all 0.3s;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.specialtyCard:hover {
+  border-color: hsl(var(--primary));
+  background-color: hsl(var(--primary) / 0.05);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px hsl(var(--primary) / 0.1);
+}
+
+.specialtyIcon {
+  width: 3rem;
+  height: 3rem;
+  background-color: hsl(var(--primary) / 0.1);
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--primary));
+}
+
+.specialtyName {
+  font-weight: 600;
+  text-align: center;
+  color: hsl(var(--foreground));
+}
+
+.specialtyCount {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .specialtyContainer {
+    padding: 4rem 1rem;
+  }
+
+  .specialtyTitle {
+    font-size: 2.25rem;
+  }
+
+  .specialtyGrid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .specialtyContainer {
+    padding: 5rem 1rem;
+  }
+
+  .specialtyGrid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+}

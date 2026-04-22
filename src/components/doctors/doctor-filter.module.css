@@ -1,0 +1,78 @@
+/* Doctor Filter Styles */
+.filterContainer {
+  padding: 2rem;
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.filterTitle {
+  font-size: 1rem;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+}
+
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.filterLabel {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.filterSelect {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.filterSelect:hover,
+.filterSelect:focus {
+  border-color: hsl(var(--primary));
+  outline: none;
+}
+
+.filterButton {
+  padding: 0.75rem 1.5rem;
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: none;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.filterButton:hover {
+  opacity: 0.9;
+}
+
+.filterReset {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.filterReset:hover {
+  background-color: hsl(var(--muted) / 0.8);
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .filterContainer {
+    position: sticky;
+    top: 100px;
+  }
+}

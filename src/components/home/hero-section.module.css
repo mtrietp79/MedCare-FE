@@ -1,0 +1,82 @@
+/* Hero Section Styles */
+.heroContainer {
+  background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
+  padding: 4rem 1rem;
+}
+
+.heroContent {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+  align-items: center;
+}
+
+.heroText {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.heroTitle {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: hsl(var(--foreground));
+}
+
+.heroDescription {
+  font-size: 1rem;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.6;
+}
+
+.heroActions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.heroImage {
+  width: 100%;
+  max-width: 500px;
+  height: auto;
+}
+
+.searchContainer {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .heroContainer {
+    padding: 6rem 1rem;
+  }
+
+  .heroContent {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .heroTitle {
+    font-size: 2.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .heroContainer {
+    padding: 8rem 1rem;
+  }
+
+  .heroTitle {
+    font-size: 3rem;
+  }
+}

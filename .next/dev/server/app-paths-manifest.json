@@ -1,0 +1,7 @@
+{
+  "/(auth)/dang-ky/page": "app/(auth)/dang-ky/page.js",
+  "/(auth)/dang-nhap/page": "app/(auth)/dang-nhap/page.js",
+  "/(main)/bac-si/page": "app/(main)/bac-si/page.js",
+  "/(main)/page": "app/(main)/page.js",
+  "/_not-found/page": "app/_not-found/page.js"
+}

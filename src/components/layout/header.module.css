@@ -1,0 +1,184 @@
+/* Header Styles */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  border-bottom: 1px solid hsl(var(--border));
+  background-color: hsl(var(--background) / 0.95);
+  backdrop-filter: blur(12px);
+}
+
+.nav {
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.navContainer {
+  display: flex;
+  height: 4rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
+.logoIcon {
+  width: 2.25rem;
+  height: 2.25rem;
+  background-color: hsl(var(--primary));
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logoText {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+}
+
+.desktopNav {
+  display: none;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.navLink {
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.navLink.active {
+  color: hsl(var(--primary));
+  background-color: hsl(var(--primary) / 0.1);
+}
+
+.navLink:not(.active) {
+  color: hsl(var(--muted-foreground));
+}
+
+.navLink:not(.active):hover {
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--muted));
+}
+
+.desktopAuth {
+  display: none;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.userButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.userAvatar {
+  width: 2rem;
+  height: 2rem;
+  background-color: hsl(var(--primary) / 0.1);
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobileMenuButton {
+  padding: 0.5rem;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.mobileMenuContent {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.mobileNav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.mobileNavLink {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.mobileNavLink.active {
+  color: hsl(var(--primary));
+  background-color: hsl(var(--primary) / 0.1);
+}
+
+.mobileNavLink:not(.active) {
+  color: hsl(var(--muted-foreground));
+}
+
+.mobileNavLink:not(.active):hover {
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--muted));
+}
+
+.mobileAuthSection {
+  border-top: 1px solid hsl(var(--border));
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.userInfo {
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.userDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.userName {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.userEmail {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Responsive */
+@media (min-width: 768px) {
+  .desktopNav {
+    display: flex;
+  }
+
+  .desktopAuth {
+    display: flex;
+  }
+
+  .mobileMenuButton {
+    display: none;
+  }
+}

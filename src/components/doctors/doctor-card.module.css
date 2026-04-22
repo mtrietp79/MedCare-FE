@@ -1,0 +1,136 @@
+/* Doctor Card Styles */
+.doctorCard {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background-color: hsl(var(--card));
+  transition: all 0.3s;
+  cursor: pointer;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.doctorCard:hover {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 10px 25px hsl(var(--primary) / 0.15);
+  transform: translateY(-4px);
+}
+
+.doctorImage {
+  width: 100%;
+  height: 250px;
+  object-fit: cover;
+  background-color: hsl(var(--muted));
+}
+
+.doctorContent {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  flex: 1;
+}
+
+.doctorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.doctorInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.doctorName {
+  font-weight: 700;
+  font-size: 1rem;
+  color: hsl(var(--foreground));
+}
+
+.doctorSpecialty {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.doctorRating {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.ratingStars {
+  color: #fbbf24;
+}
+
+.ratingValue {
+  color: hsl(var(--muted-foreground));
+}
+
+.doctorBio {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.5;
+}
+
+.doctorStats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.statItem {
+  text-align: center;
+}
+
+.statValue {
+  display: block;
+  font-weight: 700;
+  color: hsl(var(--primary));
+}
+
+.statLabel {
+  display: block;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.doctorActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.doctorButton {
+  flex: 1;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid hsl(var(--border));
+  background-color: transparent;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.doctorButton:hover {
+  background-color: hsl(var(--primary) / 0.05);
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  background-color: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}

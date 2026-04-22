@@ -1,0 +1,75 @@
+/* Admin Layout Styles */
+.layoutContainer {
+  display: flex;
+  height: 100vh;
+  background-color: #f9fafb;
+}
+
+.sidebar {
+  width: 280px;
+  background-color: #ffffff;
+  border-right: 1px solid #e5e7eb;
+  overflow-y: auto;
+  padding: 20px 0;
+}
+
+.mainContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.header {
+  background-color: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.headerTitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.toggleButton {
+  padding: 8px;
+  background-color: transparent;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.toggleButton:hover {
+  background-color: #f3f4f6;
+}
+
+.content {
+  flex: 1;
+  padding: 24px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.3s;
+  }
+
+  .sidebar.active {
+    transform: translateX(0);
+  }
+
+  .layoutContainer {
+    flex-direction: column;
+  }
+}

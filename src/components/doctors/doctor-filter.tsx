@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Search, SlidersHorizontal } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -17,7 +18,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
-import { specialties } from '@/lib/mock-data'
+import type { Specialty } from '@/types'
+import { api } from '@/services/api'
 
 interface DoctorFilterProps {
   searchQuery: string
@@ -36,6 +38,27 @@ export function DoctorFilter({
   sortBy,
   onSortChange,
 }: DoctorFilterProps) {
+  const [specialties, setSpecialties] = useState<Specialty[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchSpecialties = async () => {
+      try {
+        setLoading(true)
+        const data = await api.specialties.getAll()
+        setSpecialties(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load specialties')
+        console.error('Error fetching specialties:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchSpecialties()
+  }, [])
+
   const FilterContent = () => (
     <div className="space-y-4">
       <div>
@@ -48,11 +71,17 @@ export function DoctorFilter({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tất cả chuyên khoa</SelectItem>
-            {specialties.map((specialty) => (
-              <SelectItem key={specialty.id} value={specialty.slug}>
-                {specialty.name}
-              </SelectItem>
-            ))}
+            {loading ? (
+              <SelectItem value="" disabled>Đang tải...</SelectItem>
+            ) : error ? (
+              <SelectItem value="" disabled>Lỗi tải dữ liệu</SelectItem>
+            ) : (
+              specialties.map((specialty) => (
+                <SelectItem key={specialty.id} value={specialty.slug}>
+                  {specialty.name}
+                </SelectItem>
+              ))
+            )}
           </SelectContent>
         </Select>
       </div>

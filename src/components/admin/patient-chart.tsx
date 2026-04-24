@@ -1,11 +1,16 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { monthlyPatientData } from '@/lib/mock-data'
+import { api } from '@/services/api'
 
 export function PatientChart() {
+  const [monthlyData, setMonthlyData] = useState<Array<{ month: string; patients: number }>>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
   // Gradient colors from light to dark blue
   const chartColors = [
     '#e0f2fe', // sky-100
@@ -21,6 +26,49 @@ export function PatientChart() {
     '#082f49', // back to sky-900
     '#0a3e62', // custom dark blue
   ]
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        const data = await api.analytics.getMonthlyPatientData()
+        setMonthlyData(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data')
+        console.error('Error fetching monthly patient data:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  if (loading) {
+    return (
+      <Card className="w-full">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Số lượng bệnh nhân theo tháng</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          Đang tải...
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="w-full">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Số lượng bệnh nhân theo tháng</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 text-center text-red-500">
+          Lỗi: {error}
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card className="w-full">
@@ -39,7 +87,7 @@ export function PatientChart() {
         >
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={monthlyPatientData}
+              data={monthlyData}
               margin={{ top: 10, right: 20, left: -20, bottom: 0 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
@@ -67,7 +115,7 @@ export function PatientChart() {
                 radius={[6, 6, 0, 0]}
                 fill="#0ea5e9"
               >
-                {monthlyPatientData.map((entry, index) => (
+                {monthlyData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
                 ))}
               </Bar>

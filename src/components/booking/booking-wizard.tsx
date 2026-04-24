@@ -13,8 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { doctors, specialties } from '@/lib/mock-data'
-import type { BookingFormData, Doctor } from '@/types'
+import { api } from '@/services/api'
+import type { BookingFormData, Doctor, Specialty } from '@/types'
 
 const steps = [
   { id: 1, name: 'Chọn chuyên khoa', shortName: 'Chuyên khoa' },
@@ -39,13 +39,40 @@ export function BookingWizard() {
     notes: '',
   })
 
+  const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [specialties, setSpecialties] = useState<Specialty[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Fetch specialties and doctors
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        const [doctorsData, specialtiesData] = await Promise.all([
+          api.doctors.getAll(),
+          api.specialties.getAll(),
+        ])
+        setDoctors(doctorsData)
+        setSpecialties(specialtiesData)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data')
+        console.error('Error fetching data:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
   // Pre-fill from URL params if coming from doctor detail page
   useEffect(() => {
     const doctorId = searchParams.get('doctor')
     const date = searchParams.get('date')
     const time = searchParams.get('time')
 
-    if (doctorId) {
+    if (doctorId && doctors.length > 0) {
       const doctor = doctors.find((d) => d.id === doctorId)
       if (doctor) {
         setFormData((prev) => ({
@@ -65,7 +92,7 @@ export function BookingWizard() {
         }
       }
     }
-  }, [searchParams])
+  }, [searchParams, doctors])
 
   const selectedDoctor = doctors.find((d) => d.id === formData.doctorId)
   const filteredDoctors = formData.specialtyId
@@ -125,6 +152,22 @@ export function BookingWizard() {
       month: 'numeric',
       year: 'numeric',
     })
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-muted-foreground">Đang tải...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-red-500">Lỗi: {error}</p>
+      </div>
+    )
   }
 
   return (

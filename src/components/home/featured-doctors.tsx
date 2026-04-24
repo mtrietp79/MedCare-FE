@@ -1,14 +1,36 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DoctorCard } from '@/components/doctors/doctor-card'
-import { doctors } from '@/lib/mock-data'
+import type { Doctor } from '@/types'
+import { api } from '@/services/api'
 
 export function FeaturedDoctors() {
-  // Show top 4 doctors by rating
-  const featuredDoctors = [...doctors]
-    .sort((a, b) => b.rating - a.rating)
-    .slice(0, 4)
+  const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        setLoading(true)
+        const data = await api.doctors.getAll()
+        // Sort by rating and get top 4
+        const featuredDoctors = [...data]
+          .sort((a, b) => b.rating - a.rating)
+          .slice(0, 4)
+        setDoctors(featuredDoctors)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load doctors')
+        console.error('Error fetching doctors:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDoctors()
+  }, [])
 
   return (
     <section className="py-16 md:py-24 bg-secondary/30">
@@ -31,12 +53,35 @@ export function FeaturedDoctors() {
           </Button>
         </div>
 
+        {/* Error State */}
+        {error && (
+          <div className="text-center text-red-500 mb-8">
+            <p>Lỗi: {error}</p>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center text-muted-foreground mb-8">
+            <p>Đang tải...</p>
+          </div>
+        )}
+
         {/* Doctors Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {featuredDoctors.map((doctor) => (
-            <DoctorCard key={doctor.id} doctor={doctor} />
-          ))}
-        </div>
+        {!loading && doctors.length > 0 && (
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {doctors.map((doctor) => (
+              <DoctorCard key={doctor.id} doctor={doctor} />
+            ))}
+          </div>
+        )}
+
+        {/* No Data State */}
+        {!loading && doctors.length === 0 && !error && (
+          <div className="text-center text-muted-foreground">
+            <p>Không có bác sĩ nào</p>
+          </div>
+        )}
       </div>
     </section>
   )

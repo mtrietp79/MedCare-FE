@@ -1,11 +1,16 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { patientsBySpecialty } from '@/lib/mock-data'
+import { api } from '@/services/api'
 
 export function SpecialtyChart() {
+  const [patientsBySpecialty, setPatientsBySpecialty] = useState<Array<{ specialty: string; patients: number }>>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
   // Medical specialty colors - each has unique color
   const COLORS = [
     '#ef4444', // Nội khoa - Red (general medicine)
@@ -17,6 +22,49 @@ export function SpecialtyChart() {
     '#8b5cf6', // Thần kinh - Purple (neurology)
     '#ec4899', // Mắt - Pink (ophthalmology)
   ]
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        const data = await api.analytics.getPatientsBySpecialty()
+        setPatientsBySpecialty(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data')
+        console.error('Error fetching patients by specialty:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  if (loading) {
+    return (
+      <Card className="w-full">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Số lượng bệnh nhân theo chuyên khoa</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 text-center text-muted-foreground">
+          Đang tải...
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="w-full">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Số lượng bệnh nhân theo chuyên khoa</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 text-center text-red-500">
+          Lỗi: {error}
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card className="w-full">

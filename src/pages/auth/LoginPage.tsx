@@ -1,26 +1,51 @@
 import { useNavigate, Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Eye, EyeOff, Mail, Lock, Heart } from 'lucide-react'
+import { useAuth } from '@/context/AuthContext'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const { login, socialLogin } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
-    email: '',
+    username: '',
     password: '',
     remember: false,
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
     setIsLoading(true)
 
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    try {
+      await login({ username: formData.username, password: formData.password })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Đăng nhập thất bại')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-    navigate('/')
-    setIsLoading(false)
+  const loginWithSocial = async (provider: 'google' | 'facebook') => {
+    const token = window.prompt(`Nhập ${provider} token để đăng nhập:`)
+    if (!token) {
+      return
+    }
+
+    setError(null)
+    setIsLoading(true)
+
+    try {
+      await socialLogin(provider, token)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Đăng nhập ${provider} thất bại`)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -85,10 +110,18 @@ export function LoginPage() {
 
           {/* Social */}
           <div className="grid grid-cols-2 gap-3">
-            <button className="border rounded-lg py-2 flex justify-center items-center hover:bg-gray-100">
+            <button
+              type="button"
+              onClick={() => loginWithSocial('google')}
+              className="border rounded-lg py-2 flex justify-center items-center hover:bg-gray-100"
+            >
               Google
             </button>
-            <button className="border rounded-lg py-2 flex justify-center items-center hover:bg-gray-100">
+            <button
+              type="button"
+              onClick={() => loginWithSocial('facebook')}
+              className="border rounded-lg py-2 flex justify-center items-center hover:bg-gray-100"
+            >
               Facebook
             </button>
           </div>
@@ -107,6 +140,11 @@ export function LoginPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error ? (
+              <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+                {error}
+              </div>
+            ) : null}
 
             {/* Email */}
             <div>
@@ -114,13 +152,14 @@ export function LoginPage() {
               <div className="relative mt-1">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
-                  type="email"
-                  placeholder="name@example.com"
+                  type="text"
+                  placeholder="Email hoặc số điện thoại"
                   className="w-full pl-10 pr-3 py-2 border rounded-lg"
-                  value={formData.email}
+                  value={formData.username}
                   onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
+                    setFormData({ ...formData, username: e.target.value })
                   }
+                  required
                 />
               </div>
             </div>
@@ -163,7 +202,7 @@ export function LoginPage() {
                 Ghi nhớ đăng nhập
               </label>
 
-              <Link to="/quen-mat-khau" className="text-blue-600">
+              <Link to="/forgot-password" className="text-blue-600">
                 Quên mật khẩu?
               </Link>
             </div>
@@ -171,7 +210,8 @@ export function LoginPage() {
             {/* Button */}
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-2 rounded-lg"
+              className="w-full bg-blue-600 text-white py-2 rounded-lg disabled:opacity-70"
+              disabled={isLoading}
             >
               {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
             </button>

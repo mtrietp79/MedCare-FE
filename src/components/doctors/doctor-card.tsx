@@ -11,11 +11,15 @@ interface DoctorCardProps {
 }
 
 export function DoctorCard({ doctor, variant = 'default' }: DoctorCardProps) {
+  if (!doctor) {
+    return null
+  }
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND',
-    }).format(amount)
+    }).format(amount ?? 0)
   }
 
   if (variant === 'compact') {

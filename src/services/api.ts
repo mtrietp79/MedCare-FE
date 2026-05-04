@@ -1,34 +1,66 @@
-import type {
-  Doctor,
-  Specialty,
-  Appointment,
-  Patient,
-} from '@/types'
+import type { Doctor, Specialty, Appointment, Patient } from '@/types'
 
 const API_BASE_URL = 'http://localhost:8080/api'
+const TOKEN_KEY = 'medcare_access_token'
 
-// Helper function for API calls
-async function apiCall<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
+function getStoredToken() {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+function removeStoredToken() {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+interface FetchOptions extends RequestInit {
+  headers?: Record<string, string>
+}
+
+async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`
+  const token = getStoredToken()
+
   const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   })
 
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`)
+  const rawText = await response.text()
+  let data: unknown = null
+
+  if (rawText) {
+    try {
+      data = JSON.parse(rawText)
+    } catch (parseError) {
+      if (response.ok) {
+        throw new Error(`Invalid JSON response from ${url}`)
+      }
+      data = rawText
+    }
   }
 
-  return response.json()
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      removeStoredToken()
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
+      throw new Error('Unauthorized. Vui lòng đăng nhập lại.')
+    }
+
+    const message =
+      data && typeof data === 'object' && 'message' in data
+        ? (data as { message: string }).message
+        : `API Error: ${response.status} ${response.statusText}`
+    throw new Error(message)
+  }
+
+  return data as T
 }
 
-// Specialties API
 export const specialtyApi = {
   async getAll(): Promise<Specialty[]> {
     return apiCall<Specialty[]>('/specialties')
@@ -39,7 +71,12 @@ export const specialtyApi = {
   },
 
   async getBySlug(slug: string): Promise<Specialty> {
-    return apiCall<Specialty>(`/specialties/slug/${slug}`)
+    const specialties = await this.getAll()
+    const specialty = specialties.find((item) => item.slug === slug)
+    if (!specialty) {
+      throw new Error('Chuyên khoa không tồn tại')
+    }
+    return specialty
   },
 
   async create(data: Omit<Specialty, 'id'>): Promise<Specialty> {
@@ -63,15 +100,10 @@ export const specialtyApi = {
   },
 }
 
-// Doctors API
 export const doctorApi = {
-  async getAll(query?: {
-    specialty?: string
-    search?: string
-    sort?: string
-  }): Promise<Doctor[]> {
+  async getAll(query?: { specialty?: string; search?: string; sort?: string }): Promise<Doctor[]> {
     const params = new URLSearchParams()
-    if (query?.specialty) params.append('specialty', query.specialty)
+    if (query?.specialty && query.specialty !== 'all') params.append('specialty', query.specialty)
     if (query?.search) params.append('search', query.search)
     if (query?.sort) params.append('sort', query.sort)
 
@@ -107,18 +139,15 @@ export const doctorApi = {
     })
   },
 
-  async getAvailableSlots(doctorId: string): Promise<Doctor> {
-    return apiCall<Doctor>(`/doctors/${doctorId}/slots`)
+  async getAvailableSlots(doctorId: string, date: string): Promise<Array<{ startTime: string; endTime: string; shift: string; maxPatients: number; bookedPatients: number; full: boolean; disabled: boolean }>> {
+    return apiCall<Array<{ startTime: string; endTime: string; shift: string; maxPatients: number; bookedPatients: number; full: boolean; disabled: boolean }>>(
+      `/appointments/doctor/${doctorId}/slots?date=${date}`
+    )
   },
 }
 
-// Appointments API
 export const appointmentApi = {
-  async getAll(query?: {
-    status?: string
-    doctorId?: string
-    patientId?: string
-  }): Promise<Appointment[]> {
+  async getAll(query?: { status?: string; doctorId?: string; patientId?: string }): Promise<Appointment[]> {
     const params = new URLSearchParams()
     if (query?.status) params.append('status', query.status)
     if (query?.doctorId) params.append('doctorId', query.doctorId)
@@ -132,7 +161,7 @@ export const appointmentApi = {
     return apiCall<Appointment>(`/appointments/${id}`)
   },
 
-  async create(data: Omit<Appointment, 'id' | 'createdAt'>): Promise<Appointment> {
+  async create(data: unknown): Promise<Appointment> {
     return apiCall<Appointment>('/appointments', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -152,10 +181,7 @@ export const appointmentApi = {
     })
   },
 
-  async updateStatus(
-    id: string,
-    status: Appointment['status']
-  ): Promise<Appointment> {
+  async updateStatus(id: string, status: Appointment['status']): Promise<Appointment> {
     return apiCall<Appointment>(`/appointments/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
@@ -163,7 +189,6 @@ export const appointmentApi = {
   },
 }
 
-// Patients API
 export const patientApi = {
   async getAll(): Promise<Patient[]> {
     return apiCall<Patient[]>('/patients')
@@ -171,6 +196,10 @@ export const patientApi = {
 
   async getById(id: string): Promise<Patient> {
     return apiCall<Patient>(`/patients/${id}`)
+  },
+
+  async getCurrent(): Promise<Patient> {
+    return apiCall<Patient>('/patients/me')
   },
 
   async create(data: Omit<Patient, 'id'>): Promise<Patient> {
@@ -187,6 +216,13 @@ export const patientApi = {
     })
   },
 
+  async updateCurrent(data: Partial<Patient>): Promise<Patient> {
+    return apiCall<Patient>('/patients/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
   async delete(id: string): Promise<void> {
     return apiCall<void>(`/patients/${id}`, {
       method: 'DELETE',
@@ -194,7 +230,18 @@ export const patientApi = {
   },
 }
 
-// Analytics/Statistics API
+export const feedbackApi = {
+  async getByDoctor(doctorId: string) {
+    return apiCall<any[]>(`/feedbacks/doctor/${doctorId}`)
+  },
+  async create(data: { appointmentId?: string; doctorId: string; rating: number; comment: string }) {
+    return apiCall<any>('/feedbacks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+}
+
 export const analyticsApi = {
   async getMonthlyPatientData(): Promise<Array<{ month: string; patients: number }>> {
     return apiCall<Array<{ month: string; patients: number }>>('/analytics/monthly-patients')
@@ -214,12 +261,12 @@ export const analyticsApi = {
   },
 }
 
-// Export all APIs as a single object
 export const api = {
   specialties: specialtyApi,
   doctors: doctorApi,
   appointments: appointmentApi,
   patients: patientApi,
+  feedbacks: feedbackApi,
   analytics: analyticsApi,
 }
 

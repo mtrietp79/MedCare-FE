@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DoctorCard } from '@/components/doctors/doctor-card'
 import type { Doctor } from '@/types'
 import { api } from '@/services/api'
+import { doctors as fallbackDoctors } from '@/lib/mock-data'
 
 export function FeaturedDoctors() {
   const [doctors, setDoctors] = useState<Doctor[]>([])
@@ -16,14 +17,16 @@ export function FeaturedDoctors() {
       try {
         setLoading(true)
         const data = await api.doctors.getAll()
+        const doctorArray = Array.isArray(data) ? data : fallbackDoctors
         // Sort by rating and get top 4
-        const featuredDoctors = [...data]
-          .sort((a, b) => b.rating - a.rating)
+        const featuredDoctors = [...doctorArray]
+          .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
           .slice(0, 4)
         setDoctors(featuredDoctors)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load doctors')
         console.error('Error fetching doctors:', err)
+        setDoctors(fallbackDoctors.slice(0, 4))
       } finally {
         setLoading(false)
       }

@@ -1,13 +1,16 @@
 import { useNavigate, Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Eye, EyeOff, Mail, Lock, User, Phone, Heart } from 'lucide-react'
+import { useAuth } from '@/context/AuthContext'
 
 export function RegisterPage() {
   const navigate = useNavigate()
+  const { register } = useAuth()
 
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -20,23 +23,34 @@ export function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
 
     if (formData.password !== formData.confirmPassword) {
-      alert('Mật khẩu xác nhận không khớp')
+      setError('Mật khẩu xác nhận không khớp')
       return
     }
 
     if (!formData.agreeTerms) {
-      alert('Bạn phải đồng ý điều khoản')
+      setError('Bạn phải đồng ý điều khoản')
+      return
+    }
+
+    const username = formData.email.trim() || formData.phone.trim()
+    if (!username) {
+      setError('Vui lòng nhập email hoặc số điện thoại')
       return
     }
 
     setIsLoading(true)
 
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    navigate('/login')
-    setIsLoading(false)
+    try {
+      await register({ username, password: formData.password })
+      navigate('/login')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Đăng ký thất bại')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -121,6 +135,11 @@ export function RegisterPage() {
 
           {/* FORM */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error ? (
+              <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+                {error}
+              </div>
+            ) : null}
 
             {/* Name */}
             <div>

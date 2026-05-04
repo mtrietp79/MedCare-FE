@@ -15,23 +15,35 @@ export function DoctorsPage() {
         </div>
         
         <div className="lg:col-span-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Sample doctor cards - replace with actual data */}
             <DoctorCard
-              id="1"
-              name="Dr. Nguyễn Văn A"
-              specialty="Tim mạch"
-              image="/placeholder-user.jpg"
-              rating={4.8}
-              reviews={120}
+              doctor={{
+                id: '1',
+                name: 'Dr. Nguyễn Văn A',
+                specialty: 'Tim mạch',
+                image: '/placeholder-user.jpg',
+                experience: 10,
+                rating: 4.8,
+                reviewCount: 120,
+                education: 'Bác sĩ Chuyên khoa I',
+                hospital: 'Bệnh viện Đa khoa',
+                consultationFee: 450000,
+              }}
             />
             <DoctorCard
-              id="2"
-              name="Dr. Trần Thị B"
-              specialty="Nhi khoa"
-              image="/placeholder-user.jpg"
-              rating={4.9}
-              reviews={95}
+              doctor={{
+                id: '2',
+                name: 'Dr. Trần Thị B',
+                specialty: 'Nhi khoa',
+                image: '/placeholder-user.jpg',
+                experience: 8,
+                rating: 4.9,
+                reviewCount: 95,
+                education: 'Thạc sĩ Y khoa',
+                hospital: 'Bệnh viện Nhi đồng',
+                consultationFee: 420000,
+              }}
             />
           </div>
         </div>

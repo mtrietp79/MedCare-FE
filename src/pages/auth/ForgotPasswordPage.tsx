@@ -1,20 +1,31 @@
 import { useNavigate, Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Mail, ArrowLeft, Heart } from 'lucide-react'
+import { useAuth } from '@/context/AuthContext'
 
 export function ForgotPasswordPage() {
   const navigate = useNavigate()
+  const { forgotPassword } = useAuth()
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+    setSuccess(null)
     setIsLoading(true)
 
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    navigate('/login')
-    setIsLoading(false)
+    try {
+      await forgotPassword({ username: email.trim() })
+      setSuccess('Hướng dẫn đặt lại mật khẩu đã được gửi tới email của bạn.')
+      setTimeout(() => navigate('/login'), 2500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Yêu cầu thất bại. Vui lòng thử lại.')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -108,6 +119,16 @@ export function ForgotPasswordPage() {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
+              {error ? (
+                <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              ) : null}
+              {success ? (
+                <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+                  {success}
+                </div>
+              ) : null}
 
               <div>
                 <label className="text-sm">Email</label>

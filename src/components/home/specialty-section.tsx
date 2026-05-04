@@ -15,6 +15,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import type { Specialty } from '@/types'
 import { api } from '@/services/api'
+import { specialties as fallbackSpecialties } from '@/lib/mock-data'
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Heart,
@@ -37,10 +38,11 @@ export function SpecialtySection() {
       try {
         setLoading(true)
         const data = await api.specialties.getAll()
-        setSpecialties(data)
+        setSpecialties(Array.isArray(data) ? data : fallbackSpecialties)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load specialties')
         console.error('Error fetching specialties:', err)
+        setSpecialties(fallbackSpecialties)
       } finally {
         setLoading(false)
       }
@@ -77,7 +79,7 @@ export function SpecialtySection() {
         )}
 
         {/* Specialty Grid */}
-        {!loading && specialties.length > 0 && (
+        {!loading && Array.isArray(specialties) && specialties.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
             {specialties.map((specialty) => {
               const IconComponent = iconMap[specialty.icon] || Stethoscope

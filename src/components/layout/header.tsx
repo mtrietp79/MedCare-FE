@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
 
 const navigation = [
   { name: 'Trang chủ', href: '/' },
@@ -26,17 +27,11 @@ const navigation = [
   { name: 'Liên hệ', href: '/contact' },
 ]
 
-// Simulated auth state - in real app this would come from auth context
-const isLoggedIn = false
-const user = {
-  name: 'Nguyễn Văn A',
-  email: 'nguyen.van.a@email.com',
-}
-
 export function Header() {
   const location = useLocation()
   const pathname = location.pathname
   const [isOpen, setIsOpen] = useState(false)
+  const { user, logout } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -70,37 +65,37 @@ export function Header() {
 
           {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center gap-3">
-            {isLoggedIn ? (
+            {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="gap-2">
                     <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
                       <User className="w-4 h-4 text-primary" />
                     </div>
-                    <span className="max-w-[120px] truncate">{user.name}</span>
+                    <span className="max-w-[120px] truncate">{user.username}</span>
                     <ChevronDown className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="px-2 py-1.5">
-                    <p className="text-sm font-medium">{user.name}</p>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                    <p className="text-sm font-medium">{user.username}</p>
+                    <p className="text-xs text-muted-foreground">{user.role}</p>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link to="/account" className="cursor-pointer">
+                    <Link to="/patient" className="cursor-pointer">
                       <User className="w-4 h-4 mr-2" />
-                      Tài khoản
+                      Dashboard
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to="/account/appointments" className="cursor-pointer">
+                    <Link to="/patient/appointments" className="cursor-pointer">
                       <Calendar className="w-4 h-4 mr-2" />
-                      Lịch hẹn của tôi
+                      Lịch hẹn
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive cursor-pointer">
+                  <DropdownMenuItem onSelect={logout} className="text-destructive cursor-pointer">
                     <LogOut className="w-4 h-4 mr-2" />
                     Đăng xuất
                   </DropdownMenuItem>
@@ -158,32 +153,38 @@ export function Header() {
 
                 {/* Mobile Auth */}
                 <div className="border-t pt-4 flex flex-col gap-2">
-                  {isLoggedIn ? (
+                  {user ? (
                     <>
                       <div className="px-4 py-2 flex items-center gap-3">
                         <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                           <User className="w-5 h-5 text-primary" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium">{user.name}</p>
-                          <p className="text-xs text-muted-foreground">{user.email}</p>
+                          <p className="text-sm font-medium">{user.username}</p>
+                          <p className="text-xs text-muted-foreground">{user.role}</p>
                         </div>
                       </div>
                       <Link
-                        to="/account"
+                        to="/patient"
                         onClick={() => setIsOpen(false)}
                         className="px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted"
                       >
-                        Tài khoản
+                        Dashboard
                       </Link>
                       <Link
-                        to="/account/appointments"
+                        to="/patient/appointments"
                         onClick={() => setIsOpen(false)}
                         className="px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted"
                       >
-                        Lịch hẹn của tôi
+                        Lịch hẹn
                       </Link>
-                      <button className="px-4 py-3 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 text-left">
+                      <button
+                        onClick={() => {
+                          logout()
+                          setIsOpen(false)
+                        }}
+                        className="px-4 py-3 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 text-left"
+                      >
                         Đăng xuất
                       </button>
                     </>

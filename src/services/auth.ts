@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8080/api'
+export const API_BASE_URL = 'http://localhost:8080/api'
 const TOKEN_KEY = 'medcare_access_token'
 
 export interface AuthResponse {
@@ -19,7 +19,7 @@ interface FetchOptions extends RequestInit {
   headers?: Record<string, string>
 }
 
-async function fetchJson<T>(url: string, options: FetchOptions = {}): Promise<T> {
+export async function fetchJson<T>(url: string, options: FetchOptions = {}): Promise<T> {
   const response = await fetch(url, {
     ...options,
     headers: {

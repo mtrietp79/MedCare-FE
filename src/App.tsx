@@ -1,3 +1,4 @@
+import { AdminGuard } from '@/routes/AdminGuard'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
@@ -47,7 +48,7 @@ import { AdminMedicinesPage } from '@/pages/admin/AdminMedicinesPage'
 
 function App() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+    <ThemeProvider defaultTheme="light">
       <Router>
         <AuthProvider>
           <Routes>
@@ -89,14 +90,23 @@ function App() {
 
             <Route path="/booking" element={<RequireAuth><PatientGuard><BookingPage /></PatientGuard></RequireAuth>} />
 
-            {/* Admin Layout Routes */}
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<AdminDashboard />} />
-              <Route path="doctors" element={<AdminDoctorsPage />} />
-              <Route path="specialties" element={<AdminSpecialtiesPage />} />
-              <Route path="finance" element={<AdminFinancePage />} />
-              <Route path="medicines" element={<AdminMedicinesPage />} />
-            </Route>
+{/* Admin Layout Routes - Đã gộp và bảo mật */}
+<Route 
+  path="/admin" 
+  element={
+    <RequireAuth>
+      <AdminGuard>
+        <AdminLayout />
+      </AdminGuard>
+    </RequireAuth>
+  }
+>
+  <Route index element={<AdminDashboard />} />
+  <Route path="doctors" element={<AdminDoctorsPage />} />
+  <Route path="specialties" element={<AdminSpecialtiesPage />} />
+  <Route path="finance" element={<AdminFinancePage />} />
+  <Route path="medicines" element={<AdminMedicinesPage />} />
+</Route>
           </Routes>
         </AuthProvider>
       </Router>

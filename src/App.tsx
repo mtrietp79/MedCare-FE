@@ -6,11 +6,13 @@ import { Toaster } from '@/components/ui/sonner'
 import { AuthProvider } from '@/context/AuthContext'
 import { RequireAuth } from '@/routes/RequireAuth'
 import { PatientGuard } from '@/routes/PatientGuard'
+import { DoctorGuard } from '@/routes/DoctorGuard'
 
 import { MainLayout } from '@/layouts/MainLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
 import { PatientLayout } from '@/layouts/PatientLayout'
 import { AdminLayout } from '@/layouts/AdminLayout'
+import { DoctorLayout } from '@/layouts/DoctorLayout'
 
 // Home pages
 import { HomePage } from '@/pages/home/HomePage'
@@ -45,6 +47,11 @@ import { AdminDoctorsPage } from '@/pages/admin/AdminDoctorsPage'
 import { AdminSpecialtiesPage } from '@/pages/admin/AdminSpecialtiesPage'
 import { AdminFinancePage } from '@/pages/admin/AdminFinancePage'
 import { AdminMedicinesPage } from '@/pages/admin/AdminMedicinesPage'
+
+// Doctor pages
+import { DoctorDashboardPage } from '@/pages/doctor/DoctorDashboardPage'
+import { DoctorAppointmentsPage } from '@/pages/doctor/DoctorAppointmentsPage'
+import { DoctorProfilePage } from '@/pages/doctor/DoctorProfilePage'
 
 function App() {
   return (
@@ -106,6 +113,22 @@ function App() {
   <Route path="specialties" element={<AdminSpecialtiesPage />} />
   <Route path="finance" element={<AdminFinancePage />} />
   <Route path="medicines" element={<AdminMedicinesPage />} />
+</Route>
+
+{/* Doctor Layout Routes */}
+<Route 
+  path="/doctor" 
+  element={
+    <RequireAuth>
+      <DoctorGuard>
+        <DoctorLayout />
+      </DoctorGuard>
+    </RequireAuth>
+  }
+>
+  <Route index element={<DoctorDashboardPage />} />
+  <Route path="appointments" element={<DoctorAppointmentsPage />} />
+  <Route path="profile" element={<DoctorProfilePage />} />
 </Route>
           </Routes>
         </AuthProvider>

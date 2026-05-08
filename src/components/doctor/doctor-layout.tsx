@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import {
   LayoutDashboard,
-  Stethoscope,
-  Users,
-  DollarSign,
-  Pill,
+  Calendar,
+  User,
   LogOut,
   ChevronRight,
 } from 'lucide-react'
@@ -25,40 +23,28 @@ import {
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 
-const adminMenuItems = [
+const doctorMenuItems = [
   {
     title: 'Dashboard',
-    href: '/admin',
+    href: '/doctor',
     icon: LayoutDashboard,
     label: 'Tổng quan',
   },
   {
-    title: 'Chuyên khoa',
-    href: '/admin/specialties',
-    icon: Stethoscope,
-    label: 'Quản lý chuyên khoa',
+    title: 'Lịch hẹn',
+    href: '/doctor/appointments',
+    icon: Calendar,
+    label: 'Quản lý lịch hẹn',
   },
   {
-    title: 'Bác sĩ',
-    href: '/admin/doctors',
-    icon: Users,
-    label: 'Quản lý bác sĩ',
-  },
-  {
-    title: 'Tài chính',
-    href: '/admin/finance',
-    icon: DollarSign,
-    label: 'Quản lý tài chính',
-  },
-  {
-    title: 'Thuốc',
-    href: '/admin/medicines',
-    icon: Pill,
-    label: 'Quản lý thuốc',
+    title: 'Hồ sơ',
+    href: '/doctor/profile',
+    icon: User,
+    label: 'Thông tin cá nhân',
   },
 ]
 
-function AdminSidebar() {
+function DoctorSidebar() {
   const location = useLocation()
   const { logout } = useAuth()
   const navigate = useNavigate()
@@ -72,20 +58,20 @@ function AdminSidebar() {
   return (
     <Sidebar>
       <SidebarFooter className="border-b">
-        <Link to="/admin" className="flex items-center gap-2 px-2 py-1">
+        <Link to="/doctor" className="flex items-center gap-2 px-2 py-1">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <LayoutDashboard className="h-5 w-5 text-primary-foreground" />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold">MedCare Admin</span>
-            <span className="text-xs text-muted-foreground">Quản lý hệ thống</span>
+            <span className="text-sm font-semibold">MedCare Doctor</span>
+            <span className="text-xs text-muted-foreground">Quản lý lịch hẹn</span>
           </div>
         </Link>
       </SidebarFooter>
 
       <SidebarContent>
         <SidebarMenu>
-          {adminMenuItems.map((item) => {
+          {doctorMenuItems.map((item) => {
             const isActive = pathname === item.href
             const Icon = item.icon
 
@@ -107,31 +93,34 @@ function AdminSidebar() {
         </SidebarMenu>
       </SidebarContent>
 
-      <SidebarFooter className="border-t">
-        <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
-          <LogOut className="h-4 w-4" />
-          <span>Đăng xuất</span>
-        </Button>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
+                <LogOut className="h-4 w-4" />
+                <span>Đăng xuất</span>
+              </Button>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   )
 }
 
-export function AdminLayout({ children }: { children: React.ReactNode }) {
+export function DoctorLayoutComponent({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full">
-        <AdminSidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="border-b bg-background p-4 flex items-center gap-2">
-            <SidebarTrigger className="h-8 w-8" />
-            <Separator orientation="vertical" className="h-6" />
-            <h1 className="text-lg font-semibold">MedCare Admin Panel</h1>
-          </div>
-          <div className="flex-1 overflow-auto">
-            {children}
-          </div>
-        </div>
+      <div className="flex min-h-screen w-full">
+        <DoctorSidebar />
+        <main className="flex-1 overflow-auto">
+          <header className="flex h-14 items-center gap-4 border-b bg-background px-6">
+            <SidebarTrigger />
+            <div className="flex-1" />
+          </header>
+          <div className="p-6">{children}</div>
+        </main>
       </div>
     </SidebarProvider>
   )

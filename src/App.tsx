@@ -52,6 +52,8 @@ import { AdminMedicinesPage } from '@/pages/admin/AdminMedicinesPage'
 import { DoctorDashboardPage } from '@/pages/doctor/DoctorDashboardPage'
 import { DoctorAppointmentsPage } from '@/pages/doctor/DoctorAppointmentsPage'
 import { DoctorProfilePage } from '@/pages/doctor/DoctorProfilePage'
+import { DoctorMedicalRecordsPage } from '@/pages/doctor/DoctorMedicalRecordsPage'
+import { DoctorSchedulePage } from '@/pages/doctor/DoctorSchedulePage'
 
 function App() {
   return (
@@ -129,6 +131,8 @@ function App() {
   <Route index element={<DoctorDashboardPage />} />
   <Route path="appointments" element={<DoctorAppointmentsPage />} />
   <Route path="profile" element={<DoctorProfilePage />} />
+  <Route path="medical-records" element={<DoctorMedicalRecordsPage />} />
+  <Route path="schedule" element={<DoctorSchedulePage />} />
 </Route>
           </Routes>
         </AuthProvider>

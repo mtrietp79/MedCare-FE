@@ -5,6 +5,8 @@ import {
   User,
   LogOut,
   ChevronRight,
+  FileText,
+  Clock,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
@@ -35,6 +37,18 @@ const doctorMenuItems = [
     href: '/doctor/appointments',
     icon: Calendar,
     label: 'Quản lý lịch hẹn',
+  },
+  {
+    title: 'Bệnh án',
+    href: '/doctor/medical-records',
+    icon: FileText,
+    label: 'Quản lý bệnh án',
+  },
+  {
+    title: 'Lịch làm việc',
+    href: '/doctor/schedule',
+    icon: Clock,
+    label: 'Quản lý lịch làm việc',
   },
   {
     title: 'Hồ sơ',

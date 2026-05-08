@@ -25,8 +25,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initialize = async () => {
+      // Check if mock auth is enabled (for testing without backend)
+      const mockAuthEnabled = localStorage.getItem('mock_auth_enabled') === 'true'
+      
       const savedToken = getStoredToken()
-      if (!savedToken) {
+      if (!savedToken && !mockAuthEnabled) {
+        setLoading(false)
+        return
+      }
+
+      // If mock auth is enabled and no real token, use mock user
+      if (mockAuthEnabled && !savedToken) {
+        setUser({
+          username: 'testuser',
+          role: 'ROLE_PATIENT',
+          profileCompleted: true,
+        })
+        setToken('mock_token')
         setLoading(false)
         return
       }
@@ -36,9 +51,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(authUser)
         setToken(savedToken)
       } catch (error) {
-        removeStoredToken()
-        setUser(null)
-        setToken(null)
+        // If backend is down and mock auth is enabled, use mock user
+        if (mockAuthEnabled) {
+          setUser({
+            username: 'testuser',
+            role: 'ROLE_PATIENT',
+            profileCompleted: true,
+          })
+          setToken('mock_token')
+        } else {
+          removeStoredToken()
+          setUser(null)
+          setToken(null)
+        }
       } finally {
         setLoading(false)
       }

@@ -150,8 +150,7 @@ export function BookingWizard() {
         appointmentDate: selectedSlot.startTime,
         symptoms: formData.notes,
       })
-      // Navigate to payment method selection page
-      navigate(`/payment-method/${appointment.id}`, { replace: true })
+      navigate(`/patient/appointments/${appointment.id}`, { replace: true })
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Không thể đặt lịch khám')
     } finally {

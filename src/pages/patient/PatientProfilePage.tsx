@@ -18,7 +18,15 @@ const genders = [
 export function PatientProfilePage() {
   const navigate = useNavigate()
   const [patient, setPatient] = useState<Patient | null>(null)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    fullName: string
+    dateOfBirth: string
+    phone: string
+    email: string
+    gender: 'MALE' | 'FEMALE' | 'OTHER'
+    nationalId: string
+    address: string
+  }>({
     fullName: '',
     dateOfBirth: '',
     phone: '',
@@ -157,7 +165,13 @@ export function PatientProfilePage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label htmlFor="gender">Giới tính *</Label>
-              <Select value={formData.gender} onValueChange={(value) => setFormData({ ...formData, gender: value })}>
+              <Select
+              value={formData.gender}
+              onValueChange={(value) => setFormData({
+                ...formData,
+                gender: value as 'MALE' | 'FEMALE' | 'OTHER',
+              })}
+            >
                 <SelectTrigger id="gender" className="mt-2 w-full">
                   <SelectValue placeholder="Chọn giới tính" />
                 </SelectTrigger>

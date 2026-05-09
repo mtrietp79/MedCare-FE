@@ -235,7 +235,7 @@ export const adminApi = {
   },
 
   // Invoice Management APIs
-  getInvoices: () => {
+  getInvoices: (): Promise<Array<{ id: string; patientName: string; medicalRecordId: string; totalAmount: number; status: 'pending' | 'paid' | 'cancelled'; createdAt: string; paidAt?: string }>> => {
     const token = getStoredToken();
     return fetchJson(`${API_BASE_URL}/invoices`, {
       headers: { Authorization: `Bearer ${token}` }

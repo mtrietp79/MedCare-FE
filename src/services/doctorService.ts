@@ -117,6 +117,14 @@ export const doctorApi = {
     });
   },
 
+  deleteMedicalRecord: (id: string) => {
+    const token = getStoredToken();
+    return fetchJson(`${API_BASE_URL}/medical-records/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+
   // Prescription Details
   getPrescriptionDetails: (recordId: string) => {
     const token = getStoredToken();

@@ -22,21 +22,21 @@ import type { Specialty } from '@/types'
 import { api } from '@/services/api'
 
 interface DoctorFilterProps {
-  searchQuery: string
-  onSearchChange: (value: string) => void
-  selectedSpecialty: string
-  onSpecialtyChange: (value: string) => void
-  sortBy: string
-  onSortChange: (value: string) => void
+  searchQuery?: string
+  onSearchChange?: (value: string) => void
+  selectedSpecialty?: string
+  onSpecialtyChange?: (value: string) => void
+  sortBy?: string
+  onSortChange?: (value: string) => void
 }
 
 export function DoctorFilter({
-  searchQuery,
-  onSearchChange,
-  selectedSpecialty,
-  onSpecialtyChange,
-  sortBy,
-  onSortChange,
+  searchQuery = '',
+  onSearchChange = () => {},
+  selectedSpecialty = 'all',
+  onSpecialtyChange = () => {},
+  sortBy = 'default',
+  onSortChange = () => {},
 }: DoctorFilterProps) {
   const [specialties, setSpecialties] = useState<Specialty[]>([])
   const [loading, setLoading] = useState(true)

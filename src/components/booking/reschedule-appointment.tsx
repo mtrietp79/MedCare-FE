@@ -34,7 +34,8 @@ export function RescheduleAppointmentDialog({
 
   // Fetch available slots when date changes
   useEffect(() => {
-    if (!selectedDate || !appointment.doctorId) {
+    const doctorId = appointment.doctorId
+    if (!selectedDate || !doctorId) {
       setSlots([])
       return
     }
@@ -44,7 +45,7 @@ export function RescheduleAppointmentDialog({
         setSlotsLoading(true)
         setError(null)
         const data = await api.doctors.getAvailableSlots(
-          appointment.doctorId,
+          doctorId,
           selectedDate
         )
         setSlots(data || [])

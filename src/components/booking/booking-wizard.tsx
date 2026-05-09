@@ -106,8 +106,12 @@ export function BookingWizard() {
     fetchSlots()
   }, [formData.doctorId, formData.date])
 
-const selectedDoctor = (Array.isArray(doctors) ? doctors : []).find(doc => doc.id === formData.doctorId)
-const selectedSlot = (Array.isArray(slots) ? slots : []).find(slot => slot.startTime === formData.time)
+  const selectedDoctor = (Array.isArray(doctors) ? doctors : []).find(doc => doc.id === formData.doctorId)
+  const selectedSlot = (Array.isArray(slots) ? slots : []).find(slot => slot.startTime === formData.time)
+
+  const getDoctorName = (doctor?: Doctor) => doctor?.name ?? doctor?.fullName ?? 'Bác sĩ'
+  const getDoctorSpecialty = (specialty?: Doctor['specialty']) =>
+    typeof specialty === 'string' ? specialty : specialty?.name ?? ''
 
   const canProceed = (): boolean => {
     switch (currentStep) {
@@ -249,12 +253,12 @@ const selectedSlot = (Array.isArray(slots) ? slots : []).find(slot => slot.start
                       >
                         <div className="flex gap-4">
                           <div className="w-16 h-16 bg-gradient-to-br from-primary/20 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0 font-bold text-lg text-primary">
-                            {doctor.name.split(' ').pop()?.charAt(0).toUpperCase()}
+                            {getDoctorName(doctor).split(' ').pop()?.charAt(0).toUpperCase()}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-foreground text-lg">{doctor.name}</h3>
+                            <h3 className="font-semibold text-foreground text-lg">{getDoctorName(doctor)}</h3>
                             <p className="text-sm text-muted-foreground mb-2">
-                              {doctor.specialty} • {doctor.experience || 0} năm kinh nghiệm
+                              {getDoctorSpecialty(doctor.specialty)} • {doctor.experience || 0} năm kinh nghiệm
                             </p>
                             <div className="flex items-center gap-3">
                               <div className="flex items-center gap-1">
@@ -457,7 +461,9 @@ const selectedSlot = (Array.isArray(slots) ? slots : []).find(slot => slot.start
                         </div>
                         <div className="flex justify-between items-start">
                           <span className="text-muted-foreground">Chuyên khoa</span>
-                          <span className="font-medium text-right">{selectedDoctor?.specialty}</span>
+                          <span className="font-medium text-right">
+                            {selectedDoctor ? getDoctorSpecialty(selectedDoctor.specialty) : '—'}
+                          </span>
                         </div>
                         {selectedDoctor?.consultationFee && (
                           <div className="flex justify-between items-start pt-2 border-t">
@@ -600,8 +606,8 @@ const selectedSlot = (Array.isArray(slots) ? slots : []).find(slot => slot.start
                 <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Bác sĩ</p>
                 {selectedDoctor ? (
                   <div>
-                    <p className="font-semibold text-foreground">{selectedDoctor.name}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{selectedDoctor.specialty}</p>
+                    <p className="font-semibold text-foreground">{getDoctorName(selectedDoctor)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{getDoctorSpecialty(selectedDoctor?.specialty)}</p>
                   </div>
                 ) : (
                   <p className="text-muted-foreground italic">Chưa chọn</p>

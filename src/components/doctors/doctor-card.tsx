@@ -22,6 +22,9 @@ export function DoctorCard({ doctor, variant = 'default' }: DoctorCardProps) {
     }).format(amount ?? 0)
   }
 
+  const doctorName = doctor.name ?? doctor.fullName ?? 'Bác sĩ'
+  const doctorSpecialty = typeof doctor.specialty === 'string' ? doctor.specialty : doctor.specialty?.name ?? ''
+
   if (variant === 'compact') {
     return (
       <Link to={`/doctors/${doctor.id}`}>
@@ -31,16 +34,16 @@ export function DoctorCard({ doctor, variant = 'default' }: DoctorCardProps) {
               {/* Avatar */}
               <div className="w-20 h-20 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
                 <span className="text-2xl font-bold text-primary">
-                  {doctor.name.split(' ').pop()?.charAt(0)}
+                  {doctorName.split(' ').pop()?.charAt(0)}
                 </span>
               </div>
               
               {/* Info */}
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                  {doctor.name}
+                  {doctorName}
                 </h3>
-                <p className="text-sm text-muted-foreground mb-2">{doctor.specialty}</p>
+                <p className="text-sm text-muted-foreground mb-2">{doctorSpecialty}</p>
                 <div className="flex items-center gap-1">
                   <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                   <span className="text-sm font-medium">{doctor.rating}</span>
@@ -62,11 +65,11 @@ export function DoctorCard({ doctor, variant = 'default' }: DoctorCardProps) {
           <div className="relative h-48 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
             <div className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center">
               <span className="text-4xl font-bold text-primary">
-                {doctor.name.split(' ').pop()?.charAt(0)}
+                {doctorName.split(' ').pop()?.charAt(0)}
               </span>
             </div>
             <Badge className="absolute top-4 right-4 bg-accent text-accent-foreground">
-              {doctor.specialty}
+              {doctorSpecialty}
             </Badge>
           </div>
 
@@ -74,7 +77,7 @@ export function DoctorCard({ doctor, variant = 'default' }: DoctorCardProps) {
           <div className="p-5 space-y-4">
             <div>
               <h3 className="font-semibold text-lg text-foreground group-hover:text-primary transition-colors">
-                {doctor.name}
+                {doctorName}
               </h3>
               <p className="text-sm text-muted-foreground">{doctor.education}</p>
             </div>
@@ -103,7 +106,7 @@ export function DoctorCard({ doctor, variant = 'default' }: DoctorCardProps) {
               <div>
                 <span className="text-xs text-muted-foreground">Phí khám</span>
                 <div className="text-primary font-semibold">
-                  {formatCurrency(doctor.consultationFee)}
+                  {formatCurrency(doctor.consultationFee ?? 0)}
                 </div>
               </div>
               <Button size="sm">Đặt lịch</Button>

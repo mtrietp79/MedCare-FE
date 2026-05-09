@@ -1,30 +1,15 @@
 import React from 'react';
-import { useLocation, Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 
-interface AdminGuardProps {
-  children: React.ReactNode;
-}
-
-export function AdminGuard({ children }: AdminGuardProps) {
+export const AdminGuard = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-lg font-medium">Đang kiểm tra quyền truy cập...</p>
-      </div>
-    );
-  }
-
-  if (!user) {
+  if (loading) return <div>Loading...</div>;
+  if (!user || user.role !== 'ROLE_ADMIN') {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (user.role !== 'ROLE_ADMIN') {
-    return <Navigate to="/" replace />;
-  }
-
   return <>{children}</>;
-}
+};

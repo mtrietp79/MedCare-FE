@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Trash2, CreditCard } from 'lucide-react'
+import { ArrowLeft, CreditCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { CancelAppointmentDialog } from '@/components/booking/cancel-appointment'
+import { RescheduleAppointmentDialog } from '@/components/booking/reschedule-appointment'
 import { api } from '@/services/api'
 import type { Appointment } from '@/types'
 
@@ -12,7 +14,6 @@ export function PatientAppointmentDetailPage() {
   const [appointment, setAppointment] = useState<Appointment | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [processing, setProcessing] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -30,17 +31,15 @@ export function PatientAppointmentDetailPage() {
     fetchAppointment()
   }, [id])
 
-  const cancelAppointment = async () => {
-    if (!appointment) return
-    setProcessing(true)
-    try {
-      await api.appointments.delete(appointment.id.toString())
-      navigate('/patient/appointments')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể hủy lịch khám')
-    } finally {
-      setProcessing(false)
-    }
+  const handleCancelSuccess = () => {
+    navigate('/patient/appointments', {
+      replace: true,
+      state: { message: 'Lịch khám đã được hủy thành công' },
+    })
+  }
+
+  const handleRescheduleSuccess = (newAppointment: any) => {
+    setAppointment(newAppointment)
   }
 
   const startPayment = () => {
@@ -120,10 +119,14 @@ export function PatientAppointmentDetailPage() {
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <Button variant="outline" onClick={cancelAppointment} disabled={processing} className="gap-2">
-              <Trash2 className="w-4 h-4" />
-              Hủy lịch
-            </Button>
+            <RescheduleAppointmentDialog
+              appointment={appointment}
+              onSuccess={handleRescheduleSuccess}
+            />
+            <CancelAppointmentDialog
+              appointment={appointment}
+              onSuccess={handleCancelSuccess}
+            />
             <Button onClick={startPayment} variant="secondary" className="gap-2">
               <CreditCard className="w-4 h-4" />
               Thanh toán VNPay

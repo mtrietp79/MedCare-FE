@@ -1,52 +1,147 @@
 /* Booking Wizard Styles */
+
+/* Progress Indicator Animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes checkmark {
+  0% {
+    stroke-dashoffset: 50;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
 .wizardContainer {
-  max-width: 1000px;
-  margin: 0 auto;
+  animation: slideIn 0.3s ease-out;
+}
+
+.progressBar {
+  height: 4px;
+  background: linear-gradient(to right, var(--color-primary), var(--color-primary-dark));
+  border-radius: 2px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stepContent {
+  animation: slideIn 0.3s ease-out;
+  min-height: 400px;
+}
+
+/* Doctor Card Hover Effects */
+.doctorCard {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.doctorCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.doctorCard.selected {
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.1);
+}
+
+/* Time Slot Grid */
+.timeSlots {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 0.75rem;
 }
 
-.wizardSteps {
-  display: flex;
-  gap: 1rem;
-  overflow-x: auto;
-  padding: 1rem;
-  background-color: hsl(var(--muted) / 0.3);
-  border-radius: 0.75rem;
-  margin-bottom: 2rem;
+.timeSlot {
+  transition: all 0.2s ease;
+  position: relative;
 }
 
-.step {
+.timeSlot:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.timeSlot.available {
+  background-color: hsl(var(--accent));
+}
+
+.timeSlot.selected {
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.timeSlot:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Form Inputs */
+.formInput {
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.formInput:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.1);
+}
+
+/* Summary Card */
+.summaryCard {
+  position: sticky;
+  top: 100px;
+  animation: slideIn 0.3s ease-out;
+}
+
+.summaryItem {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.375rem;
-  background-color: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  white-space: nowrap;
-  cursor: pointer;
-  transition: all 0.2s;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid hsl(var(--border));
 }
 
-.step.active {
-  background-color: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-  border-color: hsl(var(--primary));
+.summaryItem:last-child {
+  border-bottom: none;
 }
 
-.stepNumber {
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 9999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 700;
-  background-color: hsl(var(--border));
+/* Confirmation Section */
+.confirmationSection {
+  background: hsl(var(--accent) / 0.5);
+  border: 1px dashed hsl(var(--border));
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin: 1rem 0;
 }
+
+/* Loading and Empty States */
+.emptyState {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.emptyState svg {
+  margin: 0 auto 1rem;
+  opacity: 0.5;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .timeSlots {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .summaryCard {
+    position: relative;
+    top: 0;
+  }
+}
+
 
 .step.active .stepNumber {
   background-color: hsl(var(--primary-foreground));

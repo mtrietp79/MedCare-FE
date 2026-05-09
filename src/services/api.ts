@@ -1,4 +1,5 @@
-import type { Doctor, Specialty, Appointment, Patient } from '@/types'
+import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, MoMoPaymentRequest, MoMoPaymentResponse, MoMoPaymentVerification } from '@/types'
+import { mockApi } from './mock-api'
 
 const API_BASE_URL = 'http://localhost:8080/api'
 const TOKEN_KEY = 'medcare_access_token'
@@ -16,49 +17,109 @@ interface FetchOptions extends RequestInit {
 }
 
 async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+  // If mock API is enabled, try mock first
+  if (mockApi.isEnabled()) {
+    try {
+      // Route to appropriate mock handler
+      if (endpoint.includes('/specialties')) {
+        return mockApi.specialties as any
+      } else if (endpoint.includes('/doctors')) {
+        return mockApi.doctors as any
+      } else if (endpoint.includes('/patients')) {
+        return mockApi.patients as any
+      } else if (endpoint.includes('/appointments')) {
+        return mockApi.appointments as any
+      }
+    } catch (err) {
+      console.log('Mock API fallback for:', endpoint)
+    }
+  }
+
   const url = `${API_BASE_URL}${endpoint}`
   const token = getStoredToken()
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  })
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    })
 
-  const rawText = await response.text()
-  let data: unknown = null
+    const rawText = await response.text()
+    let data: unknown = null
 
-  if (rawText) {
-    try {
-      data = JSON.parse(rawText)
-    } catch (parseError) {
-      if (response.ok) {
-        throw new Error(`Invalid JSON response from ${url}`)
+    if (rawText) {
+      try {
+        data = JSON.parse(rawText)
+      } catch (parseError) {
+        if (response.ok) {
+          throw new Error(`Invalid JSON response from ${url}`)
+        }
+        data = rawText
       }
-      data = rawText
-    }
-  }
-
-  if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      removeStoredToken()
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login'
-      }
-      throw new Error('Unauthorized. Vui lòng đăng nhập lại.')
     }
 
-    const message =
-      data && typeof data === 'object' && 'message' in data
-        ? (data as { message: string }).message
-        : `API Error: ${response.status} ${response.statusText}`
-    throw new Error(message)
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        removeStoredToken()
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login'
+        }
+        throw new Error('Unauthorized. Vui lòng đăng nhập lại.')
+      }
+
+      const message =
+        data && typeof data === 'object' && 'message' in data
+          ? (data as { message: string }).message
+          : `API Error: ${response.status} ${response.statusText}`
+      throw new Error(message)
+    }
+
+    return data as T
+  } catch (error) {
+    // If backend is down and mock API is enabled, fallback to mock
+    if (mockApi.isEnabled() && error instanceof Error && error.message.includes('ERR_CONNECTION_REFUSED')) {
+      console.log('Backend unavailable, using mock API for:', endpoint)
+      return mockApiCall(endpoint, options)
+    }
+    throw error
+  }
+}
+
+async function mockApiCall<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
+  if (endpoint.includes('/specialties')) {
+    if (endpoint.match(/\/specialties\/[^?]/)) {
+      const id = endpoint.split('/').pop()?.split('?')[0]
+      return mockApi.specialties.getById(id!) as any
+    }
+    return mockApi.specialties.getAll() as any
+  } else if (endpoint.includes('/doctors')) {
+    if (endpoint.includes('/slots')) {
+      const match = endpoint.match(/\/doctors\/([^/]+)\/slots/)
+      if (match) {
+        const doctorId = match[1]
+        const date = new URLSearchParams(endpoint.split('?')[1]).get('date') || new Date().toISOString().split('T')[0]
+        return mockApi.doctors.getAvailableSlots(doctorId, date) as any
+      }
+    }
+    if (endpoint.match(/\/doctors\/[^?]/)) {
+      const id = endpoint.split('/').pop()?.split('?')[0]
+      return mockApi.doctors.getById(id!) as any
+    }
+    return mockApi.doctors.getAll() as any
+  } else if (endpoint.includes('/patients/me')) {
+    return mockApi.patients.getCurrent() as any
+  } else if (endpoint.includes('/appointments')) {
+    if (options.method === 'POST') {
+      return mockApi.appointments.create((options.body as any) || {}) as any
+    }
+    return mockApi.appointments.getAll() as any
   }
 
-  return data as T
+  throw new Error('Unknown endpoint: ' + endpoint)
 }
 
 export const specialtyApi = {
@@ -187,6 +248,13 @@ export const appointmentApi = {
       body: JSON.stringify({ status }),
     })
   },
+
+  async reschedule(id: string, data: { appointmentDate: string }): Promise<Appointment> {
+    return apiCall<Appointment>(`/appointments/${id}/reschedule`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
 }
 
 export const patientApi = {
@@ -230,6 +298,47 @@ export const patientApi = {
   },
 }
 
+export const scheduleApi = {
+  async getAll(query?: { doctorId?: string; date?: string }): Promise<DoctorSchedule[]> {
+    const params = new URLSearchParams()
+    if (query?.doctorId) params.append('doctorId', query.doctorId)
+    if (query?.date) params.append('date', query.date)
+
+    const endpoint = `/schedules${params.toString() ? `?${params.toString()}` : ''}`
+    return apiCall<DoctorSchedule[]>(endpoint)
+  },
+
+  async getById(id: string): Promise<DoctorSchedule> {
+    return apiCall<DoctorSchedule>(`/schedules/${id}`)
+  },
+
+  async getByDoctorId(doctorId: string, query?: { date?: string }): Promise<DoctorSchedule[]> {
+    const params = new URLSearchParams({ doctorId })
+    if (query?.date) params.append('date', query.date)
+    return apiCall<DoctorSchedule[]>(`/schedules?${params.toString()}`)
+  },
+
+  async create(data: Omit<DoctorSchedule, 'id' | 'createdAt' | 'updatedAt'>): Promise<DoctorSchedule> {
+    return apiCall<DoctorSchedule>('/schedules', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async update(id: string, data: Partial<DoctorSchedule>): Promise<DoctorSchedule> {
+    return apiCall<DoctorSchedule>(`/schedules/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async delete(id: string): Promise<void> {
+    return apiCall<void>(`/schedules/${id}`, {
+      method: 'DELETE',
+    })
+  },
+}
+
 export const feedbackApi = {
   async getByDoctor(doctorId: string) {
     return apiCall<any[]>(`/feedbacks/doctor/${doctorId}`)
@@ -261,13 +370,61 @@ export const analyticsApi = {
   },
 }
 
+export const paymentApi = {
+  async initiateMoMoPayment(data: {
+    appointmentId: string
+    amount: number
+    description: string
+    returnUrl: string
+  }): Promise<{ orderId: string; paymentUrl: string; requestId: string }> {
+    return apiCall('/payments/momo/initiate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async verifyMoMoPayment(data: {
+    orderId: string
+    resultCode: string
+    transId: string
+    amount: number
+  }): Promise<{ status: string; message: string }> {
+    return apiCall('/payments/momo/verify', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async initiateVNPayPayment(data: {
+    appointmentId: string
+    amount: number
+    description: string
+    returnUrl: string
+  }): Promise<{ paymentUrl: string }> {
+    return apiCall('/payments/vnpay/initiate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async getPaymentStatus(appointmentId: string): Promise<{
+    status: string
+    method: string
+    amount: number
+  }> {
+    return apiCall(`/payments/${appointmentId}/status`)
+  },
+}
+
 export const api = {
   specialties: specialtyApi,
   doctors: doctorApi,
   appointments: appointmentApi,
   patients: patientApi,
+  schedules: scheduleApi,
   feedbacks: feedbackApi,
   analytics: analyticsApi,
+  payments: paymentApi,
 }
 
 export default api

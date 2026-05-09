@@ -5,11 +5,13 @@ import { Toaster } from '@/components/ui/sonner'
 import { AuthProvider } from '@/context/AuthContext'
 import { RequireAuth } from '@/routes/RequireAuth'
 import { PatientGuard } from '@/routes/PatientGuard'
+import { DoctorGuard } from '@/routes/DoctorGuard'
 
 import { MainLayout } from '@/layouts/MainLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
 import { PatientLayout } from '@/layouts/PatientLayout'
 import { AdminLayout } from '@/layouts/AdminLayout'
+import { DoctorLayout } from '@/layouts/DoctorLayout'
 
 // Home pages
 import { HomePage } from '@/pages/home/HomePage'
@@ -37,6 +39,9 @@ import { PatientProfilePage } from '@/pages/patient/PatientProfilePage'
 import { PatientAppointmentsPage } from '@/pages/patient/PatientAppointmentsPage'
 import { PatientAppointmentDetailPage } from '@/pages/patient/PatientAppointmentDetailPage'
 import { PaymentReturnPage } from '@/pages/patient/PaymentReturnPage'
+import { PaymentMethodPage } from '@/pages/patient/PaymentMethodPage'
+import { MoMoPaymentPage } from '@/pages/patient/MoMoPaymentPage'
+import { MoMoPaymentReturnPage } from '@/pages/patient/MoMoPaymentReturnPage'
 
 // Admin pages
 import { AdminDashboard } from '@/pages/admin/AdminDashboard'
@@ -44,6 +49,11 @@ import { AdminDoctorsPage } from '@/pages/admin/AdminDoctorsPage'
 import { AdminSpecialtiesPage } from '@/pages/admin/AdminSpecialtiesPage'
 import { AdminFinancePage } from '@/pages/admin/AdminFinancePage'
 import { AdminMedicinesPage } from '@/pages/admin/AdminMedicinesPage'
+import { AdminSchedulePage } from '@/pages/admin/AdminSchedulePage'
+
+// Doctor pages
+import { DoctorDashboardPage } from '@/pages/doctor/DoctorDashboardPage'
+import { DoctorSchedulePage } from '@/pages/doctor/DoctorSchedulePage'
 
 function App() {
   return (
@@ -61,6 +71,9 @@ function App() {
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/payment-return" element={<PaymentReturnPage />} />
+              <Route path="/payment-method/:appointmentId" element={<RequireAuth><PatientGuard><PaymentMethodPage /></PatientGuard></RequireAuth>} />
+              <Route path="/momo-payment/:appointmentId" element={<RequireAuth><PatientGuard><MoMoPaymentPage /></PatientGuard></RequireAuth>} />
+              <Route path="/momo-payment-return/:appointmentId" element={<MoMoPaymentReturnPage />} />
             </Route>
 
             {/* Auth Layout Routes */}
@@ -96,6 +109,21 @@ function App() {
               <Route path="specialties" element={<AdminSpecialtiesPage />} />
               <Route path="finance" element={<AdminFinancePage />} />
               <Route path="medicines" element={<AdminMedicinesPage />} />
+              <Route path="schedule" element={<AdminSchedulePage />} />
+            </Route>
+
+            {/* Doctor Layout Routes */}
+            <Route
+              element={
+                <RequireAuth>
+                  <DoctorGuard>
+                    <DoctorLayout />
+                  </DoctorGuard>
+                </RequireAuth>
+              }
+            >
+              <Route path="/doctor" element={<DoctorDashboardPage />} />
+              <Route path="/doctor/schedule" element={<DoctorSchedulePage />} />
             </Route>
           </Routes>
         </AuthProvider>

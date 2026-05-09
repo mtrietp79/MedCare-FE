@@ -1,10 +1,6 @@
 import { useState } from 'react'
 import {
   LayoutDashboard,
-  Stethoscope,
-  Users,
-  DollarSign,
-  Pill,
   Calendar,
   LogOut,
   ChevronRight,
@@ -26,46 +22,22 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/context/AuthContext'
 
-const adminMenuItems = [
+const doctorMenuItems = [
   {
     title: 'Dashboard',
-    href: '/admin',
+    href: '/doctor',
     icon: LayoutDashboard,
     label: 'Tổng quan',
   },
   {
-    title: 'Chuyên khoa',
-    href: '/admin/specialties',
-    icon: Stethoscope,
-    label: 'Quản lý chuyên khoa',
-  },
-  {
-    title: 'Bác sĩ',
-    href: '/admin/doctors',
-    icon: Users,
-    label: 'Quản lý bác sĩ',
-  },
-  {
     title: 'Lịch Khám',
-    href: '/admin/schedule',
+    href: '/doctor/schedule',
     icon: Calendar,
     label: 'Quản lý lịch khám',
   },
-  {
-    title: 'Tài chính',
-    href: '/admin/finance',
-    icon: DollarSign,
-    label: 'Quản lý tài chính',
-  },
-  {
-    title: 'Thuốc',
-    href: '/admin/medicines',
-    icon: Pill,
-    label: 'Quản lý thuốc',
-  },
 ]
 
-function AdminSidebar() {
+function DoctorSidebar() {
   const location = useLocation()
   const pathname = location.pathname
   const { logout } = useAuth()
@@ -73,20 +45,20 @@ function AdminSidebar() {
   return (
     <Sidebar>
       <SidebarFooter className="border-b">
-        <Link to="/admin" className="flex items-center gap-2 px-2 py-1">
+        <Link to="/doctor" className="flex items-center gap-2 px-2 py-1">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <LayoutDashboard className="h-5 w-5 text-primary-foreground" />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold">MedCare Admin</span>
-            <span className="text-xs text-muted-foreground">Quản lý hệ thống</span>
+            <span className="text-sm font-semibold">MedCare Doctor</span>
+            <span className="text-xs text-muted-foreground">Bác sĩ</span>
           </div>
         </Link>
       </SidebarFooter>
 
       <SidebarContent>
         <SidebarMenu>
-          {adminMenuItems.map((item) => {
+          {doctorMenuItems.map((item) => {
             const isActive = pathname === item.href
             const Icon = item.icon
 
@@ -118,16 +90,16 @@ function AdminSidebar() {
   )
 }
 
-export function AdminLayout({ children }: { children: React.ReactNode }) {
+export function DoctorLayout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full">
-        <AdminSidebar />
+        <DoctorSidebar />
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="border-b bg-background p-4 flex items-center gap-2">
             <SidebarTrigger className="h-8 w-8" />
             <Separator orientation="vertical" className="h-6" />
-            <h1 className="text-lg font-semibold">MedCare Admin Panel</h1>
+            <h1 className="text-lg font-semibold">MedCare Doctor Panel</h1>
           </div>
           <div className="flex-1 overflow-auto">
             {children}

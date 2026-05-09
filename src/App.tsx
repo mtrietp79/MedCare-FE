@@ -1,3 +1,4 @@
+import { AdminGuard } from '@/routes/AdminGuard'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
@@ -47,13 +48,17 @@ import { AdminFinancePage } from '@/pages/admin/AdminFinancePage'
 import { AdminMedicinesPage } from '@/pages/admin/AdminMedicinesPage'
 import { AdminSchedulePage } from '@/pages/admin/AdminSchedulePage'
 
+
 // Doctor pages
 import { DoctorDashboardPage } from '@/pages/doctor/DoctorDashboardPage'
+import { DoctorAppointmentsPage } from '@/pages/doctor/DoctorAppointmentsPage'
+import { DoctorProfilePage } from '@/pages/doctor/DoctorProfilePage'
+import { DoctorMedicalRecordsPage } from '@/pages/doctor/DoctorMedicalRecordsPage'
 import { DoctorSchedulePage } from '@/pages/doctor/DoctorSchedulePage'
 
 function App() {
   return (
-<ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
+    <ThemeProvider defaultTheme="light">
       <Router>
         <AuthProvider>
           <Routes>
@@ -94,29 +99,41 @@ function App() {
 
             <Route path="/booking" element={<RequireAuth><PatientGuard><BookingPage /></PatientGuard></RequireAuth>} />
 
-            {/* Admin Layout Routes */}
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<AdminDashboard />} />
-              <Route path="doctors" element={<AdminDoctorsPage />} />
-              <Route path="specialties" element={<AdminSpecialtiesPage />} />
-              <Route path="finance" element={<AdminFinancePage />} />
-              <Route path="medicines" element={<AdminMedicinesPage />} />
-              <Route path="schedule" element={<AdminSchedulePage />} />
-            </Route>
+{/* Admin Layout Routes - Đã gộp và bảo mật */}
+<Route 
+  path="/admin" 
+  element={
+    <RequireAuth>
+      <AdminGuard>
+        <AdminLayout />
+      </AdminGuard>
+    </RequireAuth>
+  }
+>
+  <Route index element={<AdminDashboard />} />
+  <Route path="doctors" element={<AdminDoctorsPage />} />
+  <Route path="specialties" element={<AdminSpecialtiesPage />} />
+  <Route path="finance" element={<AdminFinancePage />} />
+  <Route path="medicines" element={<AdminMedicinesPage />} />
+</Route>
 
-            {/* Doctor Layout Routes */}
-            <Route
-              element={
-                <RequireAuth>
-                  <DoctorGuard>
-                    <DoctorLayout />
-                  </DoctorGuard>
-                </RequireAuth>
-              }
-            >
-              <Route path="/doctor" element={<DoctorDashboardPage />} />
-              <Route path="/doctor/schedule" element={<DoctorSchedulePage />} />
-            </Route>
+{/* Doctor Layout Routes */}
+<Route 
+  path="/doctor" 
+  element={
+    <RequireAuth>
+      <DoctorGuard>
+        <DoctorLayout />
+      </DoctorGuard>
+    </RequireAuth>
+  }
+>
+  <Route index element={<DoctorDashboardPage />} />
+  <Route path="appointments" element={<DoctorAppointmentsPage />} />
+  <Route path="profile" element={<DoctorProfilePage />} />
+  <Route path="medical-records" element={<DoctorMedicalRecordsPage />} />
+  <Route path="schedule" element={<DoctorSchedulePage />} />
+</Route>
           </Routes>
         </AuthProvider>
       </Router>

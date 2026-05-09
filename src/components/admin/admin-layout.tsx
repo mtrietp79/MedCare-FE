@@ -9,8 +9,9 @@ import {
   LogOut,
   ChevronRight,
 } from 'lucide-react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
 import {
   Sidebar,
   SidebarContent,
@@ -67,8 +68,15 @@ const adminMenuItems = [
 
 function AdminSidebar() {
   const location = useLocation()
+  const { logout } = useAuth()
+  const navigate = useNavigate()
   const pathname = location.pathname
   const { logout } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
 
   return (
     <Sidebar>
@@ -109,7 +117,11 @@ function AdminSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t">
+<<<<<<< HEAD
         <Button variant="ghost" className="w-full justify-start" onClick={logout}>
+=======
+        <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
+>>>>>>> origin/task-minh
           <LogOut className="h-4 w-4" />
           <span>Đăng xuất</span>
         </Button>

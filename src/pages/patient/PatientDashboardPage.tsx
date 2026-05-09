@@ -127,7 +127,7 @@ export function PatientDashboardPage() {
                     <p className="text-sm text-muted-foreground">{appointment.appointmentDate}</p>
                   </div>
                   <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>{appointment.specialty?.name || appointment.specialty || 'Chuyên khoa'}</span>
+                    <span>{typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name || 'Chuyên khoa'}</span>
                     <span>{appointment.status || appointment.paymentStatus || 'Đang xử lý'}</span>
                   </div>
                   <Button variant="ghost" asChild>

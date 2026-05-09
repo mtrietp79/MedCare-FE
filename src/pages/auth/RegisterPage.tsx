@@ -1,7 +1,15 @@
 import { useNavigate, Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Eye, EyeOff, Mail, Lock, User, Phone, Heart } from 'lucide-react'
+import { getGoogleAuthUrl, getFacebookAuthUrl } from '@/services/auth'
 import { useAuth } from '@/context/AuthContext'
+
+const GOOGLE_CB = `${window.location.origin}/auth/google/callback`
+const FACEBOOK_CB = `${window.location.origin}/auth/facebook/callback`
+
+function randomState() {
+  return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
+}
 
 export function RegisterPage() {
   const navigate = useNavigate()
@@ -21,6 +29,27 @@ export function RegisterPage() {
     agreeTerms: false,
   })
 
+  const handleSocialLogin = async (provider: 'google' | 'facebook') => {
+    setError(null)
+    setIsLoading(true)
+
+    try {
+      const state = randomState()
+      sessionStorage.setItem(`oauth_${provider}_state`, state)
+      
+      const redirectUri = provider === 'google' ? GOOGLE_CB : FACEBOOK_CB
+      const url =
+        provider === 'google'
+          ? await getGoogleAuthUrl(redirectUri, state)
+          : await getFacebookAuthUrl(redirectUri, state)
+
+      window.location.href = url
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Đăng ký ${provider} thất bại`)
+      setIsLoading(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -35,16 +64,26 @@ export function RegisterPage() {
       return
     }
 
-    const username = formData.email.trim() || formData.phone.trim()
-    if (!username) {
-      setError('Vui lòng nhập email hoặc số điện thoại')
+    const email = formData.email.trim()
+    const phone = formData.phone.trim()
+
+    if (!email || !email.endsWith('@gmail.com')) {
+      setError('Vui lòng nhập email Gmail hợp lệ')
+      return
+    }
+
+    if (!phone || !/^[0-9]{10,11}$/.test(phone)) {
+      setError('Vui lòng nhập số điện thoại hợp lệ')
       return
     }
 
     setIsLoading(true)
 
     try {
-      await register({ username, password: formData.password })
+      await register({
+        username: email,
+        password: formData.password,
+      })
       navigate('/login')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đăng ký thất bại')
@@ -113,10 +152,18 @@ export function RegisterPage() {
 
           {/* Social */}
           <div className="grid grid-cols-2 gap-3">
-            <button className="border rounded-lg py-2 hover:bg-gray-100">
+            <button
+              type="button"
+              onClick={() => handleSocialLogin('google')}
+              className="border rounded-lg py-2 flex justify-center items-center hover:bg-gray-100"
+            >
               Google
             </button>
-            <button className="border rounded-lg py-2 hover:bg-gray-100">
+            <button
+              type="button"
+              onClick={() => handleSocialLogin('facebook')}
+              className="border rounded-lg py-2 hover:bg-gray-100"
+            >
               Facebook
             </button>
           </div>

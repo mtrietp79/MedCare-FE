@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Star, MessageCircle, CalendarCheck, CurrencyDong } from 'lucide-react'
+import { ArrowLeft, Star, MessageCircle, CalendarCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { api } from '@/services/api'
@@ -60,15 +60,15 @@ export function DoctorDetailPage() {
             <CardContent className="space-y-4 p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <div className="w-28 h-28 rounded-3xl bg-primary/10 flex items-center justify-center text-4xl font-bold text-primary">
-                  {doctor.name.split(' ').pop()?.charAt(0)}
+                  {(doctor.name ?? doctor.fullName ?? 'Bác sĩ').split(' ').pop()?.charAt(0)}
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2 text-sm text-primary font-semibold">
-                    <span>{doctor.specialty}</span>
+                    <span>{typeof doctor.specialty === 'string' ? doctor.specialty : doctor.specialty?.name}</span>
                     <span>·</span>
                     <span>{doctor.experience} năm kinh nghiệm</span>
                   </div>
-                  <h1 className="text-3xl font-semibold">{doctor.name}</h1>
+                  <h1 className="text-3xl font-semibold">{doctor.name ?? doctor.fullName}</h1>
                   <p className="text-muted-foreground mt-2">{doctor.education}</p>
                 </div>
               </div>
@@ -86,7 +86,7 @@ export function DoctorDetailPage() {
                 </div>
                 <div className="rounded-3xl border p-4 text-center">
                   <p className="text-sm text-muted-foreground">Phí khám</p>
-                  <p className="mt-2 text-lg font-semibold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(doctor.consultationFee)}</p>
+                  <p className="mt-2 text-lg font-semibold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(doctor.consultationFee ?? 0)}</p>
                 </div>
               </div>
 
@@ -103,7 +103,7 @@ export function DoctorDetailPage() {
                   </div>
                   <div className="rounded-3xl border p-4">
                     <p className="text-sm text-muted-foreground">Ngôn ngữ</p>
-                    <p className="mt-2 font-medium">{doctor.languages.join(', ')}</p>
+                    <p className="mt-2 font-medium">{doctor.languages?.join(', ') ?? 'N/A'}</p>
                   </div>
                 </div>
               </div>

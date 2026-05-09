@@ -95,7 +95,6 @@ export function SpecialtyChart() {
                 outerRadius={90}
                 fill="#0ea5e9"
                 dataKey="patients"
-                labelPosition="outer"
               >
                 {patientsBySpecialty.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

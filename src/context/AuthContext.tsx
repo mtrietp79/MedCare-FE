@@ -1,16 +1,29 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authApi, getStoredToken, removeStoredToken, setStoredToken, type AuthResponse, type AuthUser } from '@/services/auth'
+import {
+  getMe,
+  getStoredToken,
+  getStoredUser,
+  removeStoredToken,
+  removeStoredUser,
+  setStoredToken,
+  setStoredUser,
+  login as apiLogin,
+  register as apiRegister,
+  forgotPassword as apiForgotPassword,
+  resetPassword as apiResetPassword,
+  type AuthResponse,
+  type AuthUser,
+} from '@/services/auth'
 
 interface AuthContextValue {
   user: AuthUser | null
   token: string | null
   loading: boolean
   login: (data: { username: string; password: string }) => Promise<void>
-  socialLogin: (provider: 'google' | 'facebook', token: string) => Promise<void>
   register: (data: { username: string; password: string }) => Promise<void>
   logout: () => void
-  forgotPassword: (username: string) => Promise<any>
+  forgotPassword: (payload: { username: string }) => Promise<any>
   resetPassword: (data: { username: string; otp: string; newPassword: string }) => Promise<void>
   refreshUser: () => Promise<void>
 }
@@ -25,45 +38,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const initialize = async () => {
-      // Check if mock auth is enabled (for testing without backend)
-      const mockAuthEnabled = localStorage.getItem('mock_auth_enabled') === 'true'
-      
       const savedToken = getStoredToken()
-      if (!savedToken && !mockAuthEnabled) {
-        setLoading(false)
-        return
-      }
 
-      // If mock auth is enabled and no real token, use mock user
-      if (mockAuthEnabled && !savedToken) {
-        setUser({
-          username: 'testuser',
-          role: 'ROLE_PATIENT',
-          profileCompleted: true,
-        })
-        setToken('mock_token')
+      if (!savedToken) {
         setLoading(false)
         return
       }
 
       try {
-        const authUser = await authApi.me(savedToken)
+        const authUser = await getMe(savedToken)
         setUser(authUser)
         setToken(savedToken)
       } catch (error) {
-        // If backend is down and mock auth is enabled, use mock user
-        if (mockAuthEnabled) {
-          setUser({
-            username: 'testuser',
-            role: 'ROLE_PATIENT',
-            profileCompleted: true,
-          })
-          setToken('mock_token')
-        } else {
-          removeStoredToken()
-          setUser(null)
-          setToken(null)
-        }
+        removeStoredToken()
+        removeStoredUser()
+        setUser(null)
+        setToken(null)
       } finally {
         setLoading(false)
       }
@@ -73,13 +63,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [])
 
   const handleAuthSuccess = (response: AuthResponse) => {
-    setStoredToken(response.accessToken)
-    setToken(response.accessToken)
-    setUser({
+    setStoredToken(response.token)
+    setToken(response.token)
+
+    const userData: AuthUser = {
       username: response.username,
       role: response.role,
-      profileCompleted: response.profileCompleted,
-    })
+      profileCompleted: response.profileCompleted ?? false,
+    }
+    setStoredUser(userData)
+    setUser(userData)
 
     if (response.role === 'ROLE_PATIENT') {
       if (!response.profileCompleted) {
@@ -97,35 +90,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const login = async (data: { username: string; password: string }) => {
-    const response = await authApi.login(data)
-    handleAuthSuccess(response)
-  }
-
-  const socialLogin = async (provider: 'google' | 'facebook', token: string) => {
-    const response =
-      provider === 'google'
-        ? await authApi.loginWithGoogle(token)
-        : await authApi.loginWithFacebook(token)
+    const response = await apiLogin(data)
     handleAuthSuccess(response)
   }
 
   const register = async (data: { username: string; password: string }) => {
-    await authApi.register(data)
+    await apiRegister(data)
   }
 
   const logout = () => {
     removeStoredToken()
+    removeStoredUser()
     setToken(null)
     setUser(null)
     navigate('/login', { replace: true })
   }
 
-  const forgotPassword = async (username: string) => {
-    return authApi.forgotPassword({ username })
+  const forgotPassword = async (payload: { username: string }) => {
+    return apiForgotPassword(payload)
   }
 
   const resetPassword = async (data: { username: string; otp: string; newPassword: string }) => {
-    return authApi.resetPassword(data)
+    await apiResetPassword(data)
   }
 
   const refreshUser = async () => {
@@ -135,7 +121,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return
     }
 
-    const authUser = await authApi.me(savedToken)
+    const authUser = await getMe(savedToken)
     setUser(authUser)
     setToken(savedToken)
   }
@@ -146,7 +132,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       token,
       loading,
       login,
-      socialLogin,
       register,
       logout,
       forgotPassword,

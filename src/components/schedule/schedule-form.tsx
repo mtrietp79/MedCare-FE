@@ -102,7 +102,7 @@ export function ScheduleForm({ schedule, doctors = [], isLoading = false, onSubm
             <SelectContent>
               {doctors.map((doctor) => (
                 <SelectItem key={doctor.id} value={doctor.id}>
-                  {doctor.name} - {doctor.specialty}
+                  {doctor.name} - {typeof doctor.specialty === 'string' ? doctor.specialty : doctor.specialty?.name}
                 </SelectItem>
               ))}
             </SelectContent>

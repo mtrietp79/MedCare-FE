@@ -1,17 +1,23 @@
 export interface Doctor {
   id: string
-  name: string
-  specialty: string
+  name?: string
+  fullName?: string
+  specialty?: string | { id?: string; name?: string; slug?: string }
   specialtySlug?: string
+  specialtyId?: string
   image?: string
+  avatar?: string
   experience?: number
   rating?: number
   reviewCount?: number
   education?: string
+  qualifications?: string[]
   bio?: string
   hospital?: string
   languages?: string[]
   consultationFee?: number
+  fee?: number
+  availableSlots?: Array<{ date: string; times: string[] }>
 }
 
 export interface TimeSlot {
@@ -44,10 +50,12 @@ export interface Appointment {
   }
   doctorId?: string
   doctorName?: string
-  specialty?: {
+  specialty?: string | {
     id?: string
     name?: string
   }
+  date?: string
+  time?: string
   appointmentDate?: string
   status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'pending' | 'confirmed' | 'completed' | 'cancelled'
   paymentStatus?: string

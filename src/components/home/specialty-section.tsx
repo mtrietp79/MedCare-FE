@@ -82,7 +82,10 @@ export function SpecialtySection() {
         {!loading && Array.isArray(specialties) && specialties.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
             {specialties.map((specialty) => {
-              const IconComponent = iconMap[specialty.icon] || Stethoscope
+              const IconComponent =
+                specialty.icon && iconMap[specialty.icon]
+                  ? iconMap[specialty.icon]
+                  : Stethoscope
               return (
                 <Link key={specialty.id} to={`/specialty/${specialty.slug}`}>
                   <Card className="group h-full hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border-border/50 hover:border-primary/30">

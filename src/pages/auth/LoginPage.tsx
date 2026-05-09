@@ -1,11 +1,19 @@
 import { useNavigate, Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Eye, EyeOff, Mail, Lock, Heart } from 'lucide-react'
+import { getGoogleAuthUrl, getFacebookAuthUrl } from '@/services/auth'
 import { useAuth } from '@/context/AuthContext'
+
+const GOOGLE_CB = `${window.location.origin}/auth/google/callback`
+const FACEBOOK_CB = `${window.location.origin}/auth/facebook/callback`
+
+function randomState() {
+  return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
+}
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const { login, socialLogin } = useAuth()
+  const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,19 +39,22 @@ export function LoginPage() {
   }
 
   const loginWithSocial = async (provider: 'google' | 'facebook') => {
-    const token = window.prompt(`Nhập ${provider} token để đăng nhập:`)
-    if (!token) {
-      return
-    }
-
     setError(null)
     setIsLoading(true)
 
     try {
-      await socialLogin(provider, token)
+      const state = randomState()
+      sessionStorage.setItem(`oauth_${provider}_state`, state)
+      
+      const redirectUri = provider === 'google' ? GOOGLE_CB : FACEBOOK_CB
+      const url =
+        provider === 'google'
+          ? await getGoogleAuthUrl(redirectUri, state)
+          : await getFacebookAuthUrl(redirectUri, state)
+
+      window.location.href = url
     } catch (err) {
       setError(err instanceof Error ? err.message : `Đăng nhập ${provider} thất bại`)
-    } finally {
       setIsLoading(false)
     }
   }

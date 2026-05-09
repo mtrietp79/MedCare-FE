@@ -240,13 +240,52 @@ http://localhost:8080
 - Route guards cho từng role
 - Centralized error handling cho 401/403
 
-## 📝 Ghi chú
+## � Ghi chú
 
 - Tất cả API calls đều có error handling và loading states
 - Form validation sử dụng Zod schemas
 - Responsive design cho mobile và desktop
 - Dark/Light theme support
 - Toast notifications cho user feedback
+
+## 🧪 Testing
+
+Xem chi tiết hướng dẫn testing tại [TESTING.md](./TESTING.md)
+
+### Quick Test Setup
+```bash
+# Linux/Mac
+./test-setup.sh
+
+# Windows
+test-setup.bat
+
+# Or manually
+npm install
+npm run build
+npm run dev
+```
+
+### Test Accounts
+```json
+{
+  "admin": {
+    "email": "admin@medcare.vn",
+    "password": "admin123"
+  },
+  "doctor": {
+    "email": "doctor@medcare.vn", 
+    "password": "doctor123"
+  },
+  "patient": {
+    "email": "patient@medcare.vn",
+    "password": "patient123"
+  }
+}
+```
+
+### Test Data
+Xem mock data mẫu tại [test-data.json](./test-data.json)
 
 ## 📞 Liên hệ
 

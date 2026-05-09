@@ -38,10 +38,6 @@ import { PatientDashboardPage } from '@/pages/patient/PatientDashboardPage'
 import { PatientProfilePage } from '@/pages/patient/PatientProfilePage'
 import { PatientAppointmentsPage } from '@/pages/patient/PatientAppointmentsPage'
 import { PatientAppointmentDetailPage } from '@/pages/patient/PatientAppointmentDetailPage'
-import { PaymentReturnPage } from '@/pages/patient/PaymentReturnPage'
-import { PaymentMethodPage } from '@/pages/patient/PaymentMethodPage'
-import { MoMoPaymentPage } from '@/pages/patient/MoMoPaymentPage'
-import { MoMoPaymentReturnPage } from '@/pages/patient/MoMoPaymentReturnPage'
 
 // Admin pages
 import { AdminDashboard } from '@/pages/admin/AdminDashboard'
@@ -69,11 +65,7 @@ function App() {
               <Route path="/specialty" element={<SpecialtyPage />} />
               <Route path="/specialty/:slug" element={<SpecialtyDetailPage />} />
               <Route path="/contact" element={<ContactPage />} />
-              <Route path="/about" element={<AboutPage />} />
-              <Route path="/payment-return" element={<PaymentReturnPage />} />
-              <Route path="/payment-method/:appointmentId" element={<RequireAuth><PatientGuard><PaymentMethodPage /></PatientGuard></RequireAuth>} />
-              <Route path="/momo-payment/:appointmentId" element={<RequireAuth><PatientGuard><MoMoPaymentPage /></PatientGuard></RequireAuth>} />
-              <Route path="/momo-payment-return/:appointmentId" element={<MoMoPaymentReturnPage />} />
+              <Route path="/about" element={<AboutPage />} />   
             </Route>
 
             {/* Auth Layout Routes */}

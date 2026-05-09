@@ -1,7 +1,8 @@
 import { useLocation, Navigate } from 'react-router-dom'
+import type { ReactNode } from 'react'
 import { useAuth } from '@/context/AuthContext'
 
-export function PatientGuard({ children }: { children: JSX.Element }) {
+export function PatientGuard({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
   const location = useLocation()
 

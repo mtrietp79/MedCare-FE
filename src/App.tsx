@@ -57,7 +57,7 @@ import { DoctorSchedulePage } from '@/pages/doctor/DoctorSchedulePage'
 
 function App() {
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+<ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
       <Router>
         <AuthProvider>
           <Routes>

@@ -129,7 +129,7 @@ export function DoctorFilter({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tất cả chuyên khoa</SelectItem>
-              {specialties.map((specialty) => (
+              {(Array.isArray(specialties) ? specialties : []).map((specialty) => (
                 <SelectItem key={specialty.id} value={specialty.slug}>
                   {specialty.name}
                 </SelectItem>

@@ -2,13 +2,6 @@ import { useState } from 'react'
 import {
   LayoutDashboard,
   Calendar,
-<<<<<<< HEAD
-  LogOut,
-  ChevronRight,
-} from 'lucide-react'
-import { Link, useLocation } from 'react-router-dom'
-import { cn } from '@/lib/utils'
-=======
   User,
   LogOut,
   ChevronRight,
@@ -18,7 +11,6 @@ import { cn } from '@/lib/utils'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
->>>>>>> origin/task-minh
 import {
   Sidebar,
   SidebarContent,
@@ -32,10 +24,6 @@ import {
 } from '@/components/ui/sidebar'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-<<<<<<< HEAD
-import { useAuth } from '@/context/AuthContext'
-=======
->>>>>>> origin/task-minh
 
 const doctorMenuItems = [
   {
@@ -45,12 +33,6 @@ const doctorMenuItems = [
     label: 'Tổng quan',
   },
   {
-<<<<<<< HEAD
-    title: 'Lịch Khám',
-    href: '/doctor/schedule',
-    icon: Calendar,
-    label: 'Quản lý lịch khám',
-=======
     title: 'Lịch hẹn',
     href: '/doctor/appointments',
     icon: Calendar,
@@ -73,16 +55,11 @@ const doctorMenuItems = [
     href: '/doctor/profile',
     icon: User,
     label: 'Thông tin cá nhân',
->>>>>>> origin/task-minh
   },
 ]
 
 function DoctorSidebar() {
   const location = useLocation()
-<<<<<<< HEAD
-  const pathname = location.pathname
-  const { logout } = useAuth()
-=======
   const { logout } = useAuth()
   const navigate = useNavigate()
   const pathname = location.pathname
@@ -91,7 +68,6 @@ function DoctorSidebar() {
     logout()
     navigate('/login')
   }
->>>>>>> origin/task-minh
 
   return (
     <Sidebar>
@@ -102,11 +78,7 @@ function DoctorSidebar() {
           </div>
           <div className="flex flex-col">
             <span className="text-sm font-semibold">MedCare Doctor</span>
-<<<<<<< HEAD
-            <span className="text-xs text-muted-foreground">Bác sĩ</span>
-=======
             <span className="text-xs text-muted-foreground">Quản lý lịch hẹn</span>
->>>>>>> origin/task-minh
           </div>
         </Link>
       </SidebarFooter>
@@ -135,13 +107,6 @@ function DoctorSidebar() {
         </SidebarMenu>
       </SidebarContent>
 
-<<<<<<< HEAD
-      <SidebarFooter className="border-t">
-        <Button variant="ghost" className="w-full justify-start" onClick={logout}>
-          <LogOut className="h-4 w-4" />
-          <span>Đăng xuất</span>
-        </Button>
-=======
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -153,33 +118,11 @@ function DoctorSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
->>>>>>> origin/task-minh
       </SidebarFooter>
     </Sidebar>
   )
 }
 
-<<<<<<< HEAD
-export function DoctorLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <SidebarProvider>
-      <div className="flex h-screen w-full">
-        <DoctorSidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="border-b bg-background p-4 flex items-center gap-2">
-            <SidebarTrigger className="h-8 w-8" />
-            <Separator orientation="vertical" className="h-6" />
-            <h1 className="text-lg font-semibold">MedCare Doctor Panel</h1>
-          </div>
-          <div className="flex-1 overflow-auto">
-            {children}
-          </div>
-        </div>
-      </div>
-    </SidebarProvider>
-  )
-}
-=======
 export function DoctorLayoutComponent({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
@@ -196,4 +139,3 @@ export function DoctorLayoutComponent({ children }: { children: React.ReactNode 
     </SidebarProvider>
   )
 }
->>>>>>> origin/task-minh

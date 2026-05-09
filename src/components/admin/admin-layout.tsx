@@ -25,7 +25,6 @@ import {
 } from '@/components/ui/sidebar'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { useAuth } from '@/context/AuthContext'
 
 const adminMenuItems = [
   {
@@ -71,7 +70,6 @@ function AdminSidebar() {
   const { logout } = useAuth()
   const navigate = useNavigate()
   const pathname = location.pathname
-  const { logout } = useAuth()
 
   const handleLogout = () => {
     logout()
@@ -117,11 +115,7 @@ function AdminSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t">
-<<<<<<< HEAD
-        <Button variant="ghost" className="w-full justify-start" onClick={logout}>
-=======
         <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
->>>>>>> origin/task-minh
           <LogOut className="h-4 w-4" />
           <span>Đăng xuất</span>
         </Button>

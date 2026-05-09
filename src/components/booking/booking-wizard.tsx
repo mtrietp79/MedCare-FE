@@ -106,8 +106,8 @@ export function BookingWizard() {
     fetchSlots()
   }, [formData.doctorId, formData.date])
 
-  const selectedDoctor = doctors.find(doc => doc.id === formData.doctorId)
-  const selectedSlot = slots.find(slot => slot.startTime === formData.time)
+const selectedDoctor = (Array.isArray(doctors) ? doctors : []).find(doc => doc.id === formData.doctorId)
+const selectedSlot = (Array.isArray(slots) ? slots : []).find(slot => slot.startTime === formData.time)
 
   const canProceed = (): boolean => {
     switch (currentStep) {
@@ -145,7 +145,7 @@ export function BookingWizard() {
       const specialty = selectedDoctor.specialty
       
       const appointment = await api.appointments.create({
-        specialty: { id: selectedDoctor.specialtyId || '' },
+        specialty: { id: selectedDoctor.specialty || '' },
         doctor: { id: selectedDoctor.id },
         appointmentDate: selectedSlot.startTime,
         symptoms: formData.notes,
@@ -233,7 +233,7 @@ export function BookingWizard() {
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-96 overflow-y-auto pr-4">
-                    {doctors.map((doctor) => (
+                    {(Array.isArray(doctors) ? doctors : []).map((doctor) => (
                       <button
                         key={doctor.id}
                         type="button"

@@ -416,6 +416,65 @@ export const paymentApi = {
   },
 }
 
+export const medicineApi = {
+  async getAll(): Promise<Array<{ id: string; name: string; unit: string; price: number; description?: string }>> {
+    return apiCall('/medicines')
+  },
+
+  async getById(id: string): Promise<{ id: string; name: string; unit: string; price: number; description?: string }> {
+    return apiCall(`/medicines/${id}`)
+  },
+
+  async create(data: { name: string; unit: string; price: number; description?: string }): Promise<any> {
+    return apiCall('/medicines', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async update(id: string, data: Partial<{ name: string; unit: string; price: number; description?: string }>): Promise<any> {
+    return apiCall(`/medicines/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async delete(id: string): Promise<void> {
+    return apiCall<void>(`/medicines/${id}`, {
+      method: 'DELETE',
+    })
+  },
+}
+
+export const dashboardApi = {
+  async getSummary(): Promise<{
+    totalPatients: number
+    totalDoctors: number
+    totalAppointments: number
+    totalRevenue: number
+    todayAppointments?: number
+    pendingAppointments?: number
+  }> {
+    return apiCall('/dashboard/summary')
+  },
+
+  async getRecentAppointments(): Promise<Array<{
+    id: string
+    patientName: string
+    doctorName: string
+    date: string
+    time: string
+    status: string
+    specialty: string
+  }>> {
+    return apiCall('/dashboard/recent-appointments')
+  },
+
+  async getRevenueChart(): Promise<Array<{ month: string; revenue: number; appointments: number }>> {
+    return apiCall('/dashboard/revenue-chart')
+  },
+}
+
 export const api = {
   specialties: specialtyApi,
   doctors: doctorApi,
@@ -425,6 +484,8 @@ export const api = {
   feedbacks: feedbackApi,
   analytics: analyticsApi,
   payments: paymentApi,
+  medicines: medicineApi,
+  dashboard: dashboardApi,
 }
 
 export default api

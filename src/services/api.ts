@@ -1,4 +1,4 @@
-import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, MoMoPaymentRequest, MoMoPaymentResponse, MoMoPaymentVerification } from '@/types'
+import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule } from '@/types'
 import { mockApi } from './mock-api'
 
 const API_BASE_URL = 'http://localhost:8080/api'
@@ -371,30 +371,6 @@ export const analyticsApi = {
 }
 
 export const paymentApi = {
-  async initiateMoMoPayment(data: {
-    appointmentId: string
-    amount: number
-    description: string
-    returnUrl: string
-  }): Promise<{ orderId: string; paymentUrl: string; requestId: string }> {
-    return apiCall('/payments/momo/initiate', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
-  },
-
-  async verifyMoMoPayment(data: {
-    orderId: string
-    resultCode: string
-    transId: string
-    amount: number
-  }): Promise<{ status: string; message: string }> {
-    return apiCall('/payments/momo/verify', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
-  },
-
   async initiateVNPayPayment(data: {
     appointmentId: string
     amount: number

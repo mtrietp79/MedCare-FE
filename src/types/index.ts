@@ -113,27 +113,6 @@ export interface DoctorSchedule {
   updatedAt?: string
 }
 
-export interface MoMoPaymentRequest {
-  appointmentId: string
-  amount: number
-  description: string
-  returnUrl: string
-}
-
-export interface MoMoPaymentResponse {
-  orderId: string
-  paymentUrl: string
-  requestId: string
-  httpStatusCode: number
-}
-
-export interface MoMoPaymentVerification {
-  orderId: string
-  resultCode: string
-  transId: string
-  amount: number
-}
-
 export interface VNPayPaymentRequest {
   appointmentId: string
   amount: number
@@ -144,7 +123,7 @@ export interface VNPayPaymentRequest {
 export interface Payment {
   id: string
   appointmentId: string
-  method: 'MOMO' | 'VNPAY' | 'CARD'
+  method: 'VNPAY' | 'CARD'
   amount: number
   status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED'
   transactionId?: string

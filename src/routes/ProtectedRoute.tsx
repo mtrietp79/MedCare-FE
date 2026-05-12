@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom';
-import { getStoredToken } from '../services/auth';
+import { getStoredToken, USER_KEY } from '../services/auth';
 
 interface Props {
   allowedRoles: string[];
@@ -7,8 +7,8 @@ interface Props {
 
 export const ProtectedRoute = ({ allowedRoles }: Props) => {
   const token = getStoredToken();
-  // Lấy role đã lưu khi login thành công
-  const userRole = localStorage.getItem('user_role'); 
+  const storedUser = localStorage.getItem(USER_KEY)
+  const userRole = storedUser ? (JSON.parse(storedUser).role as string) : null
 
   if (!token) return <Navigate to="/login" replace />;
   

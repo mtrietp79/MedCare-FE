@@ -24,14 +24,15 @@ export function GoogleCallbackPage() {
       }
 
       const auth = await loginGoogleByCode(code, GOOGLE_CB)
-      setStoredToken(auth.token)
+      const token = auth.token ?? auth.accessToken ?? ''
+      setStoredToken(token)
       setStoredUser({
         username: auth.username,
         role: auth.role,
         profileCompleted: auth.profileCompleted ?? false,
       })
 
-      nav(auth.profileCompleted === false ? '/patient/profile' : '/patient', { replace: true })
+      nav('/', { replace: true })
     })().catch((e) => {
       const msg = e?.response?.data?.message || 'Đăng nhập Google thất bại'
       nav(`/login?error=${encodeURIComponent(msg)}`)

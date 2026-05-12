@@ -1,11 +1,26 @@
-import axios from 'axios'
+import axios, { type AxiosError } from 'axios'
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 })
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (axios.isAxiosError(error)) {
+      const responseData = error.response?.data as any
+      const message =
+        responseData?.message ||
+        (typeof responseData === 'string' ? responseData : undefined) ||
+        error.message
+      return Promise.reject(new Error(message))
+    }
+    return Promise.reject(error)
+  }
+)
 
 // For backwards compatibility with other services
 export async function fetchJson<T = any>(url: string, options: RequestInit = {}): Promise<T> {
@@ -42,7 +57,8 @@ export async function fetchJson<T = any>(url: string, options: RequestInit = {})
 
 
 export interface AuthResponse {
-  token: string
+  accessToken?: string
+  token?: string
   username: string
   role: string
   profileCompleted?: boolean | null

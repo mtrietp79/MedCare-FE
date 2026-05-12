@@ -15,9 +15,13 @@ const genders = [
   { value: 'OTHER', label: 'Khác' },
 ]
 
-export function PatientProfilePage() {
-  const navigate = useNavigate()
-  const [patient, setPatient] = useState<Patient | null>(null)
+interface PatientProfileFormProps {
+  patient: Patient
+  onSuccess?: (updated: Patient) => void
+  onCancel?: () => void
+}
+
+export function PatientProfileForm({ patient, onSuccess, onCancel }: PatientProfileFormProps) {
   const [formData, setFormData] = useState<{
     fullName: string
     dateOfBirth: string
@@ -27,43 +31,30 @@ export function PatientProfilePage() {
     nationalId: string
     address: string
   }>({
-    fullName: '',
-    dateOfBirth: '',
-    phone: '',
-    email: '',
-    gender: 'MALE',
-    nationalId: '',
-    address: '',
+    fullName: patient.fullName || patient.name || '',
+    dateOfBirth: patient.dateOfBirth || '',
+    phone: patient.phone || '',
+    email: patient.email || '',
+    gender: patient.gender || 'MALE',
+    nationalId: patient.nationalId || '',
+    address: patient.address || '',
   })
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const { refreshUser } = useAuth()
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        setLoading(true)
-        const data = await api.patients.getCurrent()
-        setPatient(data)
-        setFormData({
-          fullName: data.fullName || data.name || '',
-          dateOfBirth: data.dateOfBirth || '',
-          phone: data.phone || '',
-          email: data.email || '',
-          gender: data.gender || 'MALE',
-          nationalId: data.nationalId || '',
-          address: data.address || '',
-        })
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Không thể tải hồ sơ')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchProfile()
-  }, [])
+    setFormData({
+      fullName: patient.fullName || patient.name || '',
+      dateOfBirth: patient.dateOfBirth || '',
+      phone: patient.phone || '',
+      email: patient.email || '',
+      gender: patient.gender || 'MALE',
+      nationalId: patient.nationalId || '',
+      address: patient.address || '',
+    })
+  }, [patient])
 
   const validate = () => {
     if (!formData.fullName || !formData.dateOfBirth || !formData.phone || !formData.gender || !formData.nationalId || !formData.address) {
@@ -81,8 +72,6 @@ export function PatientProfilePage() {
     return null
   }
 
-  const { refreshUser } = useAuth()
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     const validationError = validate()
@@ -96,16 +85,150 @@ export function PatientProfilePage() {
     setMessage(null)
 
     try {
-      await api.patients.updateCurrent(formData)
+      const updatedPatient = await api.patients.updateCurrent(formData)
       await refreshUser()
       setMessage('Cập nhật hồ sơ thành công.')
-      setTimeout(() => navigate('/patient'), 1200)
+      onSuccess?.(updatedPatient)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không thể lưu hồ sơ')
     } finally {
       setSaving(false)
     }
   }
+
+  return (
+    <form className="grid gap-6" onSubmit={handleSubmit}>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <Label htmlFor="fullName">Họ và tên *</Label>
+          <Input
+            id="fullName"
+            value={formData.fullName}
+            onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+            className="mt-2"
+          />
+        </div>
+        <div>
+          <Label htmlFor="dateOfBirth">Ngày sinh *</Label>
+          <Input
+            id="dateOfBirth"
+            type="date"
+            value={formData.dateOfBirth}
+            onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+            className="mt-2"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <Label htmlFor="phone">Số điện thoại *</Label>
+          <Input
+            id="phone"
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            className="mt-2"
+          />
+        </div>
+        <div>
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            className="mt-2"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <Label htmlFor="gender">Giới tính *</Label>
+          <Select
+            value={formData.gender}
+            onValueChange={(value) => setFormData({
+              ...formData,
+              gender: value as 'MALE' | 'FEMALE' | 'OTHER',
+            })}
+          >
+            <SelectTrigger id="gender" className="mt-2 w-full">
+              <SelectValue placeholder="Chọn giới tính" />
+            </SelectTrigger>
+            <SelectContent>
+              {genders.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="nationalId">CMND/CCCD *</Label>
+          <Input
+            id="nationalId"
+            value={formData.nationalId}
+            onChange={(e) => setFormData({ ...formData, nationalId: e.target.value })}
+            className="mt-2"
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="address">Địa chỉ *</Label>
+        <Textarea
+          id="address"
+          value={formData.address}
+          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+          className="mt-2"
+        />
+      </div>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {message && <p className="text-sm text-emerald-600">{message}</p>}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+          {saving ? 'Đang lưu...' : 'Lưu thông tin'}
+        </Button>
+        {onCancel ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={saving}
+            className="w-full sm:w-auto"
+          >
+            Bỏ qua
+          </Button>
+        ) : null}
+      </div>
+    </form>
+  )
+}
+
+export function PatientProfilePage() {
+  const navigate = useNavigate()
+  const [patient, setPatient] = useState<Patient | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        setLoading(true)
+        const data = await api.patients.getCurrent()
+        setPatient(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Không thể tải hồ sơ')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProfile()
+  }, [])
 
   return (
     <div className="rounded-3xl border bg-white p-8 shadow-sm">
@@ -116,102 +239,16 @@ export function PatientProfilePage() {
 
       {loading ? (
         <div className="text-center py-10 text-muted-foreground">Đang tải dữ liệu hồ sơ...</div>
+      ) : error ? (
+        <div className="text-center py-10 text-destructive">{error}</div>
+      ) : patient ? (
+        <PatientProfileForm
+          patient={patient}
+          onSuccess={() => navigate('/patient')}
+          onCancel={() => navigate('/patient')}
+        />
       ) : (
-        <form className="grid gap-6" onSubmit={handleSubmit}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="fullName">Họ và tên *</Label>
-              <Input
-                id="fullName"
-                value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                className="mt-2"
-              />
-            </div>
-            <div>
-              <Label htmlFor="dateOfBirth">Ngày sinh *</Label>
-              <Input
-                id="dateOfBirth"
-                type="date"
-                value={formData.dateOfBirth}
-                onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                className="mt-2"
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="phone">Số điện thoại *</Label>
-              <Input
-                id="phone"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="mt-2"
-              />
-            </div>
-            <div>
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="mt-2"
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="gender">Giới tính *</Label>
-              <Select
-              value={formData.gender}
-              onValueChange={(value) => setFormData({
-                ...formData,
-                gender: value as 'MALE' | 'FEMALE' | 'OTHER',
-              })}
-            >
-                <SelectTrigger id="gender" className="mt-2 w-full">
-                  <SelectValue placeholder="Chọn giới tính" />
-                </SelectTrigger>
-                <SelectContent>
-                  {genders.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="nationalId">CMND/CCCD *</Label>
-              <Input
-                id="nationalId"
-                value={formData.nationalId}
-                onChange={(e) => setFormData({ ...formData, nationalId: e.target.value })}
-                className="mt-2"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="address">Địa chỉ *</Label>
-            <Textarea
-              id="address"
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              className="mt-2"
-            />
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {message && <p className="text-sm text-emerald-600">{message}</p>}
-
-          <Button type="submit" disabled={saving} className="w-full">
-            {saving ? 'Đang lưu...' : 'Lưu thông tin'}
-          </Button>
-        </form>
+        <div className="text-center py-10 text-muted-foreground">Không tìm thấy hồ sơ.</div>
       )}
     </div>
   )

@@ -39,8 +39,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const initialize = async () => {
       const savedToken = getStoredToken()
+      const savedUser = getStoredUser()
 
-      if (!savedToken) {
+      if (!savedToken || !savedUser) {
         setLoading(false)
         return
       }
@@ -50,10 +51,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(authUser)
         setToken(savedToken)
       } catch (error) {
-        removeStoredToken()
-        removeStoredUser()
-        setUser(null)
-        setToken(null)
+        // Token tồn tại nhưng getMe() fail, vẫn giữ token
+        // Để user có thể tiếp tục dùng app, API error khác sẽ handle sau
+        setUser(savedUser)
+        setToken(savedToken)
       } finally {
         setLoading(false)
       }
@@ -62,9 +63,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     initialize()
   }, [])
 
+  const getResponseToken = (response: AuthResponse) => response.accessToken ?? response.token ?? ''
+
   const handleAuthSuccess = (response: AuthResponse) => {
-    setStoredToken(response.token)
-    setToken(response.token)
+    const tokenValue = getResponseToken(response)
+    setStoredToken(tokenValue)
+    setToken(tokenValue)
+
+    localStorage.setItem('user_role', response.role)
 
     const userData: AuthUser = {
       username: response.username,
@@ -75,11 +81,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(userData)
 
     if (response.role === 'ROLE_PATIENT') {
-      if (!response.profileCompleted) {
-        navigate('/patient/profile', { replace: true })
-      } else {
-        navigate('/patient', { replace: true })
-      }
+      navigate('/', { replace: true })
     } else if (response.role === 'ROLE_ADMIN') {
       navigate('/admin', { replace: true })
     } else if (response.role === 'ROLE_DOCTOR') {

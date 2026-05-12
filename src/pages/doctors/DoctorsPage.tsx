@@ -1,7 +1,72 @@
+import { useState, useEffect } from 'react'
 import { DoctorFilter } from '@/components/doctors/doctor-filter'
 import { DoctorCard } from '@/components/doctors/doctor-card'
+import { api } from '@/services/api'
+import type { Doctor } from '@/types'
 
 export function DoctorsPage() {
+  const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedSpecialty, setSelectedSpecialty] = useState('all')
+  const [sortBy, setSortBy] = useState('default')
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const data = await api.doctors.getAll()
+        setDoctors(data)
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Không thể tải danh sách bác sĩ'
+        setError(errorMessage)
+        console.error('Error fetching doctors:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDoctors()
+  }, [])
+
+  useEffect(() => {
+    let filtered = doctors
+
+    // Filter by specialty
+    if (selectedSpecialty !== 'all') {
+      filtered = filtered.filter((doctor) => {
+        const specialtySlug = typeof doctor.specialty === 'string' 
+          ? doctor.specialty.toLowerCase().replace(/\s+/g, '-')
+          : doctor.specialty?.slug
+        return specialtySlug === selectedSpecialty
+      })
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      filtered = filtered.filter((doctor) => {
+        const name = doctor.fullName || doctor.name || ''
+        return name.toLowerCase().includes(searchQuery.toLowerCase())
+      })
+    }
+
+    // Sort
+    if (sortBy === 'rating') {
+      filtered = [...filtered].sort((a, b) => (b.rating || 0) - (a.rating || 0))
+    } else if (sortBy === 'experience') {
+      filtered = [...filtered].sort((a, b) => (b.experience || 0) - (a.experience || 0))
+    } else if (sortBy === 'price-low') {
+      filtered = [...filtered].sort((a, b) => (a.fee || a.consultationFee || 0) - (b.fee || b.consultationFee || 0))
+    } else if (sortBy === 'price-high') {
+      filtered = [...filtered].sort((a, b) => (b.fee || b.consultationFee || 0) - (a.fee || a.consultationFee || 0))
+    }
+
+    setFilteredDoctors(filtered)
+  }, [doctors, selectedSpecialty, searchQuery, sortBy])
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -11,41 +76,44 @@ export function DoctorsPage() {
       
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         <div className="lg:col-span-1">
-          <DoctorFilter />
+          <DoctorFilter 
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            selectedSpecialty={selectedSpecialty}
+            onSpecialtyChange={setSelectedSpecialty}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+          />
         </div>
         
         <div className="lg:col-span-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Sample doctor cards - replace with actual data */}
-            <DoctorCard
-              doctor={{
-                id: '1',
-                name: 'Dr. Nguyễn Văn A',
-                specialty: 'Tim mạch',
-                image: '/placeholder-user.jpg',
-                experience: 10,
-                rating: 4.8,
-                reviewCount: 120,
-                education: 'Bác sĩ Chuyên khoa I',
-                hospital: 'Bệnh viện Đa khoa',
-                consultationFee: 450000,
-              }}
-            />
-            <DoctorCard
-              doctor={{
-                id: '2',
-                name: 'Dr. Trần Thị B',
-                specialty: 'Nhi khoa',
-                image: '/placeholder-user.jpg',
-                experience: 8,
-                rating: 4.9,
-                reviewCount: 95,
-                education: 'Thạc sĩ Y khoa',
-                hospital: 'Bệnh viện Nhi đồng',
-                consultationFee: 420000,
-              }}
-            />
-          </div>
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-96 bg-gray-200 rounded-lg animate-pulse"></div>
+              ))}
+            </div>
+          ) : error ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-8 text-center">
+              <p className="text-red-700 mb-4">Lỗi: {error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
+              >
+                Thử lại
+              </button>
+            </div>
+          ) : filteredDoctors.length === 0 ? (
+            <div className="rounded-lg border border-gray-200 p-8 text-center">
+              <p className="text-muted-foreground">Không tìm thấy bác sĩ phù hợp với tiêu chí tìm kiếm</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {filteredDoctors.map((doctor) => (
+                <DoctorCard key={doctor.id} doctor={doctor} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

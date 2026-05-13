@@ -28,9 +28,13 @@ export function GoogleCallbackPage() {
       setStoredToken(token)
       setStoredUser({
         username: auth.username,
+        displayName: auth.displayName ?? auth.username,
         role: auth.role,
         profileCompleted: auth.profileCompleted ?? false,
       })
+
+      // Dispatch event để AuthContext cập nhật state
+      window.dispatchEvent(new Event('auth-sync'))
 
       nav('/', { replace: true })
     })().catch((e) => {

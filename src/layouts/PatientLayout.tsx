@@ -18,7 +18,7 @@ export function PatientLayout() {
         <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
             <p className="text-sm text-muted-foreground">Xin chào,</p>
-            <h1 className="text-2xl font-semibold">{user?.username}</h1>
+            <h1 className="text-2xl font-semibold">{user?.displayName ?? user?.username}</h1>
           </div>
           <button
             type="button"

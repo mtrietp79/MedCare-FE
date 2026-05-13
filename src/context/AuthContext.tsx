@@ -61,6 +61,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     initialize()
+
+    // Listen cho thay đổi từ social login callback pages
+    const handleAuthSync = () => {
+      const newToken = getStoredToken()
+      const newUser = getStoredUser()
+      if (newToken && newUser) {
+        setToken(newToken)
+        setUser(newUser)
+      }
+    }
+
+    // Listen storage changes từ tab khác
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'access_token' || e.key === 'auth_user') {
+        handleAuthSync()
+      }
+    }
+
+    // Listen custom event từ callback pages
+    window.addEventListener('auth-sync', handleAuthSync)
+    window.addEventListener('storage', handleStorageChange)
+    return () => {
+      window.removeEventListener('auth-sync', handleAuthSync)
+      window.removeEventListener('storage', handleStorageChange)
+    }
   }, [])
 
   const getResponseToken = (response: AuthResponse) => response.accessToken ?? response.token ?? ''
@@ -74,6 +99,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const userData: AuthUser = {
       username: response.username,
+      displayName: response.displayName ?? response.username,
       role: response.role,
       profileCompleted: response.profileCompleted ?? false,
     }

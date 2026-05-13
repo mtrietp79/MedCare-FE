@@ -82,6 +82,7 @@ export interface Patient {
 
 export interface AuthUser {
   username: string
+  displayName?: string | null
   role: 'ROLE_PATIENT' | 'ROLE_DOCTOR' | 'ROLE_ADMIN'
   profileCompleted: boolean
 }

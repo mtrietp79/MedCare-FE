@@ -1,6 +1,7 @@
 import axios, { type AxiosError } from 'axios'
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
+export const API_BASE_URL =
+  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -12,11 +13,14 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     if (axios.isAxiosError(error)) {
       const responseData = error.response?.data as any
+      const status = error.response?.status
       const message =
         responseData?.message ||
         (typeof responseData === 'string' ? responseData : undefined) ||
         error.message
-      return Promise.reject(new Error(message))
+      return Promise.reject(
+        new Error(status ? `Request failed with status code ${status}: ${message}` : message)
+      )
     }
     return Promise.reject(error)
   }
@@ -60,12 +64,14 @@ export interface AuthResponse {
   accessToken?: string
   token?: string
   username: string
+  displayName?: string | null
   role: string
   profileCompleted?: boolean | null
 }
 
 export interface AuthUser {
   username: string
+  displayName?: string | null
   role: string
   profileCompleted: boolean
 }

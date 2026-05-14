@@ -39,8 +39,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const initialize = async () => {
       const savedToken = getStoredToken()
+      const savedUser = getStoredUser()
 
-      if (!savedToken) {
+      if (!savedToken || !savedUser) {
         setLoading(false)
         return
       }
@@ -50,24 +51,55 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(authUser)
         setToken(savedToken)
       } catch (error) {
-        removeStoredToken()
-        removeStoredUser()
-        setUser(null)
-        setToken(null)
+        // Token tồn tại nhưng getMe() fail, vẫn giữ token
+        // Để user có thể tiếp tục dùng app, API error khác sẽ handle sau
+        setUser(savedUser)
+        setToken(savedToken)
       } finally {
         setLoading(false)
       }
     }
 
     initialize()
+
+    // Listen cho thay đổi từ social login callback pages
+    const handleAuthSync = () => {
+      const newToken = getStoredToken()
+      const newUser = getStoredUser()
+      if (newToken && newUser) {
+        setToken(newToken)
+        setUser(newUser)
+      }
+    }
+
+    // Listen storage changes từ tab khác
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'access_token' || e.key === 'auth_user') {
+        handleAuthSync()
+      }
+    }
+
+    // Listen custom event từ callback pages
+    window.addEventListener('auth-sync', handleAuthSync)
+    window.addEventListener('storage', handleStorageChange)
+    return () => {
+      window.removeEventListener('auth-sync', handleAuthSync)
+      window.removeEventListener('storage', handleStorageChange)
+    }
   }, [])
 
+  const getResponseToken = (response: AuthResponse) => response.accessToken ?? response.token ?? ''
+
   const handleAuthSuccess = (response: AuthResponse) => {
-    setStoredToken(response.token)
-    setToken(response.token)
+    const tokenValue = getResponseToken(response)
+    setStoredToken(tokenValue)
+    setToken(tokenValue)
+
+    localStorage.setItem('user_role', response.role)
 
     const userData: AuthUser = {
       username: response.username,
+      displayName: response.displayName ?? response.username,
       role: response.role,
       profileCompleted: response.profileCompleted ?? false,
     }
@@ -75,11 +107,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(userData)
 
     if (response.role === 'ROLE_PATIENT') {
-      if (!response.profileCompleted) {
-        navigate('/patient/profile', { replace: true })
-      } else {
-        navigate('/patient', { replace: true })
-      }
+      navigate('/', { replace: true })
     } else if (response.role === 'ROLE_ADMIN') {
       navigate('/admin', { replace: true })
     } else if (response.role === 'ROLE_DOCTOR') {

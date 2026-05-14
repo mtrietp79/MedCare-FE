@@ -4,6 +4,7 @@ import { ShieldCheck, CalendarDays, User, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { api } from '@/services/api'
+import { PatientProfileForm } from './PatientProfilePage'
 import type { Patient, Appointment } from '@/types'
 
 export function PatientDashboardPage() {
@@ -65,6 +66,21 @@ export function PatientDashboardPage() {
           </div>
         </div>
       </div>
+
+      {patient?.profileCompleted === false ? (
+        <div className="rounded-3xl border bg-white p-8 shadow-sm">
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold">Hoàn thiện hồ sơ</h2>
+            <p className="text-sm text-muted-foreground">
+              Vui lòng cập nhật đầy đủ thông tin để hoàn tất hồ sơ và tiếp tục đặt lịch khám.
+            </p>
+          </div>
+          <PatientProfileForm
+            patient={patient}
+            onSuccess={(updatedPatient) => setPatient(updatedPatient)}
+          />
+        </div>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card>

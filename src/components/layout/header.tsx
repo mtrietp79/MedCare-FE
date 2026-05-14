@@ -72,13 +72,13 @@ export function Header() {
                     <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
                       <User className="w-4 h-4 text-primary" />
                     </div>
-                    <span className="max-w-[120px] truncate">{user.username}</span>
+                    <span className="max-w-[120px] truncate">{user.displayName ?? user.username}</span>
                     <ChevronDown className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="px-2 py-1.5">
-                    <p className="text-sm font-medium">{user.username}</p>
+                    <p className="text-sm font-medium">{user.displayName ?? user.username}</p>
                     <p className="text-xs text-muted-foreground">{user.role}</p>
                   </div>
                   <DropdownMenuSeparator />
@@ -160,7 +160,7 @@ export function Header() {
                           <User className="w-5 h-5 text-primary" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium">{user.username}</p>
+                          <p className="text-sm font-medium">{user.displayName ?? user.username}</p>
                           <p className="text-xs text-muted-foreground">{user.role}</p>
                         </div>
                       </div>

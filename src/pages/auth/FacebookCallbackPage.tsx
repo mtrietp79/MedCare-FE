@@ -24,14 +24,19 @@ export function FacebookCallbackPage() {
       }
 
       const auth = await loginFacebookByCode(code, FACEBOOK_CB)
-      setStoredToken(auth.token)
+      const token = auth.token ?? auth.accessToken ?? ''
+      setStoredToken(token)
       setStoredUser({
         username: auth.username,
+        displayName: auth.displayName ?? auth.username,
         role: auth.role,
         profileCompleted: auth.profileCompleted ?? false,
       })
 
-      nav(auth.profileCompleted === false ? '/patient/profile' : '/patient', { replace: true })
+      // Dispatch event để AuthContext cập nhật state
+      window.dispatchEvent(new Event('auth-sync'))
+
+      nav('/', { replace: true })
     })().catch((e) => {
       const msg = e?.response?.data?.message || 'Đăng nhập Facebook thất bại'
       nav(`/login?error=${encodeURIComponent(msg)}`)

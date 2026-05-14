@@ -144,8 +144,6 @@ api.analytics.getStats()                 // GET /api/analytics/stats
 
 ### Payments
 ```typescript
-api.payments.initiateMoMoPayment(data)   // POST /api/payments/momo/initiate
-api.payments.verifyMoMoPayment(data)     // POST /api/payments/momo/verify
 api.payments.initiateVNPayPayment(data)  // POST /api/payments/vnpay/initiate
 api.payments.getPaymentStatus(appointmentId) // GET /api/payments/:appointmentId/status
 ```

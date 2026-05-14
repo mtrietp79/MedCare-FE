@@ -3,6 +3,7 @@ import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, MoMoPayme
 import { mockApi } from './mock-api'
 import { getStoredToken, removeStoredToken } from './auth'
 
+
 const API_BASE_URL = 'http://localhost:8080/api'
 
 interface FetchOptions extends RequestInit {

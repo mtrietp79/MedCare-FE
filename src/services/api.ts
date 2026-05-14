@@ -1,11 +1,7 @@
 
-import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, MoMoPaymentRequest, MoMoPaymentResponse, MoMoPaymentVerification } from '@/types'
+import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule} from '@/types'
 import { mockApi } from './mock-api'
 import { getStoredToken, removeStoredToken } from './auth'
-<<<<<<< HEAD
-
-=======
->>>>>>> aaace22 (designtoken)
 
 const API_BASE_URL = 'http://localhost:8080/api'
 

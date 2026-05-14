@@ -15,7 +15,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import type { Specialty } from '@/types'
 import { api } from '@/services/api'
-import { specialties as fallbackSpecialties } from '@/lib/mock-data'
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Heart,
@@ -38,11 +37,10 @@ export function SpecialtySection() {
       try {
         setLoading(true)
         const data = await api.specialties.getAll()
-        setSpecialties(Array.isArray(data) ? data : fallbackSpecialties)
+        setSpecialties(Array.isArray(data) ? data : [])
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load specialties')
         console.error('Error fetching specialties:', err)
-        setSpecialties(fallbackSpecialties)
       } finally {
         setLoading(false)
       }

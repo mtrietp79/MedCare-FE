@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Star, Quote } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { testimonials as fallbackTestimonials } from '@/lib/mock-data'
 
 interface Testimonial {
   id: string
@@ -21,16 +20,15 @@ export function Testimonials() {
     const fetchTestimonials = async () => {
       try {
         setLoading(true)
-        const response = await fetch('http://localhost:8080/api/testimonials')
+        const response = await fetch('/api/testimonials')
         if (!response.ok) {
           throw new Error('Failed to fetch testimonials')
         }
         const data = await response.json()
-        setTestimonials(Array.isArray(data) ? data : fallbackTestimonials)
+        setTestimonials(Array.isArray(data) ? data : [])
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load testimonials')
         console.error('Error fetching testimonials:', err)
-        setTestimonials(fallbackTestimonials)
       } finally {
         setLoading(false)
       }

@@ -71,6 +71,7 @@ function App() {
               <Route path="/doctors/:id" element={<DoctorDetailPage />} />
               <Route path="/specialty" element={<SpecialtyPage />} />
               <Route path="/specialty/:slug" element={<SpecialtyDetailPage />} />
+              <Route path="/booking" element={<BookingPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/about" element={<AboutPage />} />   
             </Route>
@@ -101,9 +102,7 @@ function App() {
               <Route path="/patient/appointments/:id" element={<PatientAppointmentDetailPage />} />
             </Route>
 
-            <Route path="/booking" element={<RequireAuth><PatientGuard><BookingPage /></PatientGuard></RequireAuth>} />
-
-{/* Admin Layout Routes - Đã gộp và bảo mật */}
+            {/* Admin Layout Routes - Đã gộp và bảo mật */}
 <Route 
   path="/admin" 
   element={

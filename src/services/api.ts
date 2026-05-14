@@ -1,5 +1,4 @@
 import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule } from '@/types'
-import { mockApi } from './mock-api'
 
 const API_BASE_URL = 'http://localhost:8080/api'
 const TOKEN_KEY = 'medcare_access_token'
@@ -17,24 +16,6 @@ interface FetchOptions extends RequestInit {
 }
 
 async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  // If mock API is enabled, try mock first
-  if (mockApi.isEnabled()) {
-    try {
-      // Route to appropriate mock handler
-      if (endpoint.includes('/specialties')) {
-        return mockApi.specialties as any
-      } else if (endpoint.includes('/doctors')) {
-        return mockApi.doctors as any
-      } else if (endpoint.includes('/patients')) {
-        return mockApi.patients as any
-      } else if (endpoint.includes('/appointments')) {
-        return mockApi.appointments as any
-      }
-    } catch (err) {
-      console.log('Mock API fallback for:', endpoint)
-    }
-  }
-
   const url = `${API_BASE_URL}${endpoint}`
   const token = getStoredToken()
 
@@ -80,46 +61,8 @@ async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise
 
     return data as T
   } catch (error) {
-    // If backend is down and mock API is enabled, fallback to mock
-    if (mockApi.isEnabled() && error instanceof Error && error.message.includes('ERR_CONNECTION_REFUSED')) {
-      console.log('Backend unavailable, using mock API for:', endpoint)
-      return mockApiCall(endpoint, options)
-    }
     throw error
   }
-}
-
-async function mockApiCall<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  if (endpoint.includes('/specialties')) {
-    if (endpoint.match(/\/specialties\/[^?]/)) {
-      const id = endpoint.split('/').pop()?.split('?')[0]
-      return mockApi.specialties.getById(id!) as any
-    }
-    return mockApi.specialties.getAll() as any
-  } else if (endpoint.includes('/doctors')) {
-    if (endpoint.includes('/slots')) {
-      const match = endpoint.match(/\/doctors\/([^/]+)\/slots/)
-      if (match) {
-        const doctorId = match[1]
-        const date = new URLSearchParams(endpoint.split('?')[1]).get('date') || new Date().toISOString().split('T')[0]
-        return mockApi.doctors.getAvailableSlots(doctorId, date) as any
-      }
-    }
-    if (endpoint.match(/\/doctors\/[^?]/)) {
-      const id = endpoint.split('/').pop()?.split('?')[0]
-      return mockApi.doctors.getById(id!) as any
-    }
-    return mockApi.doctors.getAll() as any
-  } else if (endpoint.includes('/patients/me')) {
-    return mockApi.patients.getCurrent() as any
-  } else if (endpoint.includes('/appointments')) {
-    if (options.method === 'POST') {
-      return mockApi.appointments.create((options.body as any) || {}) as any
-    }
-    return mockApi.appointments.getAll() as any
-  }
-
-  throw new Error('Unknown endpoint: ' + endpoint)
 }
 
 export const specialtyApi = {

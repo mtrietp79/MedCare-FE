@@ -14,7 +14,7 @@ export function SpecialtyPage() {
         setLoading(true)
         setError(null)
         const data = await api.specialties.getAll()
-        setSpecialties(data)
+        setSpecialties(Array.isArray(data) ? data : [])
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Không thể tải danh sách chuyên khoa'
         setError(errorMessage)

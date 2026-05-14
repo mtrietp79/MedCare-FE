@@ -24,9 +24,5 @@ export function PatientGuard({ children }: { children: ReactNode }) {
     return <Navigate to="/" replace />
   }
 
-  if (!user.profileCompleted && location.pathname !== '/patient/profile') {
-    return <Navigate to="/patient/profile" replace state={{ from: location }} />
-  }
-
   return children
 }

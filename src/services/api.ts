@@ -1,15 +1,10 @@
-import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule } from '@/types'
+
+import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, MoMoPaymentRequest, MoMoPaymentResponse, MoMoPaymentVerification } from '@/types'
+import { mockApi } from './mock-api'
+import { getStoredToken, removeStoredToken } from './auth'
+
 
 const API_BASE_URL = 'http://localhost:8080/api'
-const TOKEN_KEY = 'medcare_access_token'
-
-function getStoredToken() {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-function removeStoredToken() {
-  localStorage.removeItem(TOKEN_KEY)
-}
 
 interface FetchOptions extends RequestInit {
   headers?: Record<string, string>

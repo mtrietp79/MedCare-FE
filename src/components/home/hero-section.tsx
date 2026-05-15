@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Calendar, Shield, Clock } from 'lucide-react'
+import { Search, Calendar, Shield, Clock, Heart, Zap, CheckCircle2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,14 +13,14 @@ export function HeroSection() {
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.2,
+        staggerChildren: 0.15,
         delayChildren: 0.1,
       },
     },
   }
 
   const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
+    hidden: { opacity: 0, y: 25 },
     visible: {
       opacity: 1,
       y: 0,
@@ -30,7 +30,7 @@ export function HeroSection() {
 
   const floatingVariants = {
     animate: {
-      y: [0, -10, 0],
+      y: [0, -12, 0],
       transition: {
         duration: 6,
         repeat: Infinity,
@@ -40,78 +40,80 @@ export function HeroSection() {
   }
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-background to-secondary/30">
+    <section className="relative overflow-hidden bg-primary/10 -mt-2">
       {/* Animated decorative elements */}
       <motion.div
         animate={{ 
           scale: [1, 1.1, 1],
-          opacity: [0.6, 0.8, 0.6],
+          opacity: [0.8, 1, 0.8],
         }}
         transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"
+        className="absolute top-10 right-10 w-96 h-96 bg-primary/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"
       />
       <motion.div
         animate={{ 
           scale: [1, 1.15, 1],
-          opacity: [0.4, 0.6, 0.4],
+          opacity: [0.6, 0.8, 0.6],
         }}
         transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-        className="absolute bottom-0 left-0 w-64 h-64 bg-accent/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"
+        className="absolute -bottom-10 -left-10 w-80 h-80 bg-accent/15 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"
       />
       
-      <div className="container mx-auto px-4 py-16 md:py-24 relative">
+      <div className="container mx-auto px-4 relative z-10 py-16 md:py-28">
         <motion.div
-          className="grid lg:grid-cols-2 gap-12 items-center"
+          className="grid lg:grid-cols-5 gap-8 lg:gap-12 items-center"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
-          {/* Content */}
-          <motion.div className="space-y-8">
-            <motion.div className="space-y-4" variants={itemVariants}>
+          {/* Content Left */}
+          <motion.div className="space-y-8 lg:col-span-3">
+            <motion.div className="space-y-6" variants={itemVariants}>
               <motion.div
-                className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-medium"
-                whileHover={{ scale: 1.05, backgroundColor: 'var(--primary-light)' }}
+                className="inline-flex items-center gap-2 bg-white text-primary px-4 py-2.5 rounded-full text-sm font-semibold shadow-sm border border-primary/20"
+                whileHover={{ scale: 1.05, boxShadow: '0 8px 16px rgba(0, 132, 255, 0.2)' }}
                 transition={{ type: 'spring', stiffness: 400, damping: 10 }}
               >
-                <Shield className="w-4 h-4" />
-                Đặt lịch an toàn & tiện lợi
+                <Zap className="w-4 h-4" />
+                Được tin tưởng bởi 50K+ bệnh nhân
               </motion.div>
+
               <motion.h1
-                className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground leading-tight text-balance"
+                className="text-5xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight text-balance"
                 variants={itemVariants}
               >
                 Chăm sóc sức khỏe{' '}
                 <motion.span
-                  className="text-primary inline-block"
-                  animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-                  transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+                  className="text-primary"
+                  animate={{ opacity: [0.8, 1, 0.8] }}
+                  transition={{ duration: 3, repeat: Infinity }}
                 >
                   thông minh
                 </motion.span>
               </motion.h1>
+
               <motion.p
-                className="text-lg text-muted-foreground max-w-lg leading-relaxed"
+                className="text-xl text-muted-foreground max-w-lg leading-relaxed font-medium"
                 variants={itemVariants}
               >
-                Đặt lịch khám bệnh trực tuyến với các bác sĩ hàng đầu Việt Nam. 
+                Đặt lịch khám bệnh trực tuyến với các bác sĩ hàng đầu Việt Nam trong vài phút. 
                 Tiết kiệm thời gian, không cần chờ đợi.
               </motion.p>
             </motion.div>
 
-            {/* Search bar */}
+            {/* Search bar - LARGER */}
             <motion.div
               variants={itemVariants}
-              whileHover={{ boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)' }}
-              className="bg-card rounded-2xl p-2 shadow-lg border max-w-xl transition-all"
+              whileHover={{ boxShadow: '0 25px 50px rgba(0, 0, 0, 0.12)' }}
+              className="bg-white rounded-2xl p-2.5 shadow-lg border border-border/50 max-w-2xl transition-all"
             >
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-muted-foreground" />
                   <Input
                     type="text"
-                    placeholder="Tìm bác sĩ, chuyên khoa..."
-                    className="pl-12 h-12 border-0 bg-transparent text-base"
+                    placeholder="Tìm bác sĩ, chuyên khoa, bệnh viện..."
+                    className="pl-16 h-14 border-0 bg-transparent text-lg font-medium placeholder:text-muted-foreground"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -120,7 +122,7 @@ export function HeroSection() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Button size="lg" className="h-12 px-6" asChild>
+                  <Button size="lg" className="h-14 px-8 text-base font-semibold" asChild>
                     <Link to={`/doctors${searchQuery ? `?q=${searchQuery}` : ''}`}>
                       Tìm kiếm
                     </Link>
@@ -129,103 +131,193 @@ export function HeroSection() {
               </div>
             </motion.div>
 
-            {/* Quick stats */}
-            <motion.div className="flex flex-wrap gap-8" variants={itemVariants}>
+            {/* Quick stats - LARGER */}
+            <motion.div className="grid grid-cols-2 gap-6 pt-4" variants={itemVariants}>
               {[
-                { icon: Calendar, label: '50K+', desc: 'Lịch hẹn đã đặt', color: 'primary' },
-                { icon: Clock, label: '24/7', desc: 'Hỗ trợ khách hàng', color: 'accent' },
+                { icon: Calendar, label: '50K+', desc: 'Lịch hẹn', color: 'bg-primary/20 text-primary' },
+                { icon: Clock, label: '24/7', desc: 'Hỗ trợ khách hàng', color: 'bg-accent/20 text-accent' },
+                { icon: Heart, label: '98%', desc: 'Hài lòng', color: 'bg-chart-2/20 text-chart-2' },
+                { icon: CheckCircle2, label: '85+', desc: 'Bác sĩ chuyên khoa', color: 'bg-chart-1/20 text-chart-1' },
               ].map((stat, i) => (
                 <motion.div
                   key={i}
-                  className="flex items-center gap-3"
-                  whileHover={{ x: 8 }}
+                  className="flex items-center gap-4 p-4 rounded-xl bg-white/60 backdrop-blur-sm border border-border/40 hover:bg-white/80 transition-colors"
+                  whileHover={{ y: -4 }}
                   transition={{ type: 'spring', stiffness: 400, damping: 10 }}
                 >
-                  <div className={`w-12 h-12 bg-${stat.color}/10 rounded-xl flex items-center justify-center`}>
-                    <stat.icon className={`w-6 h-6 text-${stat.color}`} />
+                  <div className={`w-14 h-14 rounded-lg flex items-center justify-center flex-shrink-0 ${stat.color}`}>
+                    <stat.icon className="w-7 h-7" />
                   </div>
                   <div>
                     <div className="text-2xl font-bold text-foreground">{stat.label}</div>
-                    <div className="text-sm text-muted-foreground">{stat.desc}</div>
+                    <div className="text-sm text-muted-foreground font-medium">{stat.desc}</div>
                   </div>
                 </motion.div>
               ))}
             </motion.div>
           </motion.div>
 
-          {/* Image/Illustration placeholder */}
+          {/* Image Section Right - RICHER CONTENT */}
           <motion.div
-            className="relative hidden lg:block"
-            initial={{ opacity: 0, scale: 0.9, x: 50 }}
+            className="relative hidden lg:flex flex-col items-center lg:col-span-2"
+            initial={{ opacity: 0, scale: 0.85, x: 60 }}
             animate={{ opacity: 1, scale: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.3, ease: 'easeOut' }}
+            transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
           >
-            <div className="relative w-full aspect-square max-w-lg mx-auto">
-              {/* Main card */}
+            <div className="relative w-full max-w-md">
+              {/* Main Doctor Card */}
               <motion.div
-                className="absolute inset-0 bg-gradient-to-br from-primary to-primary/80 rounded-3xl shadow-2xl"
-                animate={{ rotate: [2, -2, 2] }}
+                className="relative rounded-3xl overflow-hidden shadow-2xl border-4 border-white bg-muted"
+                animate={{ y: [0, -8, 0] }}
                 transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-                style={{ transform: 'rotate(3deg)' }}
-              />
-              <motion.div
-                className="absolute inset-0 bg-card rounded-3xl shadow-xl flex items-center justify-center"
-                animate={{ y: [0, -5, 0] }}
-                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
               >
-                <div className="text-center p-8">
-                  <motion.div
-                    className="w-32 h-32 bg-primary/10 rounded-full mx-auto mb-6 flex items-center justify-center"
-                    animate={{ scale: [1, 1.05, 1] }}
-                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                  >
-                    <svg className="w-16 h-16 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                  </motion.div>
-                  <h3 className="text-xl font-bold text-foreground mb-2">Bác sĩ chuyên khoa</h3>
-                  <p className="text-muted-foreground">85+ bác sĩ hàng đầu</p>
-                </div>
+                <img
+                  src="/images/hero/doctor.png"
+                  alt="Healthcare Professional"
+                  className="w-full h-full object-cover aspect-[3/4]"
+                />
+                {/* Overlay gradient */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                
+                {/* Badge */}
+                <motion.div
+                  className="absolute bottom-6 left-6 right-6 bg-white/95 backdrop-blur-sm rounded-xl p-4 shadow-lg"
+                  animate={{ y: [0, -4, 0] }}
+                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+                >
+                  <p className="text-sm text-muted-foreground font-medium">Bác sĩ chuyên khoa</p>
+                  <p className="text-lg font-bold text-primary">85+ chuyên gia hàng đầu</p>
+                </motion.div>
               </motion.div>
-              
-              {/* Floating cards */}
+
+              {/* Top Right - Satisfaction Card */}
               <motion.div
-                className="absolute -top-4 -right-4 bg-card rounded-2xl p-4 shadow-lg border"
+                className="absolute -top-6 -right-6 bg-white rounded-2xl p-5 shadow-lg border-2 border-primary/20"
                 variants={floatingVariants}
                 animate="animate"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-accent/20 rounded-full flex items-center justify-center">
-                    <svg className="w-5 h-5 text-accent" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
+                  <div className="w-12 h-12 bg-chart-2/20 rounded-full flex items-center justify-center">
+                    <Heart className="w-6 h-6 text-chart-2" />
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-foreground">98%</div>
-                    <div className="text-xs text-muted-foreground">Hài lòng</div>
+                    <p className="text-2xl font-bold text-foreground">98%</p>
+                    <p className="text-xs text-muted-foreground font-medium">Hài lòng</p>
                   </div>
                 </div>
               </motion.div>
-              
+
+              {/* Bottom Left - Patients Card */}
               <motion.div
-                className="absolute -bottom-4 -left-4 bg-card rounded-2xl p-4 shadow-lg border"
+                className="absolute -bottom-6 -left-6 bg-white rounded-2xl p-5 shadow-lg border-2 border-accent/20"
                 variants={floatingVariants}
                 animate="animate"
                 transition={{ delay: 0.3 }}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                    <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                    </svg>
+                  <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
+                    <Calendar className="w-6 h-6 text-primary" />
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-foreground">15K+</div>
-                    <div className="text-xs text-muted-foreground">Bệnh nhân</div>
+                    <p className="text-2xl font-bold text-foreground">50K+</p>
+                    <p className="text-xs text-muted-foreground font-medium">Lịch khám</p>
                   </div>
                 </div>
               </motion.div>
+
+              {/* Top Left - Fast Booking Badge */}
+              <motion.div
+                className="absolute -top-12 -left-12 bg-primary text-white rounded-2xl p-4 shadow-lg"
+                animate={{ rotate: [0, 5, 0], y: [0, -6, 0] }}
+                transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <div className="flex items-center gap-2">
+                  <Zap className="w-5 h-5" />
+                  <span className="text-sm font-bold">Đặt lịch nhanh</span>
+                </div>
+              </motion.div>
+
+              {/* Bottom Right - Fast Service */}
+              <motion.div
+                className="absolute -bottom-4 right-0 translate-x-1/4 bg-white rounded-xl p-4 shadow-md border border-accent/30"
+                animate={{ y: [0, -8, 0] }}
+                transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
+              >
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-accent" />
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Nhanh chóng</p>
+                    <p className="text-xs text-muted-foreground">&lt; 5 phút</p>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Right Middle - Expert Rating */}
+              <motion.div
+                className="absolute top-1/2 -right-8 -translate-y-1/2 bg-white rounded-xl p-4 shadow-md border border-chart-1/30"
+                animate={{ x: [0, 8, 0], y: [0, -4, 0] }}
+                transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-chart-1" />
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Đánh giá cao</p>
+                    <p className="text-xs text-muted-foreground">5★ từ bệnh nhân</p>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Left Middle - Quick Consultation */}
+              <motion.div
+                className="absolute top-1/3 -left-8 bg-white rounded-xl p-4 shadow-md border border-chart-2/30"
+                animate={{ x: [0, -6, 0], y: [0, 4, 0] }}
+                transition={{ duration: 4.8, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}
+              >
+                <div className="flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-chart-2" />
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Tư vấn nhanh</p>
+                    <p className="text-xs text-muted-foreground">Online 24/7</p>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Top Center-Right - Expert Doctors */}
+              <motion.div
+                className="absolute top-0 right-1/3 translate-x-1/2 -translate-y-2/3 bg-white rounded-xl p-3 shadow-md border border-primary/20 text-center"
+                animate={{ rotate: [0, -3, 0], y: [0, -4, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 0.8 }}
+              >
+                <p className="text-lg font-bold text-primary">85+</p>
+                <p className="text-xs text-muted-foreground font-medium">Chuyên gia</p>
+              </motion.div>
             </div>
+
+            {/* Additional Info Box Below */}
+            <motion.div
+              className="mt-12 w-full bg-white rounded-2xl p-6 shadow-lg border border-border/50"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
+            >
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <Shield className="w-6 h-6 text-primary mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-foreground">An toàn</p>
+                  <p className="text-xs text-muted-foreground">Bảo mật dữ liệu</p>
+                </div>
+                <div>
+                  <Clock className="w-6 h-6 text-accent mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-foreground">Nhanh chóng</p>
+                  <p className="text-xs text-muted-foreground">&lt; 5 phút</p>
+                </div>
+                <div>
+                  <Heart className="w-6 h-6 text-chart-2 mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-foreground">Chuyên nghiệp</p>
+                  <p className="text-xs text-muted-foreground">Bác sĩ hàng đầu</p>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
         </motion.div>
       </div>

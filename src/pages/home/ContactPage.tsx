@@ -7,12 +7,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { containerVariants, itemVariants } from '@/lib/animations'
 
-// Import images
-import clinic1 from '../../public/clinic1.png'
-import clinic2 from '../../public/clinic2.png'
-import lab1 from '../../public/lab1.png'
-import lab2 from '../../public/lab2.png'
-
 interface FormData {
   name: string
   email: string
@@ -80,22 +74,22 @@ export function ContactPage() {
 
   const facilities = [
     {
-      image: clinic1,
+      image: '/images/facilities/clinic1.png',
       title: 'Phòng khám chuyên khoa',
       description: 'Cơ sở vật chất hiện đại, trang thiết bị y tế tiên tiến',
     },
     {
-      image: clinic2,
+      image: '/images/facilities/clinic2.png',
       title: 'Phòng chờ thoải mái',
       description: 'Không gian yên tĩnh, thoáng đãng cho bệnh nhân',
     },
     {
-      image: lab1,
+      image: '/images/facilities/lab1.png',
       title: 'Phòng xét nghiệm',
       description: 'Hệ thống xét nghiệm máy móc hiện đại',
     },
     {
-      image: lab2,
+      image: '/images/facilities/lab2.png',
       title: 'Phòng chẩn đoán',
       description: 'Máy chẩn đoán hình ảnh công nghệ cao',
     },

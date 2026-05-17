@@ -31,8 +31,10 @@ export function LoginPage() {
 
     try {
       await login({ username: formData.username, password: formData.password })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Đăng nhập thất bại')
+    } catch (err: any) {
+      // Lấy message từ BE error response
+      const message = err?.response?.data?.message || err?.message || 'Đăng nhập thất bại'
+      setError(message)
     } finally {
       setIsLoading(false)
     }
@@ -53,8 +55,9 @@ export function LoginPage() {
           : await getFacebookAuthUrl(redirectUri, state)
 
       window.location.href = url
-    } catch (err) {
-      setError(err instanceof Error ? err.message : `Đăng nhập ${provider} thất bại`)
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || `Đăng nhập ${provider} thất bại`
+      setError(message)
       setIsLoading(false)
     }
   }
@@ -163,8 +166,8 @@ export function LoginPage() {
               <div className="relative mt-1">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
-                  type="text"
-                  placeholder="Email hoặc số điện thoại"
+                  type="email"
+                  placeholder="Nhập email Gmail"
                   className="w-full pl-10 pr-3 py-2 border rounded-lg"
                   value={formData.username}
                   onChange={(e) =>

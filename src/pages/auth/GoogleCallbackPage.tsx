@@ -37,8 +37,26 @@ export function GoogleCallbackPage() {
       window.dispatchEvent(new Event('auth-sync'))
 
       nav('/', { replace: true })
-    })().catch((e) => {
-      const msg = e?.response?.data?.message || 'Đăng nhập Google thất bại'
+    })().catch((e: any) => {
+      // Xử lý error theo status code
+      let msg = 'Đăng nhập Google thất bại'
+      const status = e?.response?.status
+      const data = e?.response?.data
+      
+      if (data?.message) {
+        msg = data.message
+      } else if (status === 400) {
+        msg = 'Yêu cầu không hợp lệ. Vui lòng thử lại.'
+      } else if (status === 401) {
+        msg = 'Thông tin đăng nhập không hợp lệ.'
+      } else if (status === 409) {
+        msg = 'Email/tài khoản đã được sử dụng.'
+      } else if (status === 500) {
+        msg = 'Lỗi hệ thống. Vui lòng thử lại sau.'
+      } else if (e?.message) {
+        msg = e.message
+      }
+      
       nav(`/login?error=${encodeURIComponent(msg)}`)
     })
   }, [search, nav])

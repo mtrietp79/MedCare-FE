@@ -117,6 +117,7 @@ function App() {
   <Route path="doctors" element={<AdminDoctorsPage />} />
   <Route path="specialties" element={<AdminSpecialtiesPage />} />
   <Route path="finance" element={<AdminFinancePage />} />
+  <Route path="schedule" element={<AdminSchedulePage />} />
   <Route path="medicines" element={<AdminMedicinesPage />} />
 </Route>
 

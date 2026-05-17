@@ -52,7 +52,9 @@ export const adminApi = {
     });
   },
 
-  getRevenueChart: (): Promise<AdminRevenueData[]> => {
+  // Note: backend may return { labels: string[], data: number[] } or an array
+  // of AdminRevenueData objects. Keep the return type flexible (any)
+  getRevenueChart: (): Promise<any> => {
     const token = getStoredToken();
     return fetchJson<AdminRevenueData[]>(`${API_BASE_URL}/dashboard/revenue-chart`, {
       headers: { Authorization: `Bearer ${token}` }

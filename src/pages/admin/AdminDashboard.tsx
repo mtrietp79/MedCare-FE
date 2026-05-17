@@ -52,7 +52,22 @@ export function AdminDashboard() {
 
         setSummary(summaryData)
         setRecentAppointments(appointmentsData)
-        setRevenueData(revenueChartData)
+        // Normalize revenueChartData: backend may return either an array
+        // of objects or an object { labels: [...], data: [...] }.
+        const normalizeRevenue = (raw: any): RevenueData[] => {
+          if (!raw) return []
+          if (Array.isArray(raw)) return raw as RevenueData[]
+          if (typeof raw === 'object' && Array.isArray(raw.labels) && Array.isArray(raw.data)) {
+            return raw.labels.map((label: string, i: number) => ({
+              month: label,
+              revenue: Number(raw.data[i] ?? 0),
+              appointments: (raw.appointments && Array.isArray(raw.appointments) ? Number(raw.appointments[i] ?? 0) : 0),
+            }))
+          }
+          return []
+        }
+
+        setRevenueData(normalizeRevenue(revenueChartData))
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
         console.error('Error fetching dashboard data:', err)

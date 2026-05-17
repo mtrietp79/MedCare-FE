@@ -1,11 +1,11 @@
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
-interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
+interface SkeletonProps extends React.ComponentProps<typeof motion.div> {
   count?: number
 }
 
-function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
+function Skeleton({ className, ...props }: SkeletonProps) {
   return (
     <motion.div
       initial={{ opacity: 0 }}

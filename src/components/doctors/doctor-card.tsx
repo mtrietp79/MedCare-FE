@@ -60,7 +60,6 @@ export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCar
           initial="hidden"
           animate="visible"
           whileHover="hover"
-          variants={hoverVariants}
         >
           <Card className="group cursor-pointer overflow-hidden">
             <CardContent className="p-0">
@@ -106,7 +105,6 @@ export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCar
         initial="hidden"
         animate="visible"
         whileHover="hover"
-        variants={hoverVariants}
       >
         <Card className="group cursor-pointer overflow-hidden h-full">
           <CardContent className="p-0">

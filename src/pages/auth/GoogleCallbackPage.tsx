@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { loginGoogleByCode, setStoredToken, setStoredUser } from '@/services/auth'
 
@@ -7,9 +7,12 @@ const GOOGLE_CB = `${window.location.origin}/auth/google/callback`
 export function GoogleCallbackPage() {
   const nav = useNavigate()
   const { search } = useLocation()
+  const calledApi = useRef(false)
 
   useEffect(() => {
     ;(async () => {
+      if (calledApi.current) return
+
       const q = new URLSearchParams(search)
       const code = q.get('code')
       const state = q.get('state')
@@ -18,21 +21,25 @@ export function GoogleCallbackPage() {
 
       // Handle Google OAuth errors
       if (err) {
+        calledApi.current = true
         const errorMsg = errorDescription || `Google từ chối đăng nhập: ${err}`
-        return nav(`/login?error=${encodeURIComponent(errorMsg)}`)
+        return nav(`/login?error=${encodeURIComponent(errorMsg)}`, { replace: true })
       }
 
       // Validate code exists
       if (!code) {
-        return nav(`/login?error=${encodeURIComponent('Thiếu authorization code từ Google. Vui lòng thử lại.')}`)
+        calledApi.current = true
+        return nav(`/login?error=${encodeURIComponent('Thiếu authorization code từ Google. Vui lòng thử lại.')}`, { replace: true })
       }
 
       // Validate state for CSRF protection
       const expected = sessionStorage.getItem('oauth_google_state')
       if (!expected || expected !== state) {
-        return nav(`/login?error=${encodeURIComponent('State validation failed. Vui lòng thử lại.')}`)
+        calledApi.current = true
+        return nav(`/login?error=${encodeURIComponent('Xác thực trạng thái (state) thất bại. Vui lòng thử lại.')}`, { replace: true })
       }
 
+      calledApi.current = true
       try {
         const auth = await loginGoogleByCode(code, GOOGLE_CB)
         const token = auth.token ?? auth.accessToken ?? ''
@@ -57,28 +64,24 @@ export function GoogleCallbackPage() {
         // Xử lý error theo status code và message từ BE
         let errorMsg = 'Đăng nhập Google thất bại. Vui lòng thử lại.'
         const status = e?.response?.status
-        const data = e?.response?.data
+        const messageFromBe = e?.response?.data?.message
 
-        // Ưu tiên lấy message từ BE response
-        if (data?.message) {
-          errorMsg = data.message
-        } else if (status === 400) {
-          errorMsg = 'Yêu cầu không hợp lệ. Vui lòng thử lại từ đầu.'
+        if (messageFromBe) {
+          // Requirement 5: chỉ dùng error.response.data.message
+          errorMsg = messageFromBe
         } else if (status === 401) {
-          errorMsg = 'Thông tin đăng nhập không hợp lệ hoặc hết hạn. Vui lòng thử lại.'
-        } else if (status === 409) {
-          errorMsg = 'Email này đã được liên kết với tài khoản khác. Vui lòng sử dụng email khác hoặc đăng nhập bằng cách khác.'
-        } else if (status === 500) {
-          errorMsg = 'Lỗi server. Vui lòng thử lại sau ít phút.'
-        } else if (e?.message) {
-          errorMsg = e.message
+          // Requirement 6: 401 -> báo user đăng nhập lại
+          errorMsg = 'Mã xác thực không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.'
+        } else if (status === 502) {
+          // Requirement 6: 502 -> cho retry (thông qua việc quay lại trang login)
+          errorMsg = 'Lỗi kết nối tới Google. Vui lòng thử lại.'
         }
 
-        nav(`/login?error=${encodeURIComponent(errorMsg)}`)
+        // replace: true để xóa query string (code) khỏi lịch sử trình duyệt
+        nav(`/login?error=${encodeURIComponent(errorMsg)}`, { replace: true })
+      } finally {
+        sessionStorage.removeItem('oauth_google_state')
       }
-
-      // Clean up session storage
-      sessionStorage.removeItem('oauth_google_state')
     })()
   }, [search, nav])
 

@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, ArrowRight, ArrowLeft, Star } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CalendarDays, Check, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api } from '@/services/api'
@@ -29,8 +31,21 @@ interface BookingFormState {
   notes: string
 }
 
+interface SlotItem {
+  startTime: string
+  endTime: string
+  shift: string
+  maxPatients: number
+  bookedPatients: number
+  full: boolean
+  disabled: boolean
+  disabledReason?: string
+}
+
 export function BookingWizard() {
   const navigate = useNavigate()
+  const { toast } = useToast()
+
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<BookingFormState>({
     doctorId: '',
@@ -47,20 +62,19 @@ export function BookingWizard() {
   const [selectedSpecialtyId, setSelectedSpecialtyId] = useState<string | null>(null)
   const [bookingRules, setBookingRules] = useState<BookingRules | null>(null)
   const [patient, setPatient] = useState<Patient | null>(null)
-  const [slots, setSlots] = useState<any[]>([])
-  const [selectedSlot, setSelectedSlot] = useState<any | null>(null)
+  const [slots, setSlots] = useState<SlotItem[]>([])
+  const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null)
   const [loading, setLoading] = useState(true)
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [submitLoading, setSubmitLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [slotsError, setSlotsError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const { toast } = useToast()
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
 
-  // doctor query param (if present)
-  const queryDoctorId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('doctor') : null
+  const queryDoctorId =
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('doctor') : null
 
-  // Fetch initial data: specialties + patient; if ?doctor= present, pre-select doctor and specialty
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -70,12 +84,17 @@ export function BookingWizard() {
           api.patients.getCurrent().catch(() => null),
           api.appointments.getBookingRules(),
         ])
-        setSpecialties(Array.isArray(specialtiesData) ? specialtiesData.map(s => ({ id: s.id, name: s.name })) : [])
+
+        setSpecialties(
+          Array.isArray(specialtiesData)
+            ? specialtiesData.map((item) => ({ id: item.id, name: item.name }))
+            : []
+        )
         setPatient(patientData)
         setBookingRules(bookingRulesData)
 
         if (patientData) {
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
             patientName: patientData.fullName || patientData.name || '',
             patientPhone: patientData.phone || '',
@@ -83,40 +102,40 @@ export function BookingWizard() {
           }))
         }
 
-        // handle ?doctor= query param
         if (queryDoctorId) {
           try {
-            const doc = await api.doctors.getById(queryDoctorId)
-            if (doc) {
-              const spId = doc.specialtyId ?? (typeof doc.specialty === 'object' ? doc.specialty?.id : undefined)
-              setSelectedSpecialtyId(spId ? String(spId) : null)
-              if (spId) {
-                const list = await api.doctors.getBySpecialtyId(String(spId))
-                setDoctors(Array.isArray(list) ? list : [doc])
+            const doctor = await api.doctors.getById(queryDoctorId)
+            if (doctor) {
+              const specialtyId =
+                doctor.specialtyId ??
+                (typeof doctor.specialty === 'object' ? doctor.specialty?.id : undefined)
+
+              setSelectedSpecialtyId(specialtyId ? String(specialtyId) : null)
+
+              if (specialtyId) {
+                const list = await api.doctors.getBySpecialtyId(String(specialtyId))
+                setDoctors(Array.isArray(list) ? list : [doctor])
               } else {
-                setDoctors([doc])
+                setDoctors([doctor])
               }
-              setFormData(prev => ({ ...prev, doctorId: doc.id }))
-              // jump to choose date & time
+
+              setFormData((prev) => ({ ...prev, doctorId: doctor.id }))
               setCurrentStep(3)
             }
-          } catch (err) {
-            console.error('Error loading doctor from query param', err)
+          } catch (queryError) {
+            console.error('Error loading doctor from query param', queryError)
           }
         }
-      } catch (err: any) {
-        setError(err?.response?.data?.message || err?.message || 'Không thể tải dữ liệu')
-        console.error('Error fetching booking data:', err)
+      } catch (fetchError: any) {
+        setError(fetchError?.response?.data?.message || fetchError?.message || 'Không thể tải dữ liệu')
       } finally {
         setLoading(false)
       }
     }
 
-    fetchData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    void fetchData()
+  }, [queryDoctorId])
 
-  // Fetch available slots when doctor and date change
   useEffect(() => {
     const fetchSlots = async () => {
       if (!formData.doctorId || !formData.date) {
@@ -129,49 +148,54 @@ export function BookingWizard() {
         setSlotsError(null)
         setSlotsLoading(true)
         const apiDate = formatDateForApi(formData.date)
-        const data = await api.doctors.getAvailableSlots(formData.doctorId, apiDate)
-        const processed = (data || []).map((slot: any) => ({
+        const response = await api.doctors.getAvailableSlots(formData.doctorId, apiDate)
+        const processed = (response || []).map((slot: any) => ({
           ...slot,
-          disabled: !!slot.disabled,
-        }))
+          disabled: Boolean(slot.disabled),
+        })) as SlotItem[]
+
         setSlots(processed)
-        if (!processed || processed.length === 0) {
+        if (!processed.length) {
           setSlotsError('Không có khung giờ khả dụng cho ngày này.')
         }
-      } catch (err: any) {
-        setSlotsError(err?.response?.data?.message || err?.message || 'Không thể tải khung giờ')
+      } catch (slotError: any) {
+        setSlotsError(slotError?.response?.data?.message || slotError?.message || 'Không thể tải khung giờ')
         setSlots([])
       } finally {
         setSlotsLoading(false)
       }
     }
 
-    fetchSlots()
-  }, [formData.doctorId, formData.date, bookingRules])
+    void fetchSlots()
+  }, [formData.doctorId, formData.date])
 
-  const selectedDoctor = (Array.isArray(doctors) ? doctors : []).find(doc => doc.id === formData.doctorId)
+  const selectedDoctor = (Array.isArray(doctors) ? doctors : []).find((doc) => doc.id === formData.doctorId)
 
   const parseDateString = (dateString: string): Date | null => {
     if (!dateString) return null
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
       const date = new Date(dateString)
-      return isNaN(date.getTime()) ? null : date
+      return Number.isNaN(date.getTime()) ? null : date
     }
-
-    const ddmmyyyyMatch = /^\d{2}\/\d{2}\/\d{4}$/.test(dateString)
-    if (ddmmyyyyMatch) {
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) {
       const [day, month, year] = dateString.split('/')
       const date = new Date(`${year}-${month}-${day}`)
-      return isNaN(date.getTime()) ? null : date
+      return Number.isNaN(date.getTime()) ? null : date
     }
-
     const parsed = new Date(dateString)
-    return isNaN(parsed.getTime()) ? null : parsed
+    return Number.isNaN(parsed.getTime()) ? null : parsed
   }
 
   const formatDateDisplay = (dateString?: string) => {
     const date = parseDateString(dateString || '')
     return date ? date.toLocaleDateString('vi-VN') : ''
+  }
+
+  const formatDateAsIso = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
   const formatDateForApi = (dateString: string) => {
@@ -186,6 +210,11 @@ export function BookingWizard() {
   const getDoctorName = (doctor?: Doctor) => doctor?.name ?? doctor?.fullName ?? 'Bác sĩ'
   const getDoctorSpecialty = (specialty?: Doctor['specialty']) =>
     typeof specialty === 'string' ? specialty : specialty?.name ?? ''
+  const getDoctorExperienceYears = (doctor?: Doctor) => {
+    const raw = doctor?.experience ?? doctor?.experienceYears ?? 0
+    const value = Number(raw)
+    return Number.isFinite(value) ? value : 0
+  }
 
   const getSlotDisabledMessage = (reason?: string | null) => {
     switch (reason) {
@@ -202,29 +231,38 @@ export function BookingWizard() {
     }
   }
 
-  const isSelectedSlotBookable = (slot?: any) => !!slot && !slot.disabled
+  const isSelectedSlotBookable = (slot?: SlotItem | null) => Boolean(slot && !slot.disabled)
+
+  const minDateString =
+    bookingRules?.serverNow?.split('T')[0] ?? new Date().toISOString().split('T')[0]
+  const minSelectableDate = parseDateString(minDateString) ?? new Date()
+  minSelectableDate.setHours(0, 0, 0, 0)
+
+  const sortedSlots = useMemo(
+    () => [...slots].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()),
+    [slots]
+  )
+  const morningSlots = sortedSlots.slice(0, 4)
+  const afternoonSlots = sortedSlots.slice(4, 8)
 
   const formatTimeDisplay = (timeString?: string) => {
     if (!timeString) return ''
     const date = parseDateString(timeString)
     return date
-      ? date.toLocaleTimeString('vi-VN', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })
+      ? date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
       : ''
   }
 
-  const canProceed = (): boolean => {
+  const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return !!selectedSpecialtyId
+        return Boolean(selectedSpecialtyId)
       case 2:
-        return !!formData.doctorId
+        return Boolean(formData.doctorId)
       case 3:
         return isSelectedSlotBookable(selectedSlot)
       case 4:
-        return !!formData.patientName && !!formData.patientPhone && !!formData.patientEmail
+        return Boolean(formData.patientName && formData.patientPhone && formData.patientEmail)
       case 5:
         return true
       default:
@@ -232,11 +270,44 @@ export function BookingWizard() {
     }
   }
 
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
-    }).format(amount)
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
+
+  const renderSlotButton = (slot: SlotItem) => {
+    const disabledMessage = getSlotDisabledMessage(slot.disabledReason)
+    const button = (
+      <button
+        key={slot.startTime}
+        type="button"
+        disabled={slot.disabled}
+        onClick={() => {
+          if (slot.disabled) return
+          setFormData({ ...formData, time: slot.startTime })
+          setSelectedSlot(slot)
+        }}
+        className={`relative z-10 p-4 rounded-lg border-2 text-center transition-all font-medium ${
+          selectedSlot?.startTime === slot.startTime
+            ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+            : 'border-border hover:border-primary/50'
+        } ${slot.disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+      >
+        <div className="text-lg font-bold text-foreground">{formatTimeDisplay(slot.startTime)}</div>
+        <div className="text-xs text-muted-foreground mt-1">
+          {slot.full ? 'Đã đầy' : `Còn ${slot.maxPatients - slot.bookedPatients}/${slot.maxPatients}`}
+        </div>
+      </button>
+    )
+
+    return slot.disabled && disabledMessage ? (
+      <Tooltip key={slot.startTime}>
+        <TooltipTrigger asChild>
+          <span className="block">{button}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top">{disabledMessage}</TooltipContent>
+      </Tooltip>
+    ) : (
+      button
+    )
   }
 
   const submitBooking = async () => {
@@ -249,10 +320,12 @@ export function BookingWizard() {
       setSubmitLoading(true)
       setSubmitError(null)
 
-      // build specialty id to send
       let specialtyIdToSend = selectedSpecialtyId
       if (!specialtyIdToSend) {
-        specialtyIdToSend = typeof selectedDoctor?.specialty === 'string' ? (selectedDoctor?.specialtyId ?? '') : (selectedDoctor?.specialty?.id ?? selectedDoctor?.specialtyId ?? '')
+        specialtyIdToSend =
+          typeof selectedDoctor.specialty === 'string'
+            ? (selectedDoctor.specialtyId ?? '')
+            : (selectedDoctor.specialty?.id ?? selectedDoctor.specialtyId ?? '')
       }
 
       const appointment = await api.appointments.create({
@@ -261,9 +334,12 @@ export function BookingWizard() {
         appointmentDate: selectedSlot.startTime,
         symptoms: formData.notes,
       })
+
       navigate(`/patient/appointments/${appointment.id}`, { replace: true })
-    } catch (err: any) {
-      const message = err?.response?.data?.message || (err instanceof Error ? err.message : 'Không thể đặt lịch khám')
+    } catch (submitErrorValue: any) {
+      const message =
+        submitErrorValue?.response?.data?.message ||
+        (submitErrorValue instanceof Error ? submitErrorValue.message : 'Không thể đặt lịch khám')
       setSubmitError(message)
     } finally {
       setSubmitLoading(false)
@@ -274,7 +350,7 @@ export function BookingWizard() {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
           <p className="text-muted-foreground">Đang tải dữ liệu...</p>
         </div>
       </div>
@@ -295,9 +371,7 @@ export function BookingWizard() {
 
   return (
     <div className="grid lg:grid-cols-3 gap-8">
-      {/* Main Content */}
       <div className="lg:col-span-2">
-        {/* Progress Steps */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             {steps.map((step, index) => (
@@ -312,26 +386,24 @@ export function BookingWizard() {
                   >
                     {currentStep > step.id ? <Check className="w-6 h-6" /> : step.id}
                   </div>
-                  <span className={`mt-2 text-xs font-medium text-center whitespace-nowrap ${currentStep >= step.id ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  <span
+                    className={`mt-2 text-xs font-medium text-center whitespace-nowrap ${
+                      currentStep >= step.id ? 'text-foreground' : 'text-muted-foreground'
+                    }`}
+                  >
                     {step.name}
                   </span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div
-                    className={`h-1 flex-1 mx-2 transition-all ${
-                      currentStep > step.id ? 'bg-primary' : 'bg-muted'
-                    }`}
-                  />
+                  <div className={`h-1 flex-1 mx-2 transition-all ${currentStep > step.id ? 'bg-primary' : 'bg-muted'}`} />
                 )}
               </div>
             ))}
           </div>
         </div>
 
-        {/* Step Content */}
         <Card>
           <CardContent className="p-8">
-            {/* Step 1: Choose Specialty */}
             {currentStep === 1 && (
               <div className="space-y-6">
                 <div>
@@ -345,24 +417,35 @@ export function BookingWizard() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {specialties.map((sp) => (
+                    {specialties.map((specialty) => (
                       <button
-                        key={sp.id}
+                        key={specialty.id}
                         type="button"
                         onClick={async () => {
-                          setSelectedSpecialtyId(sp.id)
+                          setSelectedSpecialtyId(specialty.id)
                           setFormData({ ...formData, doctorId: '', date: '', time: '' })
                           setSelectedSlot(null)
+
                           try {
-                            const list = await api.doctors.getBySpecialtyId(sp.id)
+                            const list = await api.doctors.getBySpecialtyId(specialty.id)
                             setDoctors(Array.isArray(list) ? list : [])
                             setCurrentStep(2)
-                          } catch (e: any) {
-                            toast({ title: 'Lỗi', description: e?.response?.data?.message || e?.message || 'Không thể tải bác sĩ', variant: 'destructive' })
+                          } catch (doctorError: any) {
+                            toast({
+                              title: 'Lỗi',
+                              description:
+                                doctorError?.response?.data?.message ||
+                                doctorError?.message ||
+                                'Không thể tải bác sĩ',
+                              variant: 'destructive',
+                            })
                           }
                         }}
-                        className={`p-4 rounded-lg border-2 text-center ${selectedSpecialtyId === sp.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}>
-                        {sp.name}
+                        className={`p-4 rounded-lg border-2 text-center ${
+                          selectedSpecialtyId === specialty.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                        }`}
+                      >
+                        {specialty.name}
                       </button>
                     ))}
                   </div>
@@ -370,7 +453,6 @@ export function BookingWizard() {
               </div>
             )}
 
-            {/* Step 2: Choose Doctor */}
             {currentStep === 2 && (
               <div className="space-y-6">
                 <div>
@@ -384,7 +466,7 @@ export function BookingWizard() {
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-96 overflow-y-auto pr-4">
-                    {(Array.isArray(doctors) ? doctors : []).map((doctor) => (
+                    {doctors.map((doctor) => (
                       <button
                         key={doctor.id}
                         type="button"
@@ -394,9 +476,7 @@ export function BookingWizard() {
                           setCurrentStep(3)
                         }}
                         className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
-                          formData.doctorId === doctor.id
-                            ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                            : 'border-border hover:border-primary/50'
+                          formData.doctorId === doctor.id ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border hover:border-primary/50'
                         }`}
                       >
                         <div className="flex gap-4">
@@ -406,15 +486,13 @@ export function BookingWizard() {
                           <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-foreground text-lg">{getDoctorName(doctor)}</h3>
                             <p className="text-sm text-muted-foreground mb-2">
-                              {getDoctorSpecialty(doctor.specialty)} • {doctor.experience || 0} năm kinh nghiệm
+                              {getDoctorSpecialty(doctor.specialty)} • {getDoctorExperienceYears(doctor)} năm kinh nghiệm
                             </p>
                             <div className="flex items-center gap-3">
                               <div className="flex items-center gap-1">
                                 <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                                 <span className="font-semibold text-sm">{doctor.rating || '0.0'}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  ({doctor.reviewCount || 0} đánh giá)
-                                </span>
+                                <span className="text-xs text-muted-foreground">({doctor.reviewCount || 0} đánh giá)</span>
                               </div>
                             </div>
                           </div>
@@ -432,7 +510,6 @@ export function BookingWizard() {
               </div>
             )}
 
-            {/* Step 3: Choose Date & Time */}
             {currentStep === 3 && (
               <div className="space-y-6">
                 <div>
@@ -446,46 +523,50 @@ export function BookingWizard() {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    {/* Selected Doctor Info */}
                     <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
                       <p className="text-sm text-muted-foreground mb-1">Bác sĩ được chọn</p>
-                      <p className="font-semibold text-foreground">{selectedDoctor.name}</p>
+                      <p className="font-semibold text-foreground">{getDoctorName(selectedDoctor)}</p>
                     </div>
 
-                    {/* Date Selection */}
                     <div>
                       <Label htmlFor="appointment-date" className="text-base font-semibold mb-2 block">
                         Ngày khám
                       </Label>
-                      <Input
-                        id="appointment-date"
-                        type="date"
-                        value={formData.date}
-                        onChange={(e) => {
-                          const val = e.target.value
-                          const minDate = bookingRules?.serverNow?.split('T')[0] ?? new Date().toISOString().split('T')[0]
-                          if (val < minDate) {
-                            toast({ title: 'Lỗi', description: 'Vui lòng chọn ngày không trong quá khứ', variant: 'destructive' })
-                            return
-                          }
-                          setFormData({ ...formData, date: val, time: '' })
-                          setSelectedSlot(null)
-                          setSlotsError(null)
-                        }}
-                        min={bookingRules?.serverNow?.split('T')[0] ?? new Date().toISOString().split('T')[0]}
-                        className="text-base p-3 h-12"
-                      />
+                      <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                        <PopoverTrigger asChild>
+                          <Button id="appointment-date" type="button" variant="outline" className="h-12 w-full justify-between px-4 text-base font-normal">
+                            {formData.date ? <span>{formatDateDisplay(formData.date)}</span> : <span className="text-muted-foreground">Chọn ngày khám</span>}
+                            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={parseDateString(formData.date) ?? undefined}
+                            onSelect={(date) => {
+                              if (!date) return
+                              if (date < minSelectableDate) {
+                                toast({ title: 'Lỗi', description: 'Vui lòng chọn ngày không trong quá khứ', variant: 'destructive' })
+                                return
+                              }
+                              setFormData({ ...formData, date: formatDateAsIso(date), time: '' })
+                              setSelectedSlot(null)
+                              setSlotsError(null)
+                              setIsDatePickerOpen(false)
+                            }}
+                            disabled={(date) => date < minSelectableDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
-                    {/* Time Selection */}
                     {formData.date && (
                       <div>
-                        <Label className="text-base font-semibold mb-3 block">
-                          Khung giờ khám
-                        </Label>
+                        <Label className="text-base font-semibold mb-3 block">Khung giờ khám</Label>
                         {slotsLoading ? (
                           <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-8 text-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2" />
                             <p className="text-muted-foreground">Đang tải khung giờ...</p>
                           </div>
                         ) : slotsError ? (
@@ -497,48 +578,23 @@ export function BookingWizard() {
                             <p className="text-muted-foreground">Không có khung giờ khả dụng cho ngày này</p>
                           </div>
                         ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {slots.map((slot) => {
-                              const disabledMessage = getSlotDisabledMessage(slot.disabledReason)
-                              const button = (
-                                <button
-                                  key={slot.startTime}
-                                  type="button"
-                                  disabled={slot.disabled}
-                                  onClick={() => {
-                                    if (slot.disabled) return
-                                    setFormData({ ...formData, time: slot.startTime })
-                                    setSelectedSlot(slot)
-                                  }}
-                                  className={`relative z-10 p-4 rounded-lg border-2 text-center transition-all font-medium ${
-                                    selectedSlot?.startTime === slot.startTime
-                                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                                      : 'border-border hover:border-primary/50'
-                                  } ${slot.disabled ? 'cursor-not-allowed opacity-50' : ''}`}
-                                >
-                                  <div className="text-lg font-bold text-foreground">
-                                    {new Date(slot.startTime).toLocaleTimeString('vi-VN', {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground mt-1">
-                                    {slot.full ? 'Đã đầy' : `Còn ${slot.maxPatients - slot.bookedPatients}/${slot.maxPatients}`}
-                                  </div>
-                                </button>
-                              )
-
-                              return slot.disabled && disabledMessage ? (
-                                <Tooltip key={slot.startTime}>
-                                  <TooltipTrigger asChild>
-                                    <span className="block">{button}</span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top">{disabledMessage}</TooltipContent>
-                                </Tooltip>
+                          <div className="space-y-5">
+                            <div>
+                              <p className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Buổi sáng</p>
+                              {morningSlots.length > 0 ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{morningSlots.map((slot) => renderSlotButton(slot))}</div>
                               ) : (
-                                button
-                              )
-                            })}
+                                <p className="text-sm text-muted-foreground">Chưa có khung giờ buổi sáng.</p>
+                              )}
+                            </div>
+                            <div>
+                              <p className="mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide">Buổi chiều</p>
+                              {afternoonSlots.length > 0 ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{afternoonSlots.map((slot) => renderSlotButton(slot))}</div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">Chưa có khung giờ buổi chiều.</p>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -548,7 +604,6 @@ export function BookingWizard() {
               </div>
             )}
 
-            {/* Step 4: Patient Information */}
             {currentStep === 4 && (
               <div className="space-y-6">
                 <div>
@@ -561,60 +616,30 @@ export function BookingWizard() {
                     <Label htmlFor="patient-name" className="text-base font-semibold mb-2 block">
                       Họ và tên <span className="text-destructive">*</span>
                     </Label>
-                    <Input
-                      id="patient-name"
-                      placeholder="Nhập họ và tên"
-                      value={formData.patientName}
-                      onChange={(e) => setFormData({ ...formData, patientName: e.target.value })}
-                      className="text-base p-3 h-12"
-                    />
+                    <Input id="patient-name" placeholder="Nhập họ và tên" value={formData.patientName} onChange={(e) => setFormData({ ...formData, patientName: e.target.value })} className="text-base p-3 h-12" />
                   </div>
-
                   <div>
                     <Label htmlFor="patient-phone" className="text-base font-semibold mb-2 block">
                       Số điện thoại <span className="text-destructive">*</span>
                     </Label>
-                    <Input
-                      id="patient-phone"
-                      placeholder="Nhập số điện thoại"
-                      value={formData.patientPhone}
-                      onChange={(e) => setFormData({ ...formData, patientPhone: e.target.value })}
-                      className="text-base p-3 h-12"
-                    />
+                    <Input id="patient-phone" placeholder="Nhập số điện thoại" value={formData.patientPhone} onChange={(e) => setFormData({ ...formData, patientPhone: e.target.value })} className="text-base p-3 h-12" />
                   </div>
-
                   <div>
                     <Label htmlFor="patient-email" className="text-base font-semibold mb-2 block">
                       Email <span className="text-destructive">*</span>
                     </Label>
-                    <Input
-                      id="patient-email"
-                      type="email"
-                      placeholder="Nhập email"
-                      value={formData.patientEmail}
-                      onChange={(e) => setFormData({ ...formData, patientEmail: e.target.value })}
-                      className="text-base p-3 h-12"
-                    />
+                    <Input id="patient-email" type="email" placeholder="Nhập email" value={formData.patientEmail} onChange={(e) => setFormData({ ...formData, patientEmail: e.target.value })} className="text-base p-3 h-12" />
                   </div>
-
                   <div>
                     <Label htmlFor="symptoms" className="text-base font-semibold mb-2 block">
                       Triệu chứng / Ghi chú <span className="text-muted-foreground">(không bắt buộc)</span>
                     </Label>
-                    <Textarea
-                      id="symptoms"
-                      placeholder="Mô tả triệu chứng hoặc lý do khám..."
-                      value={formData.notes}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                      rows={5}
-                      className="text-base p-3"
-                    />
+                    <Textarea id="symptoms" placeholder="Mô tả triệu chứng hoặc lý do khám..." value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={5} className="text-base p-3" />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Step 5: Confirmation */}
             {currentStep === 5 && (
               <div className="space-y-6">
                 <div>
@@ -623,59 +648,46 @@ export function BookingWizard() {
                 </div>
 
                 <div className="space-y-4">
-                  {/* Doctor Info */}
                   <Card>
                     <CardContent className="p-4">
                       <h3 className="font-semibold text-foreground mb-4">Thông tin bác sĩ</h3>
                       <div className="space-y-3">
                         <div className="flex justify-between items-start">
                           <span className="text-muted-foreground">Bác sĩ</span>
-                          <span className="font-medium text-right">{selectedDoctor?.name}</span>
+                          <span className="font-medium text-right">{getDoctorName(selectedDoctor)}</span>
                         </div>
                         <div className="flex justify-between items-start">
                           <span className="text-muted-foreground">Chuyên khoa</span>
-                          <span className="font-medium text-right">
-                            {selectedDoctor ? getDoctorSpecialty(selectedDoctor.specialty) : '—'}
-                          </span>
+                          <span className="font-medium text-right">{selectedDoctor ? getDoctorSpecialty(selectedDoctor.specialty) : '—'}</span>
                         </div>
                         {selectedDoctor?.consultationFee && (
                           <div className="flex justify-between items-start pt-2 border-t">
                             <span className="text-muted-foreground">Phí khám</span>
-                            <span className="font-semibold text-primary">
-                              {formatCurrency(selectedDoctor.consultationFee)}
-                            </span>
+                            <span className="font-semibold text-primary">{formatCurrency(selectedDoctor.consultationFee)}</span>
                           </div>
                         )}
                       </div>
                     </CardContent>
                   </Card>
 
-                  {/* Date & Time Info */}
                   <Card>
                     <CardContent className="p-4">
                       <h3 className="font-semibold text-foreground mb-4">Ngày giờ khám</h3>
                       <div className="space-y-3">
                         <div className="flex justify-between items-start">
                           <span className="text-muted-foreground">Ngày</span>
-                          <span className="font-medium text-right">
-                            {formData.date ? formatDateDisplay(formData.date) : '—'}
-                          </span>
+                          <span className="font-medium text-right">{formData.date ? formatDateDisplay(formData.date) : '—'}</span>
                         </div>
                         <div className="flex justify-between items-start">
                           <span className="text-muted-foreground">Giờ</span>
                           <span className="font-medium text-right">
-                            {selectedSlot?.startTime
-                              ? formatTimeDisplay(selectedSlot.startTime)
-                              : formData.time
-                              ? formatTimeDisplay(formData.time)
-                              : '—'}
+                            {selectedSlot?.startTime ? formatTimeDisplay(selectedSlot.startTime) : formData.time ? formatTimeDisplay(formData.time) : '—'}
                           </span>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
 
-                  {/* Patient Info */}
                   <Card>
                     <CardContent className="p-4">
                       <h3 className="font-semibold text-foreground mb-4">Thông tin bệnh nhân</h3>
@@ -695,9 +707,7 @@ export function BookingWizard() {
                         {formData.notes && (
                           <div className="flex flex-col gap-2 pt-2 border-t">
                             <span className="text-muted-foreground">Triệu chứng / Ghi chú</span>
-                            <p className="text-sm font-medium bg-muted/50 p-3 rounded text-foreground">
-                              {formData.notes}
-                            </p>
+                            <p className="text-sm font-medium bg-muted/50 p-3 rounded text-foreground">{formData.notes}</p>
                           </div>
                         )}
                       </div>
@@ -713,15 +723,8 @@ export function BookingWizard() {
               </div>
             )}
 
-            {/* Navigation Buttons */}
             <div className="flex justify-between gap-4 mt-8 pt-6 border-t">
-              <Button
-                variant="outline"
-                onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-                disabled={currentStep === 1}
-                size="lg"
-                className="gap-2"
-              >
+              <Button variant="outline" onClick={() => setCurrentStep(Math.max(1, currentStep - 1))} disabled={currentStep === 1} size="lg" className="gap-2">
                 <ArrowLeft className="w-4 h-4" />
                 Quay lại
               </Button>
@@ -739,9 +742,7 @@ export function BookingWizard() {
               >
                 {currentStep === 5 ? (
                   submitLoading ? (
-                    <>
-                      <span>Đang xử lý...</span>
-                    </>
+                    <span>Đang xử lý...</span>
                   ) : (
                     <>
                       <Check className="w-4 h-4" />
@@ -760,13 +761,11 @@ export function BookingWizard() {
         </Card>
       </div>
 
-      {/* Sidebar: Summary */}
       <div className="lg:col-span-1">
         <Card className="sticky top-24 border-2">
           <CardContent className="p-6">
             <h3 className="font-bold text-lg text-foreground mb-6">Tóm tắt đặt lịch</h3>
             <div className="space-y-5 text-sm">
-              {/* Doctor Summary */}
               <div className="pb-4 border-b">
                 <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Bác sĩ</p>
                 {selectedDoctor ? (
@@ -779,37 +778,24 @@ export function BookingWizard() {
                 )}
               </div>
 
-              {/* Date Summary */}
               <div className="pb-4 border-b">
                 <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Ngày</p>
-                {formData.date ? (
-                  <p className="font-semibold text-foreground">
-                    {formatDateDisplay(formData.date)}
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground italic">Chưa chọn</p>
-                )}
+                {formData.date ? <p className="font-semibold text-foreground">{formatDateDisplay(formData.date)}</p> : <p className="text-muted-foreground italic">Chưa chọn</p>}
               </div>
 
-              {/* Time Summary */}
               <div className="pb-4 border-b">
                 <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Giờ</p>
                 {selectedSlot?.startTime || formData.time ? (
-                  <p className="font-semibold text-foreground">
-                    {formatTimeDisplay(selectedSlot?.startTime ?? formData.time)}
-                  </p>
+                  <p className="font-semibold text-foreground">{formatTimeDisplay(selectedSlot?.startTime ?? formData.time)}</p>
                 ) : (
                   <p className="text-muted-foreground italic">Chưa chọn</p>
                 )}
               </div>
 
-              {/* Fee Summary */}
               {selectedDoctor?.consultationFee && (
                 <div className="pt-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Tổng phí</p>
-                  <p className="text-2xl font-bold text-primary">
-                    {formatCurrency(selectedDoctor.consultationFee)}
-                  </p>
+                  <p className="text-2xl font-bold text-primary">{formatCurrency(selectedDoctor.consultationFee)}</p>
                 </div>
               )}
             </div>

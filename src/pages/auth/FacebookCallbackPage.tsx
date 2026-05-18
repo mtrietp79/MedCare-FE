@@ -1,42 +1,77 @@
-import { useEffect, useRef } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { getRoleHomePath, loginFacebookByCode, setStoredToken, setStoredUser } from '@/services/auth'
+﻿import { useEffect, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import {
+  FACEBOOK_CALLBACK_URL,
+  getRoleHomePath,
+  loginFacebookByCode,
+  setStoredToken,
+  setStoredUser,
+} from '@/services/auth'
+import { FACEBOOK_CODE_EXCHANGE_ENDPOINT } from '@/constants/auth'
 
-const FACEBOOK_CB = `${window.location.origin}/auth/facebook/callback`
+const processedCodeKeys = new Set<string>()
+const submittingCodeKeys = new Set<string>()
 
 export function FacebookCallbackPage() {
   const nav = useNavigate()
   const { search } = useLocation()
-  const calledApi = useRef(false)
+  const hasStarted = useRef(false)
+  const isSubmitting = useRef(false)
 
   useEffect(() => {
-    ;(async () => {
-      if (calledApi.current) return
+    if (hasStarted.current) return
+    hasStarted.current = true
 
+    void (async () => {
       const q = new URLSearchParams(search)
       const code = q.get('code')
       const state = q.get('state')
-      const err = q.get('error')
+      const error = q.get('error')
 
-      if (err) {
-        calledApi.current = true
-        return nav(`/login?error=${encodeURIComponent('Facebook từ chối đăng nhập')}`, { replace: true })
+      if (import.meta.env.DEV) {
+        console.debug('[oauth/facebook] code exists:', Boolean(code))
       }
+
+      if (error) {
+        nav(`/login?error=${encodeURIComponent('Facebook từ chối đăng nhập.')}`, { replace: true })
+        return
+      }
+
       if (!code) {
-        calledApi.current = true
-        return nav(`/login?error=${encodeURIComponent('Thiếu mã xác thực (code) từ Facebook')}`, { replace: true })
+        nav(`/login?error=${encodeURIComponent('Thiếu authorization code từ Facebook.')}`, { replace: true })
+        return
       }
 
-      const expected = sessionStorage.getItem('oauth_facebook_state')
-      if (!expected || expected !== state) {
-        calledApi.current = true
-        return nav(`/login?error=${encodeURIComponent('Xác thực trạng thái (state) thất bại')}`, { replace: true })
+      const expectedState = sessionStorage.getItem('oauth_facebook_state')
+      if (!expectedState || expectedState !== state) {
+        nav(`/login?error=${encodeURIComponent('Xác thực trạng thái (state) thất bại.')}`, { replace: true })
+        return
       }
 
-      calledApi.current = true
+      const codeKey = `facebook:${code}`
+      if (processedCodeKeys.has(codeKey) || submittingCodeKeys.has(codeKey) || isSubmitting.current) {
+        return
+      }
+
+      isSubmitting.current = true
+      submittingCodeKeys.add(codeKey)
+
       try {
-        const auth = await loginFacebookByCode(code, FACEBOOK_CB)
+        if (import.meta.env.DEV) {
+          console.debug('[oauth/facebook] exchange endpoint:', FACEBOOK_CODE_EXCHANGE_ENDPOINT)
+        }
+
+        const auth = await loginFacebookByCode(code, FACEBOOK_CALLBACK_URL)
+        if (import.meta.env.DEV) {
+          console.debug('[oauth/facebook] response status:', 200)
+        }
+
         const token = auth.token ?? auth.accessToken ?? ''
+        if (!token) {
+          nav(`/login?error=${encodeURIComponent('Xác thực Facebook thất bại.')}`, { replace: true })
+          return
+        }
+
         setStoredToken(token)
         setStoredUser({
           username: auth.username,
@@ -45,25 +80,23 @@ export function FacebookCallbackPage() {
           profileCompleted: auth.profileCompleted ?? false,
         })
 
-        // Dispatch event để AuthContext cập nhật state
         window.dispatchEvent(new Event('auth-sync'))
-
+        processedCodeKeys.add(codeKey)
         nav(getRoleHomePath(auth.role), { replace: true })
       } catch (e: any) {
-        let msg = 'Đăng nhập Facebook thất bại'
-        const status = e?.response?.status
-        const messageFromBe = e?.response?.data?.message || e?.message
-        
-        if (messageFromBe) {
-          msg = messageFromBe
-        } else if (status === 401) {
-          msg = 'Mã xác thực không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.'
-        } else if (status === 502) {
-          msg = 'Lỗi kết nối tới Facebook. Vui lòng thử lại.'
+        const status = Number(e?.response?.status ?? 0)
+        if (import.meta.env.DEV) {
+          console.debug('[oauth/facebook] response status:', status || 'unknown')
         }
-        
-        nav(`/login?error=${encodeURIComponent(msg)}`, { replace: true })
+
+        const message = status === 401
+          ? 'Xác thực Facebook thất bại.'
+          : 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.'
+
+        nav(`/login?error=${encodeURIComponent(message)}`, { replace: true })
       } finally {
+        submittingCodeKeys.delete(codeKey)
+        isSubmitting.current = false
         sessionStorage.removeItem('oauth_facebook_state')
       }
     })()

@@ -1,255 +1,303 @@
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { Plus, Search, Edit, Trash2, Pill } from 'lucide-react'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { Plus, Search, Edit, Trash2 } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { normalizeMedicine, safeLower, type NormalizedMedicine } from '@/lib/admin-normalizers'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 
-interface Medicine {
-  id: string
+interface MedicineForm {
   name: string
   dosage: string
   description: string
-  quantity: number
+  quantity: string
   unit: string
-  price: number
-  status: 'available' | 'out_of_stock' | 'discontinued'
-  createdAt: string
+  price: string
+  status: NormalizedMedicine['status']
+}
+
+const initialForm: MedicineForm = {
+  name: '',
+  dosage: '',
+  description: '',
+  quantity: '0',
+  unit: '',
+  price: '0',
+  status: 'available',
 }
 
 export function AdminMedicinesPage() {
-  const [medicines, setMedicines] = useState<Medicine[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedMedicine, setSelectedMedicine] = useState<Medicine | null>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const { toast } = useToast()
 
-  // Form states
-  const [formData, setFormData] = useState({
-    name: '',
-    dosage: '',
-    description: '',
-    quantity: 0,
-    unit: '',
-    price: 0,
-    status: 'available' as 'available' | 'out_of_stock' | 'discontinued'
-  })
+  const [medicines, setMedicines] = useState<NormalizedMedicine[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  useEffect(() => {
-    fetchMedicines()
-  }, [])
+  const [searchInput, setSearchInput] = useState('')
+  const debouncedSearch = useDebouncedValue(searchInput, 300)
+  const [statusFilter, setStatusFilter] = useState<'all' | NormalizedMedicine['status']>('all')
+
+  const [selectedMedicine, setSelectedMedicine] = useState<NormalizedMedicine | null>(null)
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [formData, setFormData] = useState<MedicineForm>(initialForm)
+  const [formError, setFormError] = useState('')
 
   const fetchMedicines = async () => {
+    setLoading(true)
+    setError('')
+
     try {
-      setLoading(true)
-      const data = await adminApi.getMedicines()
-      setMedicines(data)
-    } catch (error) {
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể tải danh sách thuốc',
-        variant: 'destructive'
-      })
+      const raw = await adminApi.getMedicines()
+      setMedicines((Array.isArray(raw) ? raw : []).map(normalizeMedicine))
+    } catch (fetchError: any) {
+      setError(fetchError?.message || 'Không thể tải danh sách thuốc.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleCreate = async () => {
-    try {
-      await adminApi.createMedicine(formData)
-      toast({
-        title: 'Thành công',
-        description: 'Đã thêm thuốc mới'
-      })
-      setIsCreateDialogOpen(false)
-      resetForm()
-      fetchMedicines()
-    } catch (error) {
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể thêm thuốc',
-        variant: 'destructive'
-      })
-    }
-  }
+  useEffect(() => {
+    void fetchMedicines()
+  }, [])
 
-  const handleUpdate = async () => {
-    if (!selectedMedicine) return
+  const filteredMedicines = useMemo(() => {
+    const keyword = safeLower(debouncedSearch)
 
-    try {
-      await adminApi.updateMedicine(selectedMedicine.id, formData)
-      toast({
-        title: 'Thành công',
-        description: 'Đã cập nhật thông tin thuốc'
-      })
-      setIsEditDialogOpen(false)
-      resetForm()
-      fetchMedicines()
-    } catch (error) {
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể cập nhật thuốc',
-        variant: 'destructive'
-      })
-    }
-  }
+    return medicines
+      .filter((medicine) => {
+        const hitSearch = !keyword
+          || safeLower(medicine.name).includes(keyword)
+          || safeLower(medicine.description).includes(keyword)
+          || safeLower(medicine.dosage).includes(keyword)
 
-  const handleDelete = async (medicineId: string) => {
-    try {
-      await adminApi.deleteMedicine(medicineId)
-      toast({
-        title: 'Thành công',
-        description: 'Đã xóa thuốc'
+        const hitStatus = statusFilter === 'all' || medicine.status === statusFilter
+        return hitSearch && hitStatus
       })
-      fetchMedicines()
-    } catch (error) {
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể xóa thuốc',
-        variant: 'destructive'
-      })
-    }
-  }
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [medicines, debouncedSearch, statusFilter])
 
   const resetForm = () => {
-    setFormData({
-      name: '',
-      dosage: '',
-      description: '',
-      quantity: 0,
-      unit: '',
-      price: 0,
-      status: 'available'
-    })
+    setFormData(initialForm)
+    setFormError('')
     setSelectedMedicine(null)
   }
 
-  const openEditDialog = (medicine: Medicine) => {
+  const validateForm = () => {
+    if (!formData.name.trim()) {
+      setFormError('Tên thuốc là bắt buộc.')
+      return false
+    }
+
+    if (Number(formData.price) < 0 || Number(formData.quantity) < 0) {
+      setFormError('Giá và số lượng phải >= 0.')
+      return false
+    }
+
+    setFormError('')
+    return true
+  }
+
+  const payloadFromForm = (form: MedicineForm) => ({
+    name: form.name.trim(),
+    dosage: form.dosage.trim() || null,
+    description: form.description.trim() || null,
+    quantity: Number(form.quantity) || 0,
+    unit: form.unit.trim() || null,
+    price: Number(form.price) || 0,
+    status: form.status,
+  })
+
+  const handleCreate = async () => {
+    if (!validateForm()) return
+
+    setIsSubmitting(true)
+    try {
+      await adminApi.createMedicine(payloadFromForm(formData))
+      toast({ title: 'Thành công', description: 'Đã thêm thuốc mới.' })
+      setIsCreateDialogOpen(false)
+      resetForm()
+      await fetchMedicines()
+    } catch (createError: any) {
+      toast({
+        title: 'Lỗi',
+        description: createError?.message || 'Không thể thêm thuốc.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const openEditDialog = (medicine: NormalizedMedicine) => {
     setSelectedMedicine(medicine)
     setFormData({
       name: medicine.name,
       dosage: medicine.dosage,
       description: medicine.description,
-      quantity: medicine.quantity,
+      quantity: String(medicine.quantity),
       unit: medicine.unit,
-      price: medicine.price,
-      status: medicine.status
+      price: String(medicine.price),
+      status: medicine.status,
     })
+    setFormError('')
     setIsEditDialogOpen(true)
   }
 
-  const filteredMedicines = medicines.filter(medicine =>
-    medicine.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    medicine.description.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const handleUpdate = async () => {
+    if (!selectedMedicine) return
+    if (!validateForm()) return
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'available':
-        return <Badge variant="default">Còn hàng</Badge>
-      case 'out_of_stock':
-        return <Badge variant="destructive">Hết hàng</Badge>
-      case 'discontinued':
-        return <Badge variant="secondary">Ngừng kinh doanh</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
+    setIsSubmitting(true)
+    try {
+      await adminApi.updateMedicine(selectedMedicine.id, payloadFromForm(formData))
+      toast({ title: 'Thành công', description: 'Đã cập nhật thuốc.' })
+      setIsEditDialogOpen(false)
+      resetForm()
+      await fetchMedicines()
+    } catch (updateError: any) {
+      toast({
+        title: 'Lỗi',
+        description: updateError?.message || 'Không thể cập nhật thuốc.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
+  const handleDelete = async (id: string) => {
+    try {
+      await adminApi.deleteMedicine(id)
+      toast({ title: 'Thành công', description: 'Đã xóa thuốc.' })
+      await fetchMedicines()
+    } catch (deleteError: any) {
+      toast({
+        title: 'Lỗi',
+        description: deleteError?.message || 'Không thể xóa thuốc.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const statusBadge = (status: NormalizedMedicine['status']) => {
+    if (status === 'available') return <Badge variant="default">Còn hàng</Badge>
+    if (status === 'out_of_stock') return <Badge variant="destructive">Hết hàng</Badge>
+    return <Badge variant="secondary">Ngừng kinh doanh</Badge>
+  }
+
+  const renderForm = () => (
+    <div className="grid gap-4 py-4">
+      <div className="grid gap-2">
+        <Label htmlFor="medicine-name">Tên thuốc</Label>
+        <Input id="medicine-name" value={formData.name} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} />
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="medicine-dosage">Liều lượng</Label>
+          <Input id="medicine-dosage" value={formData.dosage} onChange={(e) => setFormData((prev) => ({ ...prev, dosage: e.target.value }))} />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="medicine-unit">Đơn vị</Label>
+          <Input id="medicine-unit" value={formData.unit} onChange={(e) => setFormData((prev) => ({ ...prev, unit: e.target.value }))} />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor="medicine-quantity">Số lượng</Label>
+          <Input id="medicine-quantity" type="number" min={0} value={formData.quantity} onChange={(e) => setFormData((prev) => ({ ...prev, quantity: e.target.value }))} />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="medicine-price">Giá (VND)</Label>
+          <Input id="medicine-price" type="number" min={0} value={formData.price} onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))} />
+        </div>
+      </div>
+      <div className="grid gap-2">
+        <Label>Trạng thái</Label>
+        <Select value={formData.status} onValueChange={(value: NormalizedMedicine['status']) => setFormData((prev) => ({ ...prev, status: value }))}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="available">Còn hàng</SelectItem>
+            <SelectItem value="out_of_stock">Hết hàng</SelectItem>
+            <SelectItem value="discontinued">Ngừng kinh doanh</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="medicine-description">Mô tả</Label>
+        <Textarea id="medicine-description" value={formData.description} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} rows={3} />
+      </div>
+      {formError && <p className="text-sm text-red-600">{formError}</p>}
+    </div>
+  )
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Quản lý thuốc</h1>
-          <p className="text-muted-foreground">Quản lý danh sách thuốc trong hệ thống</p>
+          <p className="text-muted-foreground">CRUD thuốc, tìm kiếm và lọc theo trạng thái</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog
+          open={isCreateDialogOpen}
+          onOpenChange={(open) => {
+            setIsCreateDialogOpen(open)
+            if (!open) resetForm()
+          }}
+        >
           <DialogTrigger asChild>
             <Button>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               Thêm thuốc
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[560px]">
             <DialogHeader>
               <DialogTitle>Thêm thuốc mới</DialogTitle>
-              <DialogDescription>
-                Nhập thông tin cho thuốc mới
-              </DialogDescription>
+              <DialogDescription>Thông tin thuốc phục vụ kê đơn và quản lý kho.</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name" className="text-right">Tên thuốc</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="dosage" className="text-right">Liều lượng</Label>
-                <Input
-                  id="dosage"
-                  value={formData.dosage}
-                  onChange={(e) => setFormData({...formData, dosage: e.target.value})}
-                  className="col-span-3"
-                  placeholder="500mg, 10ml, ..."
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="quantity" className="text-right">Số lượng</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  value={formData.quantity}
-                  onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value) || 0})}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="unit" className="text-right">Đơn vị</Label>
-                <Input
-                  id="unit"
-                  value={formData.unit}
-                  onChange={(e) => setFormData({...formData, unit: e.target.value})}
-                  className="col-span-3"
-                  placeholder="viên, chai, hộp, ..."
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="price" className="text-right">Giá (VND)</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  value={formData.price}
-                  onChange={(e) => setFormData({...formData, price: parseInt(e.target.value) || 0})}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="description" className="text-right">Mô tả</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                  className="col-span-3"
-                  rows={2}
-                />
-              </div>
-            </div>
+            {renderForm()}
             <DialogFooter>
-              <Button type="submit" onClick={handleCreate}>Thêm thuốc</Button>
+              <Button onClick={handleCreate} disabled={isSubmitting}>
+                {isSubmitting ? 'Đang tạo...' : 'Tạo thuốc'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -258,26 +306,32 @@ export function AdminMedicinesPage() {
       <Card>
         <CardHeader>
           <CardTitle>Danh sách thuốc</CardTitle>
-          <CardDescription>
-            Tổng cộng {medicines.length} loại thuốc
-          </CardDescription>
+          <CardDescription>Tổng cộng {medicines.length} loại thuốc</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center space-x-2 mb-4">
-            <div className="relative flex-1 max-w-sm">
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-[260px] flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Tìm kiếm thuốc..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
+              <Input placeholder="Tìm theo tên/mô tả/liều lượng" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="pl-8" />
             </div>
+            <Select value={statusFilter} onValueChange={(value: 'all' | NormalizedMedicine['status']) => setStatusFilter(value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                <SelectItem value="available">Còn hàng</SelectItem>
+                <SelectItem value="out_of_stock">Hết hàng</SelectItem>
+                <SelectItem value="discontinued">Ngừng kinh doanh</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {loading ? (
-            <div className="text-center py-4">Đang tải...</div>
-          ) : (
+          {loading && <AdminTableSkeleton rows={8} />}
+          {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchMedicines()} />}
+          {!loading && !error && filteredMedicines.length === 0 && <AdminEmptyState title="Không có thuốc phù hợp." />}
+
+          {!loading && !error && filteredMedicines.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -292,17 +346,13 @@ export function AdminMedicinesPage() {
               <TableBody>
                 {filteredMedicines.map((medicine) => (
                   <TableRow key={medicine.id}>
-                    <TableCell className="font-medium">{medicine.name}</TableCell>
-                    <TableCell>{medicine.dosage}</TableCell>
-                    <TableCell>{medicine.quantity} {medicine.unit}</TableCell>
+                    <TableCell className="font-medium">{medicine.name || '-'}</TableCell>
+                    <TableCell>{medicine.dosage || '-'}</TableCell>
+                    <TableCell>{medicine.quantity} {medicine.unit || ''}</TableCell>
                     <TableCell>{medicine.price.toLocaleString('vi-VN')} VND</TableCell>
-                    <TableCell>{getStatusBadge(medicine.status)}</TableCell>
+                    <TableCell>{statusBadge(medicine.status)}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditDialog(medicine)}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(medicine)}>
                         <Edit className="h-4 w-4" />
                       </Button>
                       <AlertDialog>
@@ -315,15 +365,12 @@ export function AdminMedicinesPage() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Xác nhận xóa</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Bạn có chắc chắn muốn xóa thuốc {medicine.name}?
-                              Hành động này không thể hoàn tác.
+                              Bạn có chắc muốn xóa thuốc {medicine.name || medicine.id}?
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Hủy</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(medicine.id)}>
-                              Xóa
-                            </AlertDialogAction>
+                            <AlertDialogAction onClick={() => void handleDelete(medicine.id)}>Xóa</AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
@@ -336,89 +383,23 @@ export function AdminMedicinesPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+      <Dialog
+        open={isEditDialogOpen}
+        onOpenChange={(open) => {
+          setIsEditDialogOpen(open)
+          if (!open) resetForm()
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Chỉnh sửa thuốc</DialogTitle>
-            <DialogDescription>
-              Cập nhật thông tin thuốc
-            </DialogDescription>
+            <DialogTitle>Cập nhật thuốc</DialogTitle>
+            <DialogDescription>Chỉnh sửa thông tin thuốc và tồn kho.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-name" className="text-right">Tên thuốc</Label>
-              <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-dosage" className="text-right">Liều lượng</Label>
-              <Input
-                id="edit-dosage"
-                value={formData.dosage}
-                onChange={(e) => setFormData({...formData, dosage: e.target.value})}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-quantity" className="text-right">Số lượng</Label>
-              <Input
-                id="edit-quantity"
-                type="number"
-                value={formData.quantity}
-                onChange={(e) => setFormData({...formData, quantity: parseInt(e.target.value) || 0})}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-unit" className="text-right">Đơn vị</Label>
-              <Input
-                id="edit-unit"
-                value={formData.unit}
-                onChange={(e) => setFormData({...formData, unit: e.target.value})}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-price" className="text-right">Giá (VND)</Label>
-              <Input
-                id="edit-price"
-                type="number"
-                value={formData.price}
-                onChange={(e) => setFormData({...formData, price: parseInt(e.target.value) || 0})}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-description" className="text-right">Mô tả</Label>
-              <Textarea
-                id="edit-description"
-                value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                className="col-span-3"
-                rows={2}
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-status" className="text-right">Trạng thái</Label>
-              <select
-                id="edit-status"
-                value={formData.status}
-                onChange={(e) => setFormData({...formData, status: e.target.value as any})}
-                className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="available">Còn hàng</option>
-                <option value="out_of_stock">Hết hàng</option>
-                <option value="discontinued">Ngừng kinh doanh</option>
-              </select>
-            </div>
-          </div>
+          {renderForm()}
           <DialogFooter>
-            <Button type="submit" onClick={handleUpdate}>Cập nhật</Button>
+            <Button onClick={handleUpdate} disabled={isSubmitting}>
+              {isSubmitting ? 'Đang lưu...' : 'Lưu thay đổi'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

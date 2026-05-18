@@ -1,12 +1,7 @@
-import { AdminGuard } from '@/routes/AdminGuard'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+﻿import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
-
 import { AuthProvider } from '@/context/AuthContext'
-import { RequireAuth } from '@/routes/RequireAuth'
-import { PatientGuard } from '@/routes/PatientGuard'
-import { DoctorGuard } from '@/routes/DoctorGuard'
 
 import { MainLayout } from '@/layouts/MainLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
@@ -14,44 +9,43 @@ import { PatientLayout } from '@/layouts/PatientLayout'
 import { AdminLayout } from '@/layouts/AdminLayout'
 import { DoctorLayout } from '@/layouts/DoctorLayout'
 
-// Home pages
+import { RequireAuth } from '@/routes/RequireAuth'
+import { PatientGuard } from '@/routes/PatientGuard'
+import { DoctorGuard } from '@/routes/DoctorGuard'
+import { AdminGuard } from '@/routes/AdminGuard'
+
 import { HomePage } from '@/pages/home/HomePage'
 import { SpecialtyPage } from '@/pages/home/SpecialtyPage'
 import { SpecialtyDetailPage } from '@/pages/home/SpecialtyDetailPage'
 import { ContactPage } from '@/pages/home/ContactPage'
 import { AboutPage } from '@/pages/home/AboutPage'
 
-// Doctors pages
 import { DoctorsPage } from '@/pages/doctors/DoctorsPage'
 import { DoctorDetailPage } from '@/pages/doctors/DoctorDetailPage'
 
-// Booking pages
 import { BookingPage } from '@/pages/booking/BookingPage'
 
-// Auth pages
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
 import { GoogleCallbackPage } from '@/pages/auth/GoogleCallbackPage'
 import { FacebookCallbackPage } from '@/pages/auth/FacebookCallbackPage'
+import { ForbiddenPage } from '@/pages/auth/ForbiddenPage'
 
-// Patient pages
 import { PatientDashboardPage } from '@/pages/patient/PatientDashboardPage'
 import { PatientProfilePage } from '@/pages/patient/PatientProfilePage'
 import { PatientAppointmentsPage } from '@/pages/patient/PatientAppointmentsPage'
 import { PatientAppointmentDetailPage } from '@/pages/patient/PatientAppointmentDetailPage'
 
-// Admin pages
 import { AdminDashboard } from '@/pages/admin/AdminDashboard'
 import { AdminDoctorsPage } from '@/pages/admin/AdminDoctorsPage'
+import { AdminPatientsPage } from '@/pages/admin/AdminPatientsPage'
 import { AdminSpecialtiesPage } from '@/pages/admin/AdminSpecialtiesPage'
 import { AdminFinancePage } from '@/pages/admin/AdminFinancePage'
 import { AdminMedicinesPage } from '@/pages/admin/AdminMedicinesPage'
 import { AdminSchedulePage } from '@/pages/admin/AdminSchedulePage'
 
-
-// Doctor pages
 import { DoctorDashboardPage } from '@/pages/doctor/DoctorDashboardPage'
 import { DoctorAppointmentsPage } from '@/pages/doctor/DoctorAppointmentsPage'
 import { DoctorProfilePage } from '@/pages/doctor/DoctorProfilePage'
@@ -64,7 +58,6 @@ function App() {
       <Router>
         <AuthProvider>
           <Routes>
-            {/* Main Layout Routes */}
             <Route element={<MainLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/doctors" element={<DoctorsPage />} />
@@ -73,10 +66,9 @@ function App() {
               <Route path="/specialty/:id" element={<SpecialtyDetailPage />} />
               <Route path="/booking" element={<BookingPage />} />
               <Route path="/contact" element={<ContactPage />} />
-              <Route path="/about" element={<AboutPage />} />   
+              <Route path="/about" element={<AboutPage />} />
             </Route>
 
-            {/* Auth Layout Routes */}
             <Route element={<AuthLayout />}>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
@@ -86,7 +78,8 @@ function App() {
               <Route path="/auth/facebook/callback" element={<FacebookCallbackPage />} />
             </Route>
 
-            {/* Patient Routes */}
+            <Route path="/403" element={<ForbiddenPage />} />
+
             <Route
               element={
                 <RequireAuth>
@@ -102,42 +95,41 @@ function App() {
               <Route path="/patient/appointments/:id" element={<PatientAppointmentDetailPage />} />
             </Route>
 
-            {/* Admin Layout Routes - Đã gộp và bảo mật */}
-<Route 
-  path="/admin" 
-  element={
-    <RequireAuth>
-      <AdminGuard>
-        <AdminLayout />
-      </AdminGuard>
-    </RequireAuth>
-  }
->
-  <Route index element={<AdminDashboard />} />
-  <Route path="doctors" element={<AdminDoctorsPage />} />
-  <Route path="specialties" element={<AdminSpecialtiesPage />} />
-  <Route path="finance" element={<AdminFinancePage />} />
-  <Route path="schedule" element={<AdminSchedulePage />} />
-  <Route path="medicines" element={<AdminMedicinesPage />} />
-</Route>
+            <Route
+              path="/admin"
+              element={
+                <RequireAuth>
+                  <AdminGuard>
+                    <AdminLayout />
+                  </AdminGuard>
+                </RequireAuth>
+              }
+            >
+              <Route index element={<AdminDashboard />} />
+              <Route path="doctors" element={<AdminDoctorsPage />} />
+              <Route path="patients" element={<AdminPatientsPage />} />
+              <Route path="specialties" element={<AdminSpecialtiesPage />} />
+              <Route path="finance" element={<AdminFinancePage />} />
+              <Route path="schedule" element={<AdminSchedulePage />} />
+              <Route path="medicines" element={<AdminMedicinesPage />} />
+            </Route>
 
-{/* Doctor Layout Routes */}
-<Route 
-  path="/doctor" 
-  element={
-    <RequireAuth>
-      <DoctorGuard>
-        <DoctorLayout />
-      </DoctorGuard>
-    </RequireAuth>
-  }
->
-  <Route index element={<DoctorDashboardPage />} />
-  <Route path="appointments" element={<DoctorAppointmentsPage />} />
-  <Route path="profile" element={<DoctorProfilePage />} />
-  <Route path="medical-records" element={<DoctorMedicalRecordsPage />} />
-  <Route path="schedule" element={<DoctorSchedulePage />} />
-</Route>
+            <Route
+              path="/doctor"
+              element={
+                <RequireAuth>
+                  <DoctorGuard>
+                    <DoctorLayout />
+                  </DoctorGuard>
+                </RequireAuth>
+              }
+            >
+              <Route index element={<DoctorDashboardPage />} />
+              <Route path="appointments" element={<DoctorAppointmentsPage />} />
+              <Route path="profile" element={<DoctorProfilePage />} />
+              <Route path="medical-records" element={<DoctorMedicalRecordsPage />} />
+              <Route path="schedule" element={<DoctorSchedulePage />} />
+            </Route>
           </Routes>
         </AuthProvider>
       </Router>

@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type AxiosRequestHeaders } from 'axios'
+import { FACEBOOK_CALLBACK_URL, GOOGLE_CALLBACK_URL } from '@/constants/auth'
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
@@ -137,6 +138,8 @@ export async function loginFacebookByCode(code: string, redirectUri: string) {
   const { data } = await api.post<AuthResponse>('/auth/facebook/code', { code, redirectUri })
   return data
 }
+
+export { GOOGLE_CALLBACK_URL, FACEBOOK_CALLBACK_URL }
 
 export async function register(data: { username: string; password: string }) {
   return api.post<AuthResponse>('/auth/register', data)

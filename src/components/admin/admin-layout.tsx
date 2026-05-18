@@ -1,22 +1,19 @@
-import { useState } from 'react'
-import {
-  LayoutDashboard,
-  Stethoscope,
-  Users,
-  DollarSign,
-  Pill,
+﻿import {
   Calendar,
+  DollarSign,
+  LayoutDashboard,
   LogOut,
-  ChevronRight,
+  Pill,
+  Stethoscope,
+  UserRound,
+  Users,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -46,7 +43,13 @@ const adminMenuItems = [
     label: 'Quản lý bác sĩ',
   },
   {
-    title: 'Lịch Khám',
+    title: 'Bệnh nhân',
+    href: '/admin/patients',
+    icon: UserRound,
+    label: 'Quản lý bệnh nhân',
+  },
+  {
+    title: 'Lịch khám',
     href: '/admin/schedule',
     icon: Calendar,
     label: 'Quản lý lịch khám',
@@ -69,7 +72,6 @@ function AdminSidebar() {
   const location = useLocation()
   const { logout } = useAuth()
   const navigate = useNavigate()
-  const pathname = location.pathname
 
   const handleLogout = () => {
     logout()
@@ -93,16 +95,12 @@ function AdminSidebar() {
       <SidebarContent>
         <SidebarMenu>
           {adminMenuItems.map((item) => {
-            const isActive = pathname === item.href
             const Icon = item.icon
+            const isActive = location.pathname === item.href
 
             return (
               <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={isActive}
-                  tooltip={item.label}
-                >
+                <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
                   <Link to={item.href}>
                     <Icon className="h-4 w-4" />
                     <span>{item.title}</span>

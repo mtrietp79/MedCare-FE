@@ -1,11 +1,13 @@
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { Eye, EyeOff, Mail, Lock, Heart } from 'lucide-react'
-import { getGoogleAuthUrl, getFacebookAuthUrl } from '@/services/auth'
+import {
+  FACEBOOK_CALLBACK_URL,
+  GOOGLE_CALLBACK_URL,
+  getFacebookAuthUrl,
+  getGoogleAuthUrl,
+} from '@/services/auth'
 import { useAuth } from '@/context/AuthContext'
-
-const GOOGLE_CB = `${window.location.origin}/auth/google/callback`
-const FACEBOOK_CB = `${window.location.origin}/auth/facebook/callback`
 
 function randomState() {
   return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
@@ -71,7 +73,7 @@ export function LoginPage() {
       const state = randomState()
       sessionStorage.setItem(`oauth_${provider}_state`, state)
       
-      const redirectUri = provider === 'google' ? GOOGLE_CB : FACEBOOK_CB
+      const redirectUri = provider === 'google' ? GOOGLE_CALLBACK_URL : FACEBOOK_CALLBACK_URL
       const url =
         provider === 'google'
           ? await getGoogleAuthUrl(redirectUri, state)

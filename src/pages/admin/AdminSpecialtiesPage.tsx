@@ -1,182 +1,249 @@
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Plus, Search, Edit, Trash2 } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { normalizeSpecialty, safeLower, type NormalizedSpecialty } from '@/lib/admin-normalizers'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 
-interface Specialty {
-  id: string
+interface SpecialtyForm {
   name: string
   description: string
-  doctorCount: number
-  createdAt: string
+}
+
+const initialForm: SpecialtyForm = {
+  name: '',
+  description: '',
 }
 
 export function AdminSpecialtiesPage() {
-  const [specialties, setSpecialties] = useState<Specialty[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedSpecialty, setSelectedSpecialty] = useState<Specialty | null>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const { toast } = useToast()
 
-  // Form states
-  const [formData, setFormData] = useState({
-    name: '',
-    description: ''
-  })
+  const [specialties, setSpecialties] = useState<NormalizedSpecialty[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  useEffect(() => {
-    fetchSpecialties()
-  }, [])
+  const [searchInput, setSearchInput] = useState('')
+  const debouncedSearch = useDebouncedValue(searchInput, 300)
+  const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'doctor_desc'>('name_asc')
+
+  const [selectedSpecialty, setSelectedSpecialty] = useState<NormalizedSpecialty | null>(null)
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [formData, setFormData] = useState<SpecialtyForm>(initialForm)
+  const [formError, setFormError] = useState('')
 
   const fetchSpecialties = async () => {
+    setLoading(true)
+    setError('')
+
     try {
-      setLoading(true)
-      const data = await adminApi.getSpecialties()
-      setSpecialties(data)
-    } catch (error) {
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể tải danh sách chuyên khoa',
-        variant: 'destructive'
-      })
+      const raw = await adminApi.getSpecialties()
+      const normalized = (Array.isArray(raw) ? raw : []).map(normalizeSpecialty)
+      setSpecialties(normalized)
+    } catch (fetchError: any) {
+      setError(fetchError?.message || 'Không thể tải danh sách chuyên khoa.')
     } finally {
       setLoading(false)
     }
   }
 
+  useEffect(() => {
+    void fetchSpecialties()
+  }, [])
+
+  const filteredSpecialties = useMemo(() => {
+    const keyword = safeLower(debouncedSearch)
+
+    const list = specialties.filter((item) => {
+      if (!keyword) return true
+      return safeLower(item.name).includes(keyword) || safeLower(item.description).includes(keyword)
+    })
+
+    list.sort((a, b) => {
+      if (sortBy === 'name_desc') return a.name.localeCompare(b.name) * -1
+      if (sortBy === 'doctor_desc') return b.doctorCount - a.doctorCount
+      return a.name.localeCompare(b.name)
+    })
+
+    return list
+  }, [specialties, debouncedSearch, sortBy])
+
+  const resetForm = () => {
+    setFormData(initialForm)
+    setFormError('')
+    setSelectedSpecialty(null)
+  }
+
+  const validateForm = () => {
+    if (!formData.name.trim()) {
+      setFormError('Tên chuyên khoa là bắt buộc.')
+      return false
+    }
+    setFormError('')
+    return true
+  }
+
   const handleCreate = async () => {
+    if (!validateForm()) return
+
+    setIsSubmitting(true)
     try {
-      await adminApi.createSpecialty(formData)
-      toast({
-        title: 'Thành công',
-        description: 'Đã tạo chuyên khoa mới'
+      await adminApi.createSpecialty({
+        name: formData.name.trim(),
+        description: formData.description.trim() || null,
       })
+      toast({ title: 'Thành công', description: 'Đã tạo chuyên khoa mới.' })
       setIsCreateDialogOpen(false)
       resetForm()
-      fetchSpecialties()
-    } catch (error) {
+      await fetchSpecialties()
+    } catch (createError: any) {
       toast({
         title: 'Lỗi',
-        description: 'Không thể tạo chuyên khoa',
-        variant: 'destructive'
+        description: createError?.message || 'Không thể tạo chuyên khoa.',
+        variant: 'destructive',
       })
+    } finally {
+      setIsSubmitting(false)
     }
+  }
+
+  const openEditDialog = (specialty: NormalizedSpecialty) => {
+    setSelectedSpecialty(specialty)
+    setFormData({
+      name: specialty.name,
+      description: specialty.description,
+    })
+    setFormError('')
+    setIsEditDialogOpen(true)
   }
 
   const handleUpdate = async () => {
     if (!selectedSpecialty) return
+    if (!validateForm()) return
 
+    setIsSubmitting(true)
     try {
-      await adminApi.updateSpecialty(selectedSpecialty.id, formData)
-      toast({
-        title: 'Thành công',
-        description: 'Đã cập nhật chuyên khoa'
+      await adminApi.updateSpecialty(selectedSpecialty.id, {
+        name: formData.name.trim(),
+        description: formData.description.trim() || null,
       })
+      toast({ title: 'Thành công', description: 'Đã cập nhật chuyên khoa.' })
       setIsEditDialogOpen(false)
       resetForm()
-      fetchSpecialties()
-    } catch (error) {
+      await fetchSpecialties()
+    } catch (updateError: any) {
       toast({
         title: 'Lỗi',
-        description: 'Không thể cập nhật chuyên khoa',
-        variant: 'destructive'
+        description: updateError?.message || 'Không thể cập nhật chuyên khoa.',
+        variant: 'destructive',
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  const handleDelete = async (specialtyId: string) => {
+  const handleDelete = async (id: string) => {
     try {
-      await adminApi.deleteSpecialty(specialtyId)
-      toast({
-        title: 'Thành công',
-        description: 'Đã xóa chuyên khoa'
-      })
-      fetchSpecialties()
-    } catch (error) {
+      await adminApi.deleteSpecialty(id)
+      toast({ title: 'Thành công', description: 'Đã xóa chuyên khoa.' })
+      await fetchSpecialties()
+    } catch (deleteError: any) {
       toast({
         title: 'Lỗi',
-        description: 'Không thể xóa chuyên khoa',
-        variant: 'destructive'
+        description: deleteError?.message || 'Không thể xóa chuyên khoa.',
+        variant: 'destructive',
       })
     }
   }
 
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      description: ''
-    })
-    setSelectedSpecialty(null)
-  }
-
-  const openEditDialog = (specialty: Specialty) => {
-    setSelectedSpecialty(specialty)
-    setFormData({
-      name: specialty.name,
-      description: specialty.description
-    })
-    setIsEditDialogOpen(true)
-  }
-
-  const filteredSpecialties = specialties.filter(specialty =>
-    specialty.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    specialty.description.toLowerCase().includes(searchTerm.toLowerCase())
+  const renderForm = () => (
+    <div className="grid gap-4 py-4">
+      <div className="grid gap-2">
+        <Label htmlFor="specialty-name">Tên chuyên khoa</Label>
+        <Input
+          id="specialty-name"
+          value={formData.name}
+          onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="specialty-description">Mô tả</Label>
+        <Textarea
+          id="specialty-description"
+          rows={4}
+          value={formData.description}
+          onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+        />
+      </div>
+      {formError && <p className="text-sm text-red-600">{formError}</p>}
+    </div>
   )
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Quản lý chuyên khoa</h1>
-          <p className="text-muted-foreground">Quản lý các chuyên khoa trong hệ thống</p>
+          <p className="text-muted-foreground">CRUD chuyên khoa, tìm kiếm và sắp xếp</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog
+          open={isCreateDialogOpen}
+          onOpenChange={(open) => {
+            setIsCreateDialogOpen(open)
+            if (!open) resetForm()
+          }}
+        >
           <DialogTrigger asChild>
             <Button>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               Thêm chuyên khoa
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle>Thêm chuyên khoa mới</DialogTitle>
-              <DialogDescription>
-                Nhập thông tin cho chuyên khoa mới
-              </DialogDescription>
+              <DialogTitle>Tạo chuyên khoa mới</DialogTitle>
+              <DialogDescription>Thông tin chuyên khoa hiển thị cho bác sĩ và người bệnh.</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="name" className="text-right">Tên</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="col-span-3"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="description" className="text-right">Mô tả</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                  className="col-span-3"
-                  rows={3}
-                />
-              </div>
-            </div>
+            {renderForm()}
             <DialogFooter>
-              <Button type="submit" onClick={handleCreate}>Tạo chuyên khoa</Button>
+              <Button onClick={handleCreate} disabled={isSubmitting}>
+                {isSubmitting ? 'Đang tạo...' : 'Tạo chuyên khoa'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -185,26 +252,36 @@ export function AdminSpecialtiesPage() {
       <Card>
         <CardHeader>
           <CardTitle>Danh sách chuyên khoa</CardTitle>
-          <CardDescription>
-            Tổng cộng {specialties.length} chuyên khoa
-          </CardDescription>
+          <CardDescription>Tổng cộng {specialties.length} chuyên khoa</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center space-x-2 mb-4">
-            <div className="relative flex-1 max-w-sm">
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-[260px] flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Tìm kiếm chuyên khoa..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Tìm theo tên/mô tả"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-8"
               />
             </div>
+            <Select value={sortBy} onValueChange={(value: 'name_asc' | 'name_desc' | 'doctor_desc') => setSortBy(value)}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name_asc">Tên A-Z</SelectItem>
+                <SelectItem value="name_desc">Tên Z-A</SelectItem>
+                <SelectItem value="doctor_desc">Nhiều bác sĩ trước</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {loading ? (
-            <div className="text-center py-4">Đang tải...</div>
-          ) : (
+          {loading && <AdminTableSkeleton rows={6} />}
+          {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchSpecialties()} />}
+          {!loading && !error && filteredSpecialties.length === 0 && <AdminEmptyState title="Không có chuyên khoa phù hợp." />}
+
+          {!loading && !error && filteredSpecialties.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -217,15 +294,11 @@ export function AdminSpecialtiesPage() {
               <TableBody>
                 {filteredSpecialties.map((specialty) => (
                   <TableRow key={specialty.id}>
-                    <TableCell className="font-medium">{specialty.name}</TableCell>
-                    <TableCell className="max-w-xs truncate">{specialty.description}</TableCell>
+                    <TableCell className="font-medium">{specialty.name || '-'}</TableCell>
+                    <TableCell className="max-w-[360px] truncate">{specialty.description || '-'}</TableCell>
                     <TableCell>{specialty.doctorCount}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditDialog(specialty)}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(specialty)}>
                         <Edit className="h-4 w-4" />
                       </Button>
                       <AlertDialog>
@@ -238,15 +311,12 @@ export function AdminSpecialtiesPage() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Xác nhận xóa</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Bạn có chắc chắn muốn xóa chuyên khoa {specialty.name}?
-                              Hành động này không thể hoàn tác.
+                              Bạn có chắc muốn xóa chuyên khoa {specialty.name || specialty.id}?
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Hủy</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(specialty.id)}>
-                              Xóa
-                            </AlertDialogAction>
+                            <AlertDialogAction onClick={() => void handleDelete(specialty.id)}>Xóa</AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
@@ -259,38 +329,23 @@ export function AdminSpecialtiesPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+      <Dialog
+        open={isEditDialogOpen}
+        onOpenChange={(open) => {
+          setIsEditDialogOpen(open)
+          if (!open) resetForm()
+        }}
+      >
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Chỉnh sửa chuyên khoa</DialogTitle>
-            <DialogDescription>
-              Cập nhật thông tin chuyên khoa
-            </DialogDescription>
+            <DialogTitle>Cập nhật chuyên khoa</DialogTitle>
+            <DialogDescription>Chỉnh sửa thông tin mô tả chuyên khoa.</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-name" className="text-right">Tên</Label>
-              <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="col-span-3"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-description" className="text-right">Mô tả</Label>
-              <Textarea
-                id="edit-description"
-                value={formData.description}
-                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                className="col-span-3"
-                rows={3}
-              />
-            </div>
-          </div>
+          {renderForm()}
           <DialogFooter>
-            <Button type="submit" onClick={handleUpdate}>Cập nhật</Button>
+            <Button onClick={handleUpdate} disabled={isSubmitting}>
+              {isSubmitting ? 'Đang lưu...' : 'Lưu thay đổi'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,0 +1,145 @@
+﻿export type Nullable<T> = T | null | undefined
+
+export function safeString(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
+export function safeLower(value: unknown): string {
+  return safeString(value).toLowerCase()
+}
+
+export function safeNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+export interface NormalizedDoctor {
+  id: string
+  fullName: string
+  name: string
+  email: string
+  phone: string
+  specialtyName: string
+  specialization: string
+  username: string
+  specialtyId: string
+  experience: number
+  status: 'active' | 'inactive'
+  raw: any
+}
+
+export function normalizeDoctor(raw: any): NormalizedDoctor {
+  const fullName = safeString(raw?.fullName ?? raw?.name)
+  const specialtyName = safeString(raw?.specialtyName ?? raw?.specialization ?? raw?.specialty?.name)
+
+  return {
+    id: safeString(raw?.id),
+    fullName,
+    name: fullName || safeString(raw?.name),
+    email: safeString(raw?.email),
+    phone: safeString(raw?.phone),
+    specialtyName,
+    specialization: specialtyName,
+    username: safeString(raw?.username ?? raw?.account?.username),
+    specialtyId: safeString(raw?.specialtyId ?? raw?.specialty?.id),
+    experience: safeNumber(raw?.experience ?? raw?.experienceYears, 0),
+    status: safeString(raw?.status).toLowerCase() === 'inactive' ? 'inactive' : 'active',
+    raw,
+  }
+}
+
+export interface NormalizedSpecialty {
+  id: string
+  name: string
+  description: string
+  doctorCount: number
+  createdAt: string
+}
+
+export function normalizeSpecialty(raw: any): NormalizedSpecialty {
+  return {
+    id: safeString(raw?.id),
+    name: safeString(raw?.name),
+    description: safeString(raw?.description),
+    doctorCount: safeNumber(raw?.doctorCount),
+    createdAt: safeString(raw?.createdAt),
+  }
+}
+
+export interface NormalizedMedicine {
+  id: string
+  name: string
+  dosage: string
+  description: string
+  quantity: number
+  unit: string
+  price: number
+  status: 'available' | 'out_of_stock' | 'discontinued'
+  createdAt: string
+}
+
+export function normalizeMedicine(raw: any): NormalizedMedicine {
+  const rawStatus = safeLower(raw?.status)
+  const status: NormalizedMedicine['status'] = rawStatus === 'out_of_stock' || rawStatus === 'discontinued'
+    ? (rawStatus as NormalizedMedicine['status'])
+    : 'available'
+
+  return {
+    id: safeString(raw?.id),
+    name: safeString(raw?.name),
+    dosage: safeString(raw?.dosage),
+    description: safeString(raw?.description),
+    quantity: safeNumber(raw?.quantity),
+    unit: safeString(raw?.unit),
+    price: safeNumber(raw?.price),
+    status,
+    createdAt: safeString(raw?.createdAt),
+  }
+}
+
+export interface NormalizedPatient {
+  id: string
+  fullName: string
+  email: string
+  phone: string
+  gender: string
+  dateOfBirth: string
+  profileCompleted: boolean
+}
+
+export function normalizePatient(raw: any): NormalizedPatient {
+  return {
+    id: safeString(raw?.id),
+    fullName: safeString(raw?.fullName ?? raw?.name),
+    email: safeString(raw?.email),
+    phone: safeString(raw?.phone),
+    gender: safeString(raw?.gender),
+    dateOfBirth: safeString(raw?.dateOfBirth),
+    profileCompleted: Boolean(raw?.profileCompleted),
+  }
+}
+
+export interface NormalizedInvoice {
+  id: string
+  patientName: string
+  medicalRecordId: string
+  totalAmount: number
+  status: 'pending' | 'paid' | 'cancelled'
+  createdAt: string
+  paidAt: string
+}
+
+export function normalizeInvoice(raw: any): NormalizedInvoice {
+  const status = safeLower(raw?.status)
+  return {
+    id: safeString(raw?.id),
+    patientName: safeString(raw?.patientName),
+    medicalRecordId: safeString(raw?.medicalRecordId),
+    totalAmount: safeNumber(raw?.totalAmount),
+    status: status === 'paid' || status === 'cancelled' ? status : 'pending',
+    createdAt: safeString(raw?.createdAt),
+    paidAt: safeString(raw?.paidAt),
+  }
+}

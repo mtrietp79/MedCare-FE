@@ -1,7 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/services/api'
-import type { Specialty } from '@/types'
+import type { Doctor, Specialty } from '@/types'
+
+function getSpecialtyId(doctor: Doctor) {
+  if (typeof doctor.specialty === 'object') {
+    return doctor.specialty?.id || doctor.specialtyId
+  }
+  return doctor.specialtyId
+}
 
 export function SpecialtyPage() {
   const [specialties, setSpecialties] = useState<Specialty[]>([])
@@ -13,8 +20,29 @@ export function SpecialtyPage() {
       try {
         setLoading(true)
         setError(null)
-        const data = await api.specialties.getAll()
-        setSpecialties(Array.isArray(data) ? data : [])
+
+        const [specialtyData, doctorData] = await Promise.all([
+          api.specialties.getAll(),
+          api.doctors.getAll(),
+        ])
+
+        const specialtiesArray = Array.isArray(specialtyData) ? specialtyData : []
+        const doctors = Array.isArray(doctorData) ? doctorData : []
+
+        const countBySpecialty = doctors.reduce<Record<string, number>>((counts, doctor) => {
+          const specialtyId = getSpecialtyId(doctor)
+          if (specialtyId) {
+            counts[specialtyId] = (counts[specialtyId] || 0) + 1
+          }
+          return counts
+        }, {})
+
+        setSpecialties(
+          specialtiesArray.map((specialty) => ({
+            ...specialty,
+            doctorCount: countBySpecialty[specialty.id] ?? 0,
+          }))
+        )
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Không thể tải danh sách chuyên khoa'
         setError(errorMessage)
@@ -59,15 +87,13 @@ export function SpecialtyPage() {
           {specialties.map((specialty) => (
             <Link
               key={specialty.id}
-              to={`/specialty/${specialty.slug}`}
+              to={`/specialty/${specialty.id}`}
               className="p-6 border rounded-lg hover:shadow-lg transition-shadow cursor-pointer hover:border-primary"
             >
               <div className="text-4xl mb-4">🏥</div>
               <h3 className="font-semibold text-lg mb-2">{specialty.name}</h3>
               <p className="text-sm text-muted-foreground">{specialty.description || 'Dịch vụ chuyên khoa'}</p>
-              {specialty.doctorCount && (
-                <p className="text-sm text-primary mt-3 font-medium">{specialty.doctorCount} bác sĩ</p>
-              )}
+              <p className="text-sm text-primary mt-3 font-medium">{specialty.doctorCount ?? 0} bác sĩ</p>
             </Link>
           ))}
         </div>

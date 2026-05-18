@@ -8,6 +8,7 @@ export interface Doctor {
   image?: string
   avatar?: string
   experience?: number
+  experienceYears?: number
   rating?: number
   reviewCount?: number
   education?: string
@@ -16,6 +17,7 @@ export interface Doctor {
   hospital?: string
   languages?: string[]
   consultationFee?: number
+  price?: number
   fee?: number
   availableSlots?: Array<{ date: string; times: string[] }>
 }

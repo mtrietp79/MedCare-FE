@@ -1,35 +1,57 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DoctorCard } from '@/components/doctors/doctor-card'
 import { api } from '@/services/api'
 import type { Doctor, Specialty } from '@/types'
 
+function getSpecialtyId(doctor: Doctor) {
+  if (typeof doctor.specialty === 'object') {
+    return doctor.specialty?.id || doctor.specialtyId
+  }
+  return doctor.specialtyId
+}
+
 export function SpecialtyDetailPage() {
-  const { slug } = useParams()
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [specialty, setSpecialty] = useState<Specialty | null>(null)
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!slug) return
+    if (!id?.trim()) {
+      setError('ID chuyên khoa không hợp lệ.')
+      setLoading(false)
+      const timeoutId = window.setTimeout(() => navigate('/specialty', { replace: true }), 2500)
+      return () => window.clearTimeout(timeoutId)
+    }
+
     const fetchData = async () => {
       try {
         setLoading(true)
-        const specialtyData = await api.specialties.getBySlug(slug)
+        setError(null)
+
+        const specialtyData = await api.specialties.getById(id)
         setSpecialty(specialtyData)
-        const doctorData = await api.doctors.getAll({ specialty: specialtyData.name })
-        setDoctors(doctorData)
+
+        const allDoctors = await api.doctors.getAll()
+        const filteredDoctors = Array.isArray(allDoctors)
+          ? allDoctors.filter((doctor) => getSpecialtyId(doctor) === id)
+          : []
+
+        setDoctors(filteredDoctors)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu')
+        setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu chuyên khoa')
       } finally {
         setLoading(false)
       }
     }
+
     fetchData()
-  }, [slug])
+  }, [id, navigate])
 
   if (loading) {
     return (
@@ -66,7 +88,7 @@ export function SpecialtyDetailPage() {
             <div className="mt-6 grid grid-cols-2 gap-4 text-sm text-muted-foreground">
               <div>
                 <p className="font-medium text-foreground">Bác sĩ</p>
-                <p>{specialty.doctorCount || 'Nhiều'} bác sĩ</p>
+                <p>{doctors.length} bác sĩ</p>
               </div>
               <div>
                 <p className="font-medium text-foreground">Gợi ý</p>

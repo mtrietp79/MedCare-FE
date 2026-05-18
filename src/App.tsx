@@ -70,7 +70,7 @@ function App() {
               <Route path="/doctors" element={<DoctorsPage />} />
               <Route path="/doctors/:id" element={<DoctorDetailPage />} />
               <Route path="/specialty" element={<SpecialtyPage />} />
-              <Route path="/specialty/:slug" element={<SpecialtyDetailPage />} />
+              <Route path="/specialty/:id" element={<SpecialtyDetailPage />} />
               <Route path="/booking" element={<BookingPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/about" element={<AboutPage />} />   

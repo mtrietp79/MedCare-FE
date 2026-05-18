@@ -47,6 +47,7 @@ export function BookingWizard() {
   const [bookingRules, setBookingRules] = useState<BookingRules | null>(null)
   const [patient, setPatient] = useState<Patient | null>(null)
   const [slots, setSlots] = useState<any[]>([])
+  const [selectedSlot, setSelectedSlot] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [submitLoading, setSubmitLoading] = useState(false)
@@ -119,13 +120,15 @@ export function BookingWizard() {
     const fetchSlots = async () => {
       if (!formData.doctorId || !formData.date) {
         setSlots([])
+        setSelectedSlot(null)
         return
       }
 
       try {
         setSlotsError(null)
         setSlotsLoading(true)
-        const data = await api.doctors.getAvailableSlots(formData.doctorId, formData.date)
+        const apiDate = formatDateForApi(formData.date)
+        const data = await api.doctors.getAvailableSlots(formData.doctorId, apiDate)
         const serverNow = bookingRules?.serverNow ? new Date(bookingRules.serverNow) : new Date()
         const minBookableAt = bookingRules?.minBookableAt ? new Date(bookingRules.minBookableAt) : serverNow
         const processed = (data || []).map((slot: any) => {
@@ -155,13 +158,55 @@ export function BookingWizard() {
   }, [formData.doctorId, formData.date, bookingRules])
 
   const selectedDoctor = (Array.isArray(doctors) ? doctors : []).find(doc => doc.id === formData.doctorId)
-  const selectedSlot = (Array.isArray(slots) ? slots : []).find(slot => slot.startTime === formData.time)
+
+  const parseDateString = (dateString: string): Date | null => {
+    if (!dateString) return null
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      const date = new Date(dateString)
+      return isNaN(date.getTime()) ? null : date
+    }
+
+    const ddmmyyyyMatch = /^\d{2}\/\d{2}\/\d{4}$/.test(dateString)
+    if (ddmmyyyyMatch) {
+      const [day, month, year] = dateString.split('/')
+      const date = new Date(`${year}-${month}-${day}`)
+      return isNaN(date.getTime()) ? null : date
+    }
+
+    const parsed = new Date(dateString)
+    return isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  const formatDateDisplay = (dateString?: string) => {
+    const date = parseDateString(dateString || '')
+    return date ? date.toLocaleDateString('vi-VN') : ''
+  }
+
+  const formatDateForApi = (dateString: string) => {
+    const date = parseDateString(dateString)
+    if (!date) return dateString
+    const day = String(date.getDate()).padStart(2, '0')
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const year = date.getFullYear()
+    return `${day}/${month}/${year}`
+  }
 
   const getDoctorName = (doctor?: Doctor) => doctor?.name ?? doctor?.fullName ?? 'Bác sĩ'
   const getDoctorSpecialty = (specialty?: Doctor['specialty']) =>
     typeof specialty === 'string' ? specialty : specialty?.name ?? ''
 
   const isSelectedSlotBookable = (slot?: any) => !!slot && slot.isBookable
+
+  const formatTimeDisplay = (timeString?: string) => {
+    if (!timeString) return ''
+    const date = parseDateString(timeString)
+    return date
+      ? date.toLocaleTimeString('vi-VN', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : ''
+  }
 
   const canProceed = (): boolean => {
     switch (currentStep) {
@@ -300,6 +345,7 @@ export function BookingWizard() {
                         onClick={async () => {
                           setSelectedSpecialtyId(sp.id)
                           setFormData({ ...formData, doctorId: '', date: '', time: '' })
+                          setSelectedSlot(null)
                           try {
                             const list = await api.doctors.getBySpecialtyId(sp.id)
                             setDoctors(Array.isArray(list) ? list : [])
@@ -337,6 +383,7 @@ export function BookingWizard() {
                         type="button"
                         onClick={() => {
                           setFormData({ ...formData, doctorId: doctor.id, date: '', time: '' })
+                          setSelectedSlot(null)
                           setCurrentStep(3)
                         }}
                         className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
@@ -448,9 +495,13 @@ export function BookingWizard() {
                                 key={slot.startTime}
                                 type="button"
                                 disabled={!slot.isBookable}
-                                onClick={() => setFormData({ ...formData, time: slot.startTime })}
-                                className={`p-4 rounded-lg border-2 text-center transition-all font-medium ${
-                                  formData.time === slot.startTime
+                                onClick={() => {
+                                  if (!slot.isBookable) return
+                                  setFormData({ ...formData, time: slot.startTime })
+                                  setSelectedSlot(slot)
+                                }}
+                                className={`relative z-10 p-4 rounded-lg border-2 text-center transition-all font-medium ${
+                                  selectedSlot?.startTime === slot.startTime
                                     ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
                                     : 'border-border hover:border-primary/50'
                                 } ${!slot.isBookable ? 'cursor-not-allowed opacity-50' : ''}`}
@@ -585,24 +636,16 @@ export function BookingWizard() {
                         <div className="flex justify-between items-start">
                           <span className="text-muted-foreground">Ngày</span>
                           <span className="font-medium text-right">
-                            {formData.date
-                              ? new Date(formData.date).toLocaleDateString('vi-VN', {
-                                  weekday: 'long',
-                                  day: 'numeric',
-                                  month: 'numeric',
-                                  year: 'numeric',
-                                })
-                              : '—'}
+                            {formData.date ? formatDateDisplay(formData.date) : '—'}
                           </span>
                         </div>
                         <div className="flex justify-between items-start">
                           <span className="text-muted-foreground">Giờ</span>
                           <span className="font-medium text-right">
-                            {formData.time
-                              ? new Date(formData.time).toLocaleTimeString('vi-VN', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
+                            {selectedSlot?.startTime
+                              ? formatTimeDisplay(selectedSlot.startTime)
+                              : formData.time
+                              ? formatTimeDisplay(formData.time)
                               : '—'}
                           </span>
                         </div>
@@ -719,11 +762,7 @@ export function BookingWizard() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Ngày</p>
                 {formData.date ? (
                   <p className="font-semibold text-foreground">
-                    {new Date(formData.date).toLocaleDateString('vi-VN', {
-                      weekday: 'short',
-                      day: 'numeric',
-                      month: 'numeric',
-                    })}
+                    {formatDateDisplay(formData.date)}
                   </p>
                 ) : (
                   <p className="text-muted-foreground italic">Chưa chọn</p>
@@ -733,12 +772,9 @@ export function BookingWizard() {
               {/* Time Summary */}
               <div className="pb-4 border-b">
                 <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Giờ</p>
-                {formData.time ? (
+                {selectedSlot?.startTime || formData.time ? (
                   <p className="font-semibold text-foreground">
-                    {new Date(formData.time).toLocaleTimeString('vi-VN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatTimeDisplay(selectedSlot?.startTime ?? formData.time)}
                   </p>
                 ) : (
                   <p className="text-muted-foreground italic">Chưa chọn</p>

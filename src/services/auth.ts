@@ -130,13 +130,17 @@ export async function getFacebookAuthUrl(redirectUri: string, state: string) {
 }
 
 export async function loginGoogleByCode(code: string, redirectUri: string) {
-  const { data } = await api.post<AuthResponse>('/auth/google/code', { code, redirectUri })
-  return data
+  if (import.meta.env.DEV) console.debug('[services] loginGoogleByCode called. code exists:', !!code, 'endpoint: /api/auth/google/code')
+  const resp = await api.post<AuthResponse>('/auth/google/code', { code, redirectUri })
+  if (import.meta.env.DEV) console.debug('[services] loginGoogleByCode status:', resp.status)
+  return resp.data
 }
 
 export async function loginFacebookByCode(code: string, redirectUri: string) {
-  const { data } = await api.post<AuthResponse>('/auth/facebook/code', { code, redirectUri })
-  return data
+  if (import.meta.env.DEV) console.debug('[services] loginFacebookByCode called. code exists:', !!code, 'endpoint: /api/auth/facebook/code')
+  const resp = await api.post<AuthResponse>('/auth/facebook/code', { code, redirectUri })
+  if (import.meta.env.DEV) console.debug('[services] loginFacebookByCode status:', resp.status)
+  return resp.data
 }
 
 export { GOOGLE_CALLBACK_URL, FACEBOOK_CALLBACK_URL }

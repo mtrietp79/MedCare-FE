@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { loginFacebookByCode, setStoredToken, setStoredUser } from '@/services/auth'
+import { getRoleHomePath, loginFacebookByCode, setStoredToken, setStoredUser } from '@/services/auth'
 
 const FACEBOOK_CB = `${window.location.origin}/auth/facebook/callback`
 
@@ -48,12 +48,11 @@ export function FacebookCallbackPage() {
         // Dispatch event để AuthContext cập nhật state
         window.dispatchEvent(new Event('auth-sync'))
 
-        nav('/', { replace: true })
+        nav(getRoleHomePath(auth.role), { replace: true })
       } catch (e: any) {
-        // Xử lý error theo status code
         let msg = 'Đăng nhập Facebook thất bại'
         const status = e?.response?.status
-        const messageFromBe = e?.response?.data?.message
+        const messageFromBe = e?.response?.data?.message || e?.message
         
         if (messageFromBe) {
           msg = messageFromBe

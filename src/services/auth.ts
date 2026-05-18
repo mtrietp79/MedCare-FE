@@ -30,14 +30,29 @@ api.interceptors.response.use(
         responseData?.message ||
         (typeof responseData === 'string' ? responseData : undefined) ||
         error.message
-      
-      // Requirement 5: Hiển thị lỗi chỉ dùng error.response.data.message
-      // Không prepend thêm "Request failed with status code..."
-      return Promise.reject(new Error(message))
+
+      if (error.response) {
+        error.message = message
+      }
+
+      return Promise.reject(error)
     }
     return Promise.reject(error)
   }
 )
+
+export function getRoleHomePath(role: string) {
+  switch (role) {
+    case 'ROLE_ADMIN':
+      return '/admin'
+    case 'ROLE_DOCTOR':
+      return '/doctor'
+    case 'ROLE_PATIENT':
+      return '/'
+    default:
+      return '/'
+  }
+}
 
 // For backwards compatibility with other services
 export async function fetchJson<T = any>(url: string, options: RequestInit = {}): Promise<T> {

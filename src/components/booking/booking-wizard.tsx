@@ -88,7 +88,7 @@ export function BookingWizard() {
           try {
             const doc = await api.doctors.getById(queryDoctorId)
             if (doc) {
-              const spId = typeof doc.specialty === 'string' ? doc.specialtyId ?? null : doc.specialty?.id ?? doc.specialtyId ?? null
+              const spId = doc.specialtyId ?? (typeof doc.specialty === 'object' ? doc.specialty?.id : undefined)
               setSelectedSpecialtyId(spId ? String(spId) : null)
               if (spId) {
                 const list = await api.doctors.getBySpecialtyId(String(spId))

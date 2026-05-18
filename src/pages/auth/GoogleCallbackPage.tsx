@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { loginGoogleByCode, setStoredToken, setStoredUser } from '@/services/auth'
+import { getRoleHomePath, loginGoogleByCode, setStoredToken, setStoredUser } from '@/services/auth'
 
 const GOOGLE_CB = `${window.location.origin}/auth/google/callback`
 
@@ -59,25 +59,20 @@ export function GoogleCallbackPage() {
         // Dispatch event để AuthContext cập nhật state
         window.dispatchEvent(new Event('auth-sync'))
 
-        nav('/', { replace: true })
+        nav(getRoleHomePath(auth.role), { replace: true })
       } catch (e: any) {
-        // Xử lý error theo status code và message từ BE
         let errorMsg = 'Đăng nhập Google thất bại. Vui lòng thử lại.'
         const status = e?.response?.status
-        const messageFromBe = e?.response?.data?.message
+        const messageFromBe = e?.response?.data?.message || e?.message
 
         if (messageFromBe) {
-          // Requirement 5: chỉ dùng error.response.data.message
           errorMsg = messageFromBe
         } else if (status === 401) {
-          // Requirement 6: 401 -> báo user đăng nhập lại
           errorMsg = 'Mã xác thực không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.'
         } else if (status === 502) {
-          // Requirement 6: 502 -> cho retry (thông qua việc quay lại trang login)
           errorMsg = 'Lỗi kết nối tới Google. Vui lòng thử lại.'
         }
 
-        // replace: true để xóa query string (code) khỏi lịch sử trình duyệt
         nav(`/login?error=${encodeURIComponent(errorMsg)}`, { replace: true })
       } finally {
         sessionStorage.removeItem('oauth_google_state')

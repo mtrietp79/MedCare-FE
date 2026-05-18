@@ -305,25 +305,6 @@ export const feedbackApi = {
   },
 }
 
-export const analyticsApi = {
-  async getMonthlyPatientData(): Promise<Array<{ month: string; patients: number }>> {
-    return apiCall<Array<{ month: string; patients: number }>>('/analytics/monthly-patients')
-  },
-
-  async getPatientsBySpecialty(): Promise<Array<{ specialty: string; patients: number }>> {
-    return apiCall<Array<{ specialty: string; patients: number }>>('/analytics/patients-by-specialty')
-  },
-
-  async getStats(): Promise<{
-    totalDoctors: number
-    totalPatients: number
-    totalAppointments: number
-    satisfactionRate: number
-  }> {
-    return apiCall('/analytics/stats')
-  },
-}
-
 export const paymentApi = {
   async initiateVNPayPayment(data: {
     appointmentId: string
@@ -413,7 +394,6 @@ export const api = {
   patients: patientApi,
   schedules: scheduleApi,
   feedbacks: feedbackApi,
-  analytics: analyticsApi,
   payments: paymentApi,
   medicines: medicineApi,
   dashboard: dashboardApi,

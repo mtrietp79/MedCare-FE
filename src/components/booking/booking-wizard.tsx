@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { api } from '@/services/api'
 import { useToast } from '@/hooks/use-toast'
 import type { BookingRules, Doctor, Patient } from '@/types'
@@ -129,19 +130,10 @@ export function BookingWizard() {
         setSlotsLoading(true)
         const apiDate = formatDateForApi(formData.date)
         const data = await api.doctors.getAvailableSlots(formData.doctorId, apiDate)
-        const serverNow = bookingRules?.serverNow ? new Date(bookingRules.serverNow) : new Date()
-        const minBookableAt = bookingRules?.minBookableAt ? new Date(bookingRules.minBookableAt) : serverNow
-        const processed = (data || []).map((slot: any) => {
-          const start = new Date(slot.startTime)
-          const isPast = start.getTime() < serverNow.getTime()
-          const isBeforeMinBookable = start.getTime() < minBookableAt.getTime()
-          const isBookable = !slot.disabled && !slot.full && !isPast && !isBeforeMinBookable
-          return {
-            ...slot,
-            disabled: !!slot.disabled || slot.full || isPast || isBeforeMinBookable,
-            isBookable,
-          }
-        })
+        const processed = (data || []).map((slot: any) => ({
+          ...slot,
+          disabled: !!slot.disabled,
+        }))
         setSlots(processed)
         if (!processed || processed.length === 0) {
           setSlotsError('Không có khung giờ khả dụng cho ngày này.')
@@ -195,7 +187,22 @@ export function BookingWizard() {
   const getDoctorSpecialty = (specialty?: Doctor['specialty']) =>
     typeof specialty === 'string' ? specialty : specialty?.name ?? ''
 
-  const isSelectedSlotBookable = (slot?: any) => !!slot && slot.isBookable
+  const getSlotDisabledMessage = (reason?: string | null) => {
+    switch (reason) {
+      case 'PAST':
+        return 'Khung giờ đã qua.'
+      case 'LESS_THAN_2H':
+        return 'Chỉ được đặt trước ít nhất 2 giờ.'
+      case 'OFF_SHIFT':
+        return 'Bác sĩ không trực khung giờ này.'
+      case 'FULL':
+        return 'Khung giờ đã đầy.'
+      default:
+        return ''
+    }
+  }
+
+  const isSelectedSlotBookable = (slot?: any) => !!slot && !slot.disabled
 
   const formatTimeDisplay = (timeString?: string) => {
     if (!timeString) return ''
@@ -462,6 +469,7 @@ export function BookingWizard() {
                             return
                           }
                           setFormData({ ...formData, date: val, time: '' })
+                          setSelectedSlot(null)
                           setSlotsError(null)
                         }}
                         min={bookingRules?.serverNow?.split('T')[0] ?? new Date().toISOString().split('T')[0]}
@@ -490,33 +498,47 @@ export function BookingWizard() {
                           </div>
                         ) : (
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {slots.map((slot) => (
-                              <button
-                                key={slot.startTime}
-                                type="button"
-                                disabled={!slot.isBookable}
-                                onClick={() => {
-                                  if (!slot.isBookable) return
-                                  setFormData({ ...formData, time: slot.startTime })
-                                  setSelectedSlot(slot)
-                                }}
-                                className={`relative z-10 p-4 rounded-lg border-2 text-center transition-all font-medium ${
-                                  selectedSlot?.startTime === slot.startTime
-                                    ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                                    : 'border-border hover:border-primary/50'
-                                } ${!slot.isBookable ? 'cursor-not-allowed opacity-50' : ''}`}
-                              >
-                                <div className="text-lg font-bold text-foreground">
-                                  {new Date(slot.startTime).toLocaleTimeString('vi-VN', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                </div>
-                                <div className="text-xs text-muted-foreground mt-1">
-                                  {slot.full ? 'Đã đầy' : `Còn ${slot.maxPatients - slot.bookedPatients}/${slot.maxPatients}`}
-                                </div>
-                              </button>
-                            ))}
+                            {slots.map((slot) => {
+                              const disabledMessage = getSlotDisabledMessage(slot.disabledReason)
+                              const button = (
+                                <button
+                                  key={slot.startTime}
+                                  type="button"
+                                  disabled={slot.disabled}
+                                  onClick={() => {
+                                    if (slot.disabled) return
+                                    setFormData({ ...formData, time: slot.startTime })
+                                    setSelectedSlot(slot)
+                                  }}
+                                  className={`relative z-10 p-4 rounded-lg border-2 text-center transition-all font-medium ${
+                                    selectedSlot?.startTime === slot.startTime
+                                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                                      : 'border-border hover:border-primary/50'
+                                  } ${slot.disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                                >
+                                  <div className="text-lg font-bold text-foreground">
+                                    {new Date(slot.startTime).toLocaleTimeString('vi-VN', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    {slot.full ? 'Đã đầy' : `Còn ${slot.maxPatients - slot.bookedPatients}/${slot.maxPatients}`}
+                                  </div>
+                                </button>
+                              )
+
+                              return slot.disabled && disabledMessage ? (
+                                <Tooltip key={slot.startTime}>
+                                  <TooltipTrigger asChild>
+                                    <span className="block">{button}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">{disabledMessage}</TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                button
+                              )
+                            })}
                           </div>
                         )}
                       </div>

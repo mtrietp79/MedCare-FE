@@ -1,5 +1,5 @@
-import { useNavigate, Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { Eye, EyeOff, Mail, Lock, Heart } from 'lucide-react'
 import { getGoogleAuthUrl, getFacebookAuthUrl } from '@/services/auth'
 import { useAuth } from '@/context/AuthContext'
@@ -13,6 +13,7 @@ function randomState() {
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -24,16 +25,38 @@ export function LoginPage() {
     remember: false,
   })
 
+  // Check for error message from OAuth callback
+  useEffect(() => {
+    const errorFromUrl = searchParams.get('error')
+    if (errorFromUrl) {
+      setError(decodeURIComponent(errorFromUrl))
+    }
+  }, [searchParams])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    
+    if (!formData.username.trim()) {
+      setError('Vui lòng nhập Email / SĐT / Username')
+      return
+    }
+    
+    if (!formData.password) {
+      setError('Vui lòng nhập mật khẩu')
+      return
+    }
+
     setIsLoading(true)
 
     try {
-      await login({ username: formData.username, password: formData.password })
+      await login({ username: formData.username.trim(), password: formData.password })
     } catch (err: any) {
-      // Lấy message từ BE error response
-      const message = err?.response?.data?.message || err?.message || 'Đăng nhập thất bại'
+      // Lấy message từ BE error response có ưu tiên cao nhất
+      const message = 
+        err?.response?.data?.message || 
+        err?.message || 
+        'Đăng nhập thất bại. Vui lòng thử lại.'
       setError(message)
     } finally {
       setIsLoading(false)
@@ -56,7 +79,11 @@ export function LoginPage() {
 
       window.location.href = url
     } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || `Đăng nhập ${provider} thất bại`
+      // Lấy message từ BE error response
+      const message = 
+        err?.response?.data?.message || 
+        err?.message || 
+        `Không thể kết nối với ${provider}. Vui lòng thử lại.`
       setError(message)
       setIsLoading(false)
     }
@@ -147,7 +174,7 @@ export function LoginPage() {
             </div>
             <div className="relative text-center text-xs">
               <span className="bg-gray-50 px-2 text-gray-400">
-                HOẶC ĐĂNG NHẬP VỚI EMAIL
+                HOẶC ĐĂNG NHẬP VỚI THÔNG TIN CÓ SẴN
               </span>
             </div>
           </div>
@@ -160,20 +187,19 @@ export function LoginPage() {
               </div>
             ) : null}
 
-            {/* Email */}
+            {/* Identifier - Email/Phone/Username */}
             <div>
-              <label className="text-sm">Email</label>
+              <label className="text-sm">Email / SĐT / Username</label>
               <div className="relative mt-1">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
-                  type="email"
-                  placeholder="Nhập email Gmail"
+                  type="text"
+                  placeholder="VD: abc@gmail.com, 0912345678 hoặc username"
                   className="w-full pl-10 pr-3 py-2 border rounded-lg"
                   value={formData.username}
                   onChange={(e) =>
                     setFormData({ ...formData, username: e.target.value })
                   }
-                  required
                 />
               </div>
             </div>

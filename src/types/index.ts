@@ -20,6 +20,7 @@ export interface Doctor {
   price?: number
   fee?: number
   availableSlots?: Array<{ date: string; times: string[] }>
+  specialtyName?: string
 }
 
 export interface TimeSlot {
@@ -32,8 +33,30 @@ export interface Specialty {
   name: string
   slug: string
   icon?: string
-  description?: string
+  description?: string | null
   doctorCount?: number
+}
+
+export interface SearchDoctor {
+  id: number
+  fullName: string
+  specialtyId: number | null
+  specialtyName: string | null
+  rating: number | null
+  experienceYears: number | null
+  price: number | null
+}
+
+export interface SearchSpecialty {
+  id: number
+  name: string
+  description: string | null
+}
+
+export interface SearchResponse {
+  query: string
+  doctors: SearchDoctor[]
+  specialties: SearchSpecialty[]
 }
 
 export interface Appointment {

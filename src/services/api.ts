@@ -1,5 +1,5 @@
 
-import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule} from '@/types'
+import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, SearchResponse } from '@/types'
 import { mockApi } from './mock-api'
 import { getStoredToken, removeStoredToken } from './auth'
 
@@ -146,6 +146,13 @@ export const doctorApi = {
     return apiCall<Array<{ startTime: string; endTime: string; shift: string; maxPatients: number; bookedPatients: number; full: boolean; disabled: boolean }>>(
       `/appointments/doctor/${doctorId}/slots?date=${date}`
     )
+  },
+}
+
+export const searchApi = {
+  async query(keyword: string): Promise<SearchResponse> {
+    const params = new URLSearchParams({ q: keyword })
+    return apiCall<SearchResponse>(`/search?${params.toString()}`)
   },
 }
 
@@ -396,6 +403,7 @@ export const dashboardApi = {
 export const api = {
   specialties: specialtyApi,
   doctors: doctorApi,
+  search: searchApi,
   appointments: appointmentApi,
   patients: patientApi,
   schedules: scheduleApi,

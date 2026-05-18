@@ -132,7 +132,7 @@ export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCar
 
               <div className="pt-2 border-t border-border/70">
                 <Button size="sm" className="w-full justify-center">
-                  Xem chi tiết
+                  Đặt lịch
                 </Button>
               </div>
             </div>

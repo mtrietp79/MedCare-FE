@@ -1,12 +1,57 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Search, Calendar, Shield, Clock, Heart, Zap, CheckCircle2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { api } from '@/services/api'
+import type { SearchResponse } from '@/types'
 
 export function HeroSection() {
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResponse | null>(null)
+  const [loadingSearch, setLoadingSearch] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300)
+    return () => window.clearTimeout(handle)
+  }, [searchQuery])
+
+  useEffect(() => {
+    const fetchSearch = async () => {
+      if (!debouncedQuery) {
+        setSearchResults(null)
+        setSearchError(null)
+        setLoadingSearch(false)
+        return
+      }
+
+      try {
+        setLoadingSearch(true)
+        setSearchError(null)
+        const response = await api.search.query(debouncedQuery)
+        setSearchResults(response)
+      } catch (err: any) {
+        setSearchError(err?.response?.data?.message || err?.message || 'Không thể tải kết quả tìm kiếm')
+        setSearchResults(null)
+      } finally {
+        setLoadingSearch(false)
+      }
+    }
+
+    fetchSearch()
+  }, [debouncedQuery])
+
+  const doctorResults = searchResults?.doctors ?? []
+  const specialtyResults = searchResults?.specialties ?? []
+  const hasResults = doctorResults.length > 0 || specialtyResults.length > 0
+
+  const handleResultClick = (path: string) => {
+    navigate(path)
+  }
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -117,6 +162,49 @@ export function HeroSection() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
+
+                  {debouncedQuery.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-2 rounded-3xl border border-border/70 bg-white shadow-xl z-20">
+                      {loadingSearch ? (
+                        <div className="p-4 text-sm text-muted-foreground">Đang tìm kiếm...</div>
+                      ) : searchError ? (
+                        <div className="p-4 text-sm text-destructive">Lỗi: {searchError}</div>
+                      ) : hasResults ? (
+                        <div className="divide-y divide-border/60">
+                          <div className="p-4">
+                            <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">Bác sĩ</div>
+                            {doctorResults.map((doctor) => (
+                              <button
+                                key={doctor.id}
+                                type="button"
+                                onClick={() => handleResultClick(`/doctors/${doctor.id}`)}
+                                className="w-full text-left rounded-2xl px-3 py-2 hover:bg-slate-100 transition-colors"
+                              >
+                                <div className="text-sm font-medium text-foreground">{doctor.fullName}</div>
+                                <div className="text-xs text-muted-foreground">{doctor.specialtyName || 'Chưa cập nhật'}</div>
+                              </button>
+                            ))}
+                          </div>
+                          <div className="p-4">
+                            <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">Chuyên khoa</div>
+                            {specialtyResults.map((specialty) => (
+                              <button
+                                key={specialty.id}
+                                type="button"
+                                onClick={() => handleResultClick(`/specialty/${specialty.id}`)}
+                                className="w-full text-left rounded-2xl px-3 py-2 hover:bg-slate-100 transition-colors"
+                              >
+                                <div className="text-sm font-medium text-foreground">{specialty.name}</div>
+                                <div className="text-xs text-muted-foreground">{specialty.description || 'Chuyên khoa'}</div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4 text-sm text-muted-foreground">Không có kết quả tìm kiếm</div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <motion.div
                   whileHover={{ scale: 1.05 }}

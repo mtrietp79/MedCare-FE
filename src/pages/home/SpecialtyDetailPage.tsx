@@ -46,8 +46,8 @@ export function SpecialtyDetailPage() {
         const doctorsArray = Array.isArray(doctorsData) ? doctorsData : []
         console.log('SpecialtyDetailPage doctors in specialty:', doctorsArray.length)
         setDoctors(doctorsArray)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu chuyên khoa')
+      } catch (err: any) {
+        setError(err?.response?.data?.message || err?.message || 'Không thể tải dữ liệu chuyên khoa')
       } finally {
         setLoading(false)
       }
@@ -123,7 +123,7 @@ export function SpecialtyDetailPage() {
               </div>
             ) : (
               <div className="rounded-3xl border border-dashed border-muted p-8 text-center">
-                <p className="text-lg font-medium text-foreground mb-2">Chưa có bác sĩ cho chuyên khoa này</p>
+                <p className="text-lg font-medium text-foreground mb-2">Chưa có bác sĩ thuộc chuyên khoa này</p>
                 <p className="text-sm text-muted-foreground">Hệ thống đang cập nhật bác sĩ cho chuyên khoa {specialty.name}. Vui lòng thử lại sau.</p>
               </div>
             )}

@@ -19,8 +19,8 @@ export function DoctorDetailPage() {
         setLoading(true)
         const data = await api.doctors.getById(id)
         setDoctor(data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Không thể tải bác sĩ')
+      } catch (err: any) {
+        setError(err?.response?.data?.message || err?.message || 'Không thể tải bác sĩ')
       } finally {
         setLoading(false)
       }
@@ -48,6 +48,14 @@ export function DoctorDetailPage() {
     return null
   }
 
+  const doctorName = doctor.fullName ?? doctor.name ?? 'Bác sĩ'
+  const doctorSpecialty = doctor.specialtyName ?? (typeof doctor.specialty === 'string' ? doctor.specialty : doctor.specialty?.name) ?? 'Chưa cập nhật'
+  const experienceYears = doctor.experienceYears ?? 0
+  const priceValue = doctor.price ?? doctor.consultationFee ?? doctor.fee ?? 0
+  const formattedPrice = priceValue > 0
+    ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(priceValue)
+    : 'Liên hệ'
+
   return (
     <div className="container mx-auto px-4 py-10">
       <Link to="/doctors" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
@@ -64,11 +72,11 @@ export function DoctorDetailPage() {
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2 text-sm text-primary font-semibold">
-                    <span>{typeof doctor.specialty === 'string' ? doctor.specialty : doctor.specialty?.name}</span>
+                    <span>{doctorSpecialty}</span>
                     <span>·</span>
-                    <span>{doctor.experience} năm kinh nghiệm</span>
+                    <span>{experienceYears} năm kinh nghiệm</span>
                   </div>
-                  <h1 className="text-3xl font-semibold">{doctor.name ?? doctor.fullName}</h1>
+                  <h1 className="text-3xl font-semibold">{doctorName}</h1>
                   <p className="text-muted-foreground mt-2">{doctor.education}</p>
                 </div>
               </div>
@@ -81,12 +89,8 @@ export function DoctorDetailPage() {
                   </div>
                 </div>
                 <div className="rounded-3xl border p-4 text-center">
-                  <p className="text-sm text-muted-foreground">Bệnh nhân</p>
-                  <p className="mt-2 text-lg font-semibold">{doctor.reviewCount}</p>
-                </div>
-                <div className="rounded-3xl border p-4 text-center">
                   <p className="text-sm text-muted-foreground">Phí khám</p>
-                  <p className="mt-2 text-lg font-semibold">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(doctor.consultationFee ?? 0)}</p>
+                  <p className="mt-2 text-lg font-semibold">{formattedPrice}</p>
                 </div>
               </div>
 
@@ -94,17 +98,6 @@ export function DoctorDetailPage() {
                 <div>
                   <h2 className="text-xl font-semibold">Giới thiệu</h2>
                   <p className="text-muted-foreground leading-relaxed">{doctor.bio}</p>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-3xl border p-4">
-                    <p className="text-sm text-muted-foreground">Cơ sở</p>
-                    <p className="mt-2 font-medium">{doctor.hospital}</p>
-                  </div>
-                  <div className="rounded-3xl border p-4">
-                    <p className="text-sm text-muted-foreground">Ngôn ngữ</p>
-                    <p className="mt-2 font-medium">{doctor.languages?.join(', ') ?? 'N/A'}</p>
-                  </div>
                 </div>
               </div>
             </CardContent>

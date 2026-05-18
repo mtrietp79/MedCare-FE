@@ -7,13 +7,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/services/api'
-import type { Doctor, Patient } from '@/types'
+import { useToast } from '@/hooks/use-toast'
+import type { BookingRules, Doctor, Patient } from '@/types'
 
 const steps = [
-  { id: 1, name: 'Chọn bác sĩ' },
-  { id: 2, name: 'Chọn ngày & giờ' },
-  { id: 3, name: 'Thông tin bệnh nhân' },
-  { id: 4, name: 'Xác nhận' },
+  { id: 1, name: 'Chọn chuyên khoa' },
+  { id: 2, name: 'Chọn bác sĩ' },
+  { id: 3, name: 'Chọn ngày & giờ' },
+  { id: 4, name: 'Thông tin bệnh nhân' },
+  { id: 5, name: 'Xác nhận' },
 ]
 
 interface BookingFormState {
@@ -40,6 +42,9 @@ export function BookingWizard() {
   })
 
   const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [specialties, setSpecialties] = useState<Array<{ id: string; name: string }>>([])
+  const [selectedSpecialtyId, setSelectedSpecialtyId] = useState<string | null>(null)
+  const [bookingRules, setBookingRules] = useState<BookingRules | null>(null)
   const [patient, setPatient] = useState<Patient | null>(null)
   const [slots, setSlots] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,18 +53,25 @@ export function BookingWizard() {
   const [error, setError] = useState<string | null>(null)
   const [slotsError, setSlotsError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const { toast } = useToast()
 
-  // Fetch initial data
+  // doctor query param (if present)
+  const queryDoctorId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('doctor') : null
+
+  // Fetch initial data: specialties + patient; if ?doctor= present, pre-select doctor and specialty
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true)
-        const [doctorsData, patientData] = await Promise.all([
-          api.doctors.getAll(),
+        const [specialtiesData, patientData, bookingRulesData] = await Promise.all([
+          api.specialties.getAll(),
           api.patients.getCurrent().catch(() => null),
+          api.appointments.getBookingRules(),
         ])
-        setDoctors(doctorsData)
+        setSpecialties(Array.isArray(specialtiesData) ? specialtiesData.map(s => ({ id: s.id, name: s.name })) : [])
         setPatient(patientData)
+        setBookingRules(bookingRulesData)
+
         if (patientData) {
           setFormData(prev => ({
             ...prev,
@@ -68,8 +80,30 @@ export function BookingWizard() {
             patientEmail: patientData.email || '',
           }))
         }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu')
+
+        // handle ?doctor= query param
+        if (queryDoctorId) {
+          try {
+            const doc = await api.doctors.getById(queryDoctorId)
+            if (doc) {
+              const spId = typeof doc.specialty === 'string' ? doc.specialtyId ?? null : doc.specialty?.id ?? doc.specialtyId ?? null
+              setSelectedSpecialtyId(spId ? String(spId) : null)
+              if (spId) {
+                const list = await api.doctors.getBySpecialtyId(String(spId))
+                setDoctors(Array.isArray(list) ? list : [doc])
+              } else {
+                setDoctors([doc])
+              }
+              setFormData(prev => ({ ...prev, doctorId: doc.id }))
+              // jump to choose date & time
+              setCurrentStep(3)
+            }
+          } catch (err) {
+            console.error('Error loading doctor from query param', err)
+          }
+        }
+      } catch (err: any) {
+        setError(err?.response?.data?.message || err?.message || 'Không thể tải dữ liệu')
         console.error('Error fetching booking data:', err)
       } finally {
         setLoading(false)
@@ -77,6 +111,7 @@ export function BookingWizard() {
     }
 
     fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Fetch available slots when doctor and date change
@@ -91,12 +126,25 @@ export function BookingWizard() {
         setSlotsError(null)
         setSlotsLoading(true)
         const data = await api.doctors.getAvailableSlots(formData.doctorId, formData.date)
-        setSlots(data || [])
-        if (!data || data.length === 0) {
+        const serverNow = bookingRules?.serverNow ? new Date(bookingRules.serverNow) : new Date()
+        const minBookableAt = bookingRules?.minBookableAt ? new Date(bookingRules.minBookableAt) : serverNow
+        const processed = (data || []).map((slot: any) => {
+          const start = new Date(slot.startTime)
+          const isPast = start.getTime() < serverNow.getTime()
+          const isBeforeMinBookable = start.getTime() < minBookableAt.getTime()
+          const isBookable = !slot.disabled && !slot.full && !isPast && !isBeforeMinBookable
+          return {
+            ...slot,
+            disabled: !!slot.disabled || slot.full || isPast || isBeforeMinBookable,
+            isBookable,
+          }
+        })
+        setSlots(processed)
+        if (!processed || processed.length === 0) {
           setSlotsError('Không có khung giờ khả dụng cho ngày này.')
         }
-      } catch (err) {
-        setSlotsError(err instanceof Error ? err.message : 'Không thể tải khung giờ')
+      } catch (err: any) {
+        setSlotsError(err?.response?.data?.message || err?.message || 'Không thể tải khung giờ')
         setSlots([])
       } finally {
         setSlotsLoading(false)
@@ -104,7 +152,7 @@ export function BookingWizard() {
     }
 
     fetchSlots()
-  }, [formData.doctorId, formData.date])
+  }, [formData.doctorId, formData.date, bookingRules])
 
   const selectedDoctor = (Array.isArray(doctors) ? doctors : []).find(doc => doc.id === formData.doctorId)
   const selectedSlot = (Array.isArray(slots) ? slots : []).find(slot => slot.startTime === formData.time)
@@ -113,15 +161,19 @@ export function BookingWizard() {
   const getDoctorSpecialty = (specialty?: Doctor['specialty']) =>
     typeof specialty === 'string' ? specialty : specialty?.name ?? ''
 
+  const isSelectedSlotBookable = (slot?: any) => !!slot && slot.isBookable
+
   const canProceed = (): boolean => {
     switch (currentStep) {
       case 1:
-        return !!formData.doctorId
+        return !!selectedSpecialtyId
       case 2:
-        return !!formData.date && !!formData.time
+        return !!formData.doctorId
       case 3:
-        return !!formData.patientName && !!formData.patientPhone && !!formData.patientEmail
+        return isSelectedSlotBookable(selectedSlot)
       case 4:
+        return !!formData.patientName && !!formData.patientPhone && !!formData.patientEmail
+      case 5:
         return true
       default:
         return false
@@ -144,19 +196,23 @@ export function BookingWizard() {
     try {
       setSubmitLoading(true)
       setSubmitError(null)
-      
-      // Find specialty from doctor
-      const specialty = selectedDoctor.specialty
-      
+
+      // build specialty id to send
+      let specialtyIdToSend = selectedSpecialtyId
+      if (!specialtyIdToSend) {
+        specialtyIdToSend = typeof selectedDoctor?.specialty === 'string' ? (selectedDoctor?.specialtyId ?? '') : (selectedDoctor?.specialty?.id ?? selectedDoctor?.specialtyId ?? '')
+      }
+
       const appointment = await api.appointments.create({
-        specialty: { id: selectedDoctor.specialty || '' },
+        specialty: { id: String(specialtyIdToSend || '') },
         doctor: { id: selectedDoctor.id },
         appointmentDate: selectedSlot.startTime,
         symptoms: formData.notes,
       })
       navigate(`/patient/appointments/${appointment.id}`, { replace: true })
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Không thể đặt lịch khám')
+    } catch (err: any) {
+      const message = err?.response?.data?.message || (err instanceof Error ? err.message : 'Không thể đặt lịch khám')
+      setSubmitError(message)
     } finally {
       setSubmitLoading(false)
     }
@@ -223,12 +279,50 @@ export function BookingWizard() {
         {/* Step Content */}
         <Card>
           <CardContent className="p-8">
-            {/* Step 1: Choose Doctor */}
+            {/* Step 1: Choose Specialty */}
             {currentStep === 1 && (
               <div className="space-y-6">
                 <div>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">Chọn chuyên khoa</h2>
+                  <p className="text-muted-foreground">Chọn chuyên khoa trước để lọc danh sách bác sĩ</p>
+                </div>
+
+                {specialties.length === 0 ? (
+                  <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-12 text-center">
+                    <p className="text-muted-foreground">Không có chuyên khoa</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {specialties.map((sp) => (
+                      <button
+                        key={sp.id}
+                        type="button"
+                        onClick={async () => {
+                          setSelectedSpecialtyId(sp.id)
+                          setFormData({ ...formData, doctorId: '', date: '', time: '' })
+                          try {
+                            const list = await api.doctors.getBySpecialtyId(sp.id)
+                            setDoctors(Array.isArray(list) ? list : [])
+                            setCurrentStep(2)
+                          } catch (e: any) {
+                            toast({ title: 'Lỗi', description: e?.response?.data?.message || e?.message || 'Không thể tải bác sĩ', variant: 'destructive' })
+                          }
+                        }}
+                        className={`p-4 rounded-lg border-2 text-center ${selectedSpecialtyId === sp.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}>
+                        {sp.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 2: Choose Doctor */}
+            {currentStep === 2 && (
+              <div className="space-y-6">
+                <div>
                   <h2 className="text-2xl font-bold text-foreground mb-2">Chọn bác sĩ</h2>
-                  <p className="text-muted-foreground">Tìm và chọn bác sĩ phù hợp với nhu cầu của bạn</p>
+                  <p className="text-muted-foreground">Tìm và chọn bác sĩ phù hợp với chuyên khoa</p>
                 </div>
 
                 {doctors.length === 0 ? (
@@ -243,7 +337,7 @@ export function BookingWizard() {
                         type="button"
                         onClick={() => {
                           setFormData({ ...formData, doctorId: doctor.id, date: '', time: '' })
-                          setCurrentStep(2)
+                          setCurrentStep(3)
                         }}
                         className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
                           formData.doctorId === doctor.id
@@ -284,8 +378,8 @@ export function BookingWizard() {
               </div>
             )}
 
-            {/* Step 2: Choose Date & Time */}
-            {currentStep === 2 && (
+            {/* Step 3: Choose Date & Time */}
+            {currentStep === 3 && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold text-foreground mb-2">Chọn ngày & giờ khám</h2>
@@ -314,10 +408,16 @@ export function BookingWizard() {
                         type="date"
                         value={formData.date}
                         onChange={(e) => {
-                          setFormData({ ...formData, date: e.target.value, time: '' })
+                          const val = e.target.value
+                          const minDate = bookingRules?.serverNow?.split('T')[0] ?? new Date().toISOString().split('T')[0]
+                          if (val < minDate) {
+                            toast({ title: 'Lỗi', description: 'Vui lòng chọn ngày không trong quá khứ', variant: 'destructive' })
+                            return
+                          }
+                          setFormData({ ...formData, date: val, time: '' })
                           setSlotsError(null)
                         }}
-                        min={new Date().toISOString().split('T')[0]}
+                        min={bookingRules?.serverNow?.split('T')[0] ?? new Date().toISOString().split('T')[0]}
                         className="text-base p-3 h-12"
                       />
                     </div>
@@ -347,13 +447,13 @@ export function BookingWizard() {
                               <button
                                 key={slot.startTime}
                                 type="button"
-                                disabled={slot.full || slot.disabled}
+                                disabled={!slot.isBookable}
                                 onClick={() => setFormData({ ...formData, time: slot.startTime })}
                                 className={`p-4 rounded-lg border-2 text-center transition-all font-medium ${
                                   formData.time === slot.startTime
                                     ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
                                     : 'border-border hover:border-primary/50'
-                                } ${slot.full || slot.disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                                } ${!slot.isBookable ? 'cursor-not-allowed opacity-50' : ''}`}
                               >
                                 <div className="text-lg font-bold text-foreground">
                                   {new Date(slot.startTime).toLocaleTimeString('vi-VN', {
@@ -375,8 +475,8 @@ export function BookingWizard() {
               </div>
             )}
 
-            {/* Step 3: Patient Information */}
-            {currentStep === 3 && (
+            {/* Step 4: Patient Information */}
+            {currentStep === 4 && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold text-foreground mb-2">Thông tin bệnh nhân</h2>
@@ -441,8 +541,8 @@ export function BookingWizard() {
               </div>
             )}
 
-            {/* Step 4: Confirmation */}
-            {currentStep === 4 && (
+            {/* Step 5: Confirmation */}
+            {currentStep === 5 && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold text-foreground mb-2">Xác nhận thông tin đặt lịch</h2>
@@ -562,7 +662,7 @@ export function BookingWizard() {
               </Button>
               <Button
                 onClick={async () => {
-                  if (currentStep < 4) {
+                  if (currentStep < steps.length) {
                     setCurrentStep(currentStep + 1)
                   } else {
                     await submitBooking()
@@ -572,7 +672,7 @@ export function BookingWizard() {
                 size="lg"
                 className="gap-2"
               >
-                {currentStep === 4 ? (
+                {currentStep === 5 ? (
                   submitLoading ? (
                     <>
                       <span>Đang xử lý...</span>

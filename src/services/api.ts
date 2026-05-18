@@ -157,6 +157,10 @@ export const searchApi = {
 }
 
 export const appointmentApi = {
+  async getBookingRules(): Promise<{ serverNow: string; minBookableAt: string }> {
+    return apiCall<{ serverNow: string; minBookableAt: string }>('/appointments/booking-rules')
+  },
+
   async getAll(query?: { status?: string; doctorId?: string; patientId?: string }): Promise<Appointment[]> {
     const params = new URLSearchParams()
     if (query?.status) params.append('status', query.status)

@@ -90,6 +90,11 @@ export interface Appointment {
   createdAt?: string
 }
 
+export interface BookingRules {
+  serverNow: string
+  minBookableAt: string
+}
+
 export interface Patient {
   id: string
   fullName?: string

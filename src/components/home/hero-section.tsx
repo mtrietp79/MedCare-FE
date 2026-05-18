@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api } from '@/services/api'
+import { useToast } from '@/hooks/use-toast'
 import type { SearchResponse } from '@/types'
 
 export function HeroSection() {
@@ -14,6 +15,30 @@ export function HeroSection() {
   const [loadingSearch, setLoadingSearch] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const navigate = useNavigate()
+  const { toast } = useToast()
+
+  const onSearch = async (triggerFromButton = false) => {
+    const keyword = searchQuery.trim()
+    if (!keyword) {
+      toast({ title: 'Lỗi', description: 'Vui lòng nhập chuyên khoa hoặc bác sĩ.', variant: 'destructive' })
+      const el = document.getElementById('hero-search-input') as HTMLInputElement | null
+      el?.focus()
+      return
+    }
+
+    try {
+      setLoadingSearch(true)
+      setSearchError(null)
+      const response = await api.search.query(encodeURIComponent(keyword))
+      setSearchResults(response)
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || 'Có lỗi xảy ra, vui lòng thử lại.'
+      toast({ title: 'Lỗi', description: message, variant: 'destructive' })
+      setSearchResults(null)
+    } finally {
+      setLoadingSearch(false)
+    }
+  }
 
   useEffect(() => {
     const handle = window.setTimeout(() => setDebouncedQuery(searchQuery.trim()), 300)
@@ -156,11 +181,18 @@ export function HeroSection() {
                 <div className="relative flex-1">
                   <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-muted-foreground" />
                   <Input
+                    id="hero-search-input"
                     type="text"
                     placeholder="Tìm bác sĩ, chuyên khoa, bệnh viện..."
                     className="pl-16 h-14 border-0 bg-transparent text-lg font-medium placeholder:text-muted-foreground"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        onSearch(true)
+                      }
+                    }}
                   />
 
                   {debouncedQuery.length > 0 && (
@@ -201,19 +233,14 @@ export function HeroSection() {
                           </div>
                         </div>
                       ) : (
-                        <div className="p-4 text-sm text-muted-foreground">Không có kết quả tìm kiếm</div>
+                        <div className="p-4 text-sm text-muted-foreground">Không tìm thấy kết quả phù hợp.</div>
                       )}
                     </div>
                   )}
                 </div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button size="lg" className="h-14 px-8 text-base font-semibold" asChild>
-                    <Link to={`/doctors${searchQuery ? `?q=${searchQuery}` : ''}`}>
-                      Tìm kiếm
-                    </Link>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button size="lg" className="h-14 px-8 text-base font-semibold" onClick={() => onSearch(true)}>
+                    Tìm kiếm
                   </Button>
                 </motion.div>
               </div>

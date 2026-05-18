@@ -18,10 +18,18 @@ export function DoctorsPage() {
       try {
         setLoading(true)
         setError(null)
-        const data = await api.doctors.getAll()
+        const params: { specialtyId?: string; search?: string } = {}
+        if (selectedSpecialty !== 'all') {
+          params.specialtyId = selectedSpecialty
+        }
+        if (searchQuery.trim()) {
+          params.search = searchQuery.trim()
+        }
+
+        const data = await api.doctors.getAll(params)
         setDoctors(data)
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Không thể tải danh sách bác sĩ'
+      } catch (err: any) {
+        const errorMessage = err?.response?.data?.message || err?.message || 'Không thể tải danh sách bác sĩ'
         setError(errorMessage)
         console.error('Error fetching doctors:', err)
       } finally {
@@ -30,42 +38,24 @@ export function DoctorsPage() {
     }
 
     fetchDoctors()
-  }, [])
+  }, [selectedSpecialty, searchQuery])
 
   useEffect(() => {
-    let filtered = doctors
-
-    // Filter by specialty
-    if (selectedSpecialty !== 'all') {
-      filtered = filtered.filter((doctor) => {
-        const specialtySlug = typeof doctor.specialty === 'string' 
-          ? doctor.specialty.toLowerCase().replace(/\s+/g, '-')
-          : doctor.specialty?.slug
-        return specialtySlug === selectedSpecialty
-      })
-    }
-
-    // Filter by search query
-    if (searchQuery) {
-      filtered = filtered.filter((doctor) => {
-        const name = doctor.fullName || doctor.name || ''
-        return name.toLowerCase().includes(searchQuery.toLowerCase())
-      })
-    }
+    let filtered = [...doctors]
 
     // Sort
     if (sortBy === 'rating') {
-      filtered = [...filtered].sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      filtered = filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0))
     } else if (sortBy === 'experience') {
-      filtered = [...filtered].sort((a, b) => (b.experience || 0) - (a.experience || 0))
+      filtered = filtered.sort((a, b) => (b.experience || 0) - (a.experience || 0))
     } else if (sortBy === 'price-low') {
-      filtered = [...filtered].sort((a, b) => (a.fee || a.consultationFee || 0) - (b.fee || b.consultationFee || 0))
+      filtered = filtered.sort((a, b) => (a.fee || a.consultationFee || 0) - (b.fee || b.consultationFee || 0))
     } else if (sortBy === 'price-high') {
-      filtered = [...filtered].sort((a, b) => (b.fee || b.consultationFee || 0) - (a.fee || a.consultationFee || 0))
+      filtered = filtered.sort((a, b) => (b.fee || b.consultationFee || 0) - (a.fee || a.consultationFee || 0))
     }
 
     setFilteredDoctors(filtered)
-  }, [doctors, selectedSpecialty, searchQuery, sortBy])
+  }, [doctors, sortBy])
 
   return (
     <div className="container mx-auto px-4 py-8">

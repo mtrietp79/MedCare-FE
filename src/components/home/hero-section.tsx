@@ -19,17 +19,11 @@ export function HeroSection() {
 
   const onSearch = async (triggerFromButton = false) => {
     const keyword = searchQuery.trim()
-    if (!keyword) {
-      toast({ title: 'Lỗi', description: 'Vui lòng nhập chuyên khoa hoặc bác sĩ.', variant: 'destructive' })
-      const el = document.getElementById('hero-search-input') as HTMLInputElement | null
-      el?.focus()
-      return
-    }
 
     try {
       setLoadingSearch(true)
       setSearchError(null)
-      const response = await api.search.query(encodeURIComponent(keyword))
+      const response = await api.search.query(keyword)
       setSearchResults(response)
     } catch (err: any) {
       const message = err?.response?.data?.message || err?.message || 'Có lỗi xảy ra, vui lòng thử lại.'

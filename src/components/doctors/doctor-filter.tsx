@@ -77,7 +77,7 @@ export function DoctorFilter({
               <SelectItem value="" disabled>Lỗi tải dữ liệu</SelectItem>
             ) : (
               specialties.map((specialty) => (
-                <SelectItem key={specialty.id} value={specialty.slug}>
+                <SelectItem key={specialty.id} value={specialty.id}>
                   {specialty.name}
                 </SelectItem>
               ))
@@ -130,7 +130,7 @@ export function DoctorFilter({
             <SelectContent>
               <SelectItem value="all">Tất cả chuyên khoa</SelectItem>
               {(Array.isArray(specialties) ? specialties : []).map((specialty) => (
-                <SelectItem key={specialty.id} value={specialty.slug}>
+                <SelectItem key={specialty.id} value={specialty.id}>
                   {specialty.name}
                 </SelectItem>
               ))}

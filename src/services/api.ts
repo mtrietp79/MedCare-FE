@@ -3,7 +3,7 @@ import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule} from '@/t
 import { mockApi } from './mock-api'
 import { getStoredToken, removeStoredToken } from './auth'
 
-const API_BASE_URL = 'http://localhost:8080/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api'
 
 interface FetchOptions extends RequestInit {
   headers?: Record<string, string>

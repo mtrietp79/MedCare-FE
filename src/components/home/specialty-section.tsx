@@ -13,8 +13,15 @@ import {
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import type { Specialty } from '@/types'
+import type { Doctor, Specialty } from '@/types'
 import { api } from '@/services/api'
+
+function getSpecialtyId(doctor: Doctor) {
+  if (typeof doctor.specialty === 'object') {
+    return doctor.specialty?.id || doctor.specialtyId
+  }
+  return doctor.specialtyId
+}
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Heart,
@@ -36,8 +43,28 @@ export function SpecialtySection() {
     const fetchSpecialties = async () => {
       try {
         setLoading(true)
-        const data = await api.specialties.getAll()
-        setSpecialties(Array.isArray(data) ? data : [])
+        const [specialtyData, doctorData] = await Promise.all([
+          api.specialties.getAll(),
+          api.doctors.getAll(),
+        ])
+
+        const specialtiesArray = Array.isArray(specialtyData) ? specialtyData : []
+        const doctors = Array.isArray(doctorData) ? doctorData : []
+
+        const countBySpecialty = doctors.reduce<Record<string, number>>((counts, doctor) => {
+          const specialtyId = getSpecialtyId(doctor)
+          if (specialtyId) {
+            counts[specialtyId] = (counts[specialtyId] || 0) + 1
+          }
+          return counts
+        }, {})
+
+        setSpecialties(
+          specialtiesArray.map((specialty) => ({
+            ...specialty,
+            doctorCount: countBySpecialty[specialty.id] ?? 0,
+          }))
+        )
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load specialties')
         console.error('Error fetching specialties:', err)
@@ -85,7 +112,7 @@ export function SpecialtySection() {
                   ? iconMap[specialty.icon]
                   : Stethoscope
               return (
-                <Link key={specialty.id} to={`/specialty/${specialty.slug}`}>
+                <Link key={specialty.id} to={`/specialty/${specialty.id}`}>
                   <Card className="group h-full hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border-border/50 hover:border-primary/30">
                     <CardContent className="p-6 flex flex-col items-center text-center">
                       <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
@@ -95,7 +122,7 @@ export function SpecialtySection() {
                         {specialty.name}
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        {specialty.doctorCount} bác sĩ
+                        {specialty.doctorCount ?? 0} bác sĩ
                       </p>
                     </CardContent>
                   </Card>

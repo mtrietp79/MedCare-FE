@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Star, Clock, MapPin } from 'lucide-react'
+import { Star } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,29 +12,44 @@ interface DoctorCardProps {
   index?: number
 }
 
+function formatPrice(value?: number) {
+  if (value == null || value <= 0) {
+    return 'Liên hệ'
+  }
+
+  return new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+function getDoctorSpecialtyName(doctor: Doctor) {
+  if (typeof doctor.specialty === 'string') {
+    return doctor.specialty || 'Chưa cập nhật'
+  }
+  return doctor.specialty?.name || 'Chưa cập nhật'
+}
+
 export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCardProps) {
   if (!doctor) {
     return null
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
-    }).format(amount ?? 0)
-  }
-
-  const doctorName = doctor.name ?? doctor.fullName ?? 'Bác sĩ'
-  const doctorSpecialty = typeof doctor.specialty === 'string' ? doctor.specialty : doctor.specialty?.name ?? ''
+  const doctorName = doctor.fullName ?? doctor.name ?? 'Bác sĩ'
+  const doctorSpecialty = getDoctorSpecialtyName(doctor)
+  const experienceYears = doctor.experienceYears ?? doctor.experience ?? 0
+  const priceLabel = formatPrice(doctor.price ?? doctor.consultationFee ?? doctor.fee)
+  const ratingValue = typeof doctor.rating === 'number' ? doctor.rating.toFixed(1) : '0.0'
 
   const cardVariants = {
-    hidden: { opacity: 0, y: 20 },
+    hidden: { opacity: 0, y: 18 },
     visible: {
       opacity: 1,
       y: 0,
       transition: {
-        duration: 0.4,
-        delay: index * 0.1,
+        duration: 0.35,
+        delay: index * 0.08,
         ease: 'easeOut',
       },
     },
@@ -42,12 +57,12 @@ export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCar
 
   const hoverVariants = {
     hover: {
-      y: -8,
-      boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
+      y: -6,
+      boxShadow: '0 18px 30px rgba(0, 0, 0, 0.08)',
       transition: {
         type: 'spring',
-        stiffness: 300,
-        damping: 10,
+        stiffness: 260,
+        damping: 18,
       },
     },
   }
@@ -55,39 +70,21 @@ export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCar
   if (variant === 'compact') {
     return (
       <Link to={`/doctors/${doctor.id}`}>
-        <motion.div
-          variants={cardVariants}
-          initial="hidden"
-          animate="visible"
-          whileHover="hover"
-        >
+        <motion.div variants={cardVariants} initial="hidden" animate="visible" whileHover="hover">
           <Card className="group cursor-pointer overflow-hidden">
-            <CardContent className="p-0">
-              <div className="flex gap-4 p-4">
-                {/* Avatar */}
-                <motion.div
-                  className="w-20 h-20 bg-primary/10 rounded-xl flex items-center justify-center flex-shrink-0"
-                  whileHover={{ scale: 1.1 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 10 }}
-                >
-                  <span className="text-2xl font-bold text-primary">
-                    {doctorName.split(' ').pop()?.charAt(0)}
-                  </span>
-                </motion.div>
-                
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <motion.h3
-                    className="font-semibold text-foreground truncate group-hover:text-primary transition-colors"
-                    whileHover={{ letterSpacing: 0.5 }}
-                  >
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
+                  {doctorName.split(' ').pop()?.charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                     {doctorName}
-                  </motion.h3>
-                  <p className="text-sm text-muted-foreground mb-2">{doctorSpecialty}</p>
-                  <div className="flex items-center gap-1">
-                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                    <span className="text-sm font-medium">{doctor.rating}</span>
-                    <span className="text-sm text-muted-foreground">({doctor.reviewCount})</span>
+                  </h3>
+                  <p className="text-sm text-muted-foreground truncate">{doctorSpecialty}</p>
+                  <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Star className="w-4 h-4 text-yellow-500" />
+                    <span className="font-medium text-foreground">{ratingValue}</span>
                   </div>
                 </div>
               </div>
@@ -100,110 +97,44 @@ export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCar
 
   return (
     <Link to={`/doctors/${doctor.id}`}>
-      <motion.div
-        variants={cardVariants}
-        initial="hidden"
-        animate="visible"
-        whileHover="hover"
-      >
+      <motion.div variants={cardVariants} initial="hidden" animate="visible" whileHover="hover">
         <Card className="group cursor-pointer overflow-hidden h-full">
           <CardContent className="p-0">
-            {/* Image placeholder */}
-            <motion.div
-              className="relative h-48 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center"
-              whileHover={{ scale: 1.05 }}
-              transition={{ duration: 0.3 }}
-            >
-              <motion.div
-                className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center"
-                animate={{ scale: [1, 1.05, 1] }}
-                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <span className="text-4xl font-bold text-primary">
-                  {doctorName.split(' ').pop()?.charAt(0)}
-                </span>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, x: 10 }}
-                whileHover={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Badge className="absolute top-4 right-4 bg-accent text-accent-foreground">
-                  {doctorSpecialty}
-                </Badge>
-              </motion.div>
-            </motion.div>
+            <div className="relative h-44 bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+              <div className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center text-4xl font-bold text-primary">
+                {doctorName.split(' ').pop()?.charAt(0)}
+              </div>
+              <Badge className="absolute top-4 right-4 bg-accent text-accent-foreground px-3 py-1 text-xs font-medium">
+                {doctorSpecialty}
+              </Badge>
+            </div>
 
-            {/* Content */}
             <div className="p-5 space-y-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: 0.1 }}
-              >
-                <motion.h3
-                  className="font-semibold text-lg text-foreground group-hover:text-primary transition-colors"
-                  whileHover={{ x: 4 }}
-                >
+              <div className="space-y-1">
+                <h3 className="text-xl font-semibold text-foreground group-hover:text-primary transition-colors truncate">
                   {doctorName}
-                </motion.h3>
-                <p className="text-sm text-muted-foreground">{doctor.education}</p>
-              </motion.div>
+                </h3>
+                <p className="text-sm text-muted-foreground">{experienceYears} năm KN</p>
+              </div>
 
-              {/* Stats */}
-              <motion.div
-                className="flex items-center gap-4 text-sm"
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: 0.15 }}
-              >
-                <div className="flex items-center gap-1">
-                  <motion.div
-                    animate={{ rotate: [0, 10, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                  >
-                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                  </motion.div>
-                  <span className="font-medium">{doctor.rating}</span>
-                  <span className="text-muted-foreground">({doctor.reviewCount})</span>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-border/70 bg-secondary p-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Đánh giá</p>
+                  <p className="mt-2 text-lg font-semibold text-foreground flex items-center gap-2">
+                    <Star className="w-4 h-4 text-yellow-500" /> {ratingValue}
+                  </p>
                 </div>
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <Clock className="w-4 h-4" />
-                  <span>{doctor.experience} năm KN</span>
+                <div className="rounded-2xl border border-border/70 bg-secondary p-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Giá khám</p>
+                  <p className="mt-2 text-lg font-semibold text-primary">{priceLabel}</p>
                 </div>
-              </motion.div>
+              </div>
 
-              {/* Hospital */}
-              <motion.div
-                className="flex items-center gap-2 text-sm text-muted-foreground"
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                <MapPin className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">{doctor.hospital}</span>
-              </motion.div>
-
-              {/* Price & CTA */}
-              <motion.div
-                className="flex items-center justify-between pt-2 border-t"
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: 0.25 }}
-              >
-                <div>
-                  <span className="text-xs text-muted-foreground">Phí khám</span>
-                  <div className="text-primary font-semibold">
-                    {formatCurrency(doctor.consultationFee ?? 0)}
-                  </div>
-                </div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button size="sm">Đặt lịch</Button>
-                </motion.div>
-              </motion.div>
+              <div className="pt-2 border-t border-border/70">
+                <Button size="sm" className="w-full justify-center">
+                  Xem chi tiết
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

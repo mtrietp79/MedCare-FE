@@ -8,7 +8,7 @@ import type { Doctor, Specialty } from '@/types'
 
 function getSpecialtyId(doctor: Doctor) {
   if (typeof doctor.specialty === 'object') {
-    return doctor.specialty?.id || doctor.specialtyId
+    return doctor.specialty?.id ?? doctor.specialtyId
   }
   return doctor.specialtyId
 }
@@ -22,7 +22,10 @@ export function SpecialtyDetailPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!id?.trim()) {
+    const specialtyId = Number(id)
+    console.log('SpecialtyDetailPage:', { id, specialtyId })
+
+    if (!id?.trim() || Number.isNaN(specialtyId)) {
       setError('ID chuyên khoa không hợp lệ.')
       setLoading(false)
       const timeoutId = window.setTimeout(() => navigate('/specialty', { replace: true }), 2500)
@@ -34,15 +37,15 @@ export function SpecialtyDetailPage() {
         setLoading(true)
         setError(null)
 
-        const specialtyData = await api.specialties.getById(id)
+        const [specialtyData, doctorsData] = await Promise.all([
+          api.specialties.getById(String(specialtyId)),
+          api.doctors.getBySpecialtyId(String(specialtyId)),
+        ])
+
         setSpecialty(specialtyData)
-
-        const allDoctors = await api.doctors.getAll()
-        const filteredDoctors = Array.isArray(allDoctors)
-          ? allDoctors.filter((doctor) => getSpecialtyId(doctor) === id)
-          : []
-
-        setDoctors(filteredDoctors)
+        const doctorsArray = Array.isArray(doctorsData) ? doctorsData : []
+        console.log('SpecialtyDetailPage doctors in specialty:', doctorsArray.length)
+        setDoctors(doctorsArray)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Không thể tải dữ liệu chuyên khoa')
       } finally {
@@ -103,18 +106,27 @@ export function SpecialtyDetailPage() {
                 <h2 className="text-2xl font-semibold">Bác sĩ chuyên khoa {specialty.name}</h2>
                 <p className="text-sm text-muted-foreground">Lọc bác sĩ theo chuyên môn và lịch khám.</p>
               </div>
-              <Button asChild>
-                <Link to="/booking" className="text-center">
-                  Đặt lịch khám
-                </Link>
-              </Button>
+              {doctors.length > 0 && (
+                <Button asChild>
+                  <Link to="/booking" className="text-center">
+                    Đặt lịch khám
+                  </Link>
+                </Button>
+              )}
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-2">
-              {doctors.map((doctor) => (
-                <DoctorCard key={doctor.id} doctor={doctor} />
-              ))}
-            </div>
+            {doctors.length > 0 ? (
+              <div className="grid gap-6 lg:grid-cols-2">
+                {doctors.map((doctor) => (
+                  <DoctorCard key={doctor.id} doctor={doctor} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-dashed border-muted p-8 text-center">
+                <p className="text-lg font-medium text-foreground mb-2">Chưa có bác sĩ cho chuyên khoa này</p>
+                <p className="text-sm text-muted-foreground">Hệ thống đang cập nhật bác sĩ cho chuyên khoa {specialty.name}. Vui lòng thử lại sau.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

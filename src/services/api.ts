@@ -99,8 +99,9 @@ export const specialtyApi = {
 }
 
 export const doctorApi = {
-  async getAll(query?: { specialty?: string; search?: string; sort?: string }): Promise<Doctor[]> {
+  async getAll(query?: { specialty?: string; specialtyId?: string; search?: string; sort?: string }): Promise<Doctor[]> {
     const params = new URLSearchParams()
+    if (query?.specialtyId) params.append('specialtyId', query.specialtyId)
     if (query?.specialty && query.specialty !== 'all') params.append('specialty', query.specialty)
     if (query?.search) params.append('search', query.search)
     if (query?.sort) params.append('sort', query.sort)
@@ -115,6 +116,10 @@ export const doctorApi = {
 
   async getBySpecialty(specialty: string): Promise<Doctor[]> {
     return apiCall<Doctor[]>(`/doctors?specialty=${specialty}`)
+  },
+
+  async getBySpecialtyId(specialtyId: string): Promise<Doctor[]> {
+    return apiCall<Doctor[]>(`/doctors?specialtyId=${specialtyId}`)
   },
 
   async create(data: Omit<Doctor, 'id'>): Promise<Doctor> {

@@ -1,7 +1,7 @@
 
 import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, SearchResponse } from '@/types'
 import { mockApi } from './mock-api'
-import { getStoredToken, removeStoredToken } from './auth'
+import { getStoredToken, removeStoredToken, removeStoredUser } from './auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api'
 
@@ -38,8 +38,9 @@ async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise
     }
 
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401) {
         removeStoredToken()
+        removeStoredUser()
         if (typeof window !== 'undefined') {
           window.location.href = '/login'
         }

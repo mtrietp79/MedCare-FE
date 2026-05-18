@@ -1,4 +1,4 @@
-import { getStoredToken } from '@/services/auth';
+import { getStoredToken, removeStoredToken, removeStoredUser } from '@/services/auth';
 
 export async function apiClient<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
@@ -13,8 +13,9 @@ export async function apiClient<T>(endpoint: string, options: RequestInit = {}):
     headers,
   });
 
-  if (response.status === 401 || response.status === 403) {
-    localStorage.removeItem('access_token');
+  if (response.status === 401) {
+    removeStoredToken();
+    removeStoredUser();
     window.location.href = '/login';
     throw new Error('Hết phiên làm việc, vui lòng đăng nhập lại.');
   }

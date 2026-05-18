@@ -1,4 +1,4 @@
-import axios, { type AxiosError } from 'axios'
+import axios, { type AxiosError, type AxiosRequestHeaders } from 'axios'
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
@@ -6,6 +6,18 @@ export const API_BASE_URL =
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
+})
+
+api.interceptors.request.use((config) => {
+  const token = getStoredToken()
+  if (token) {
+    const headers = (config.headers ?? {}) as Record<string, string>
+    config.headers = {
+      ...headers,
+      Authorization: `Bearer ${token}`,
+    } as AxiosRequestHeaders
+  }
+  return config
 })
 
 api.interceptors.response.use(
@@ -29,10 +41,12 @@ api.interceptors.response.use(
 // For backwards compatibility with other services
 export async function fetchJson<T = any>(url: string, options: RequestInit = {}): Promise<T> {
   try {
+    const token = getStoredToken()
     const response = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(options.headers || {}),
       },
     })
@@ -46,6 +60,14 @@ export async function fetchJson<T = any>(url: string, options: RequestInit = {})
     }
 
     if (!response.ok) {
+      if (response.status === 401) {
+        removeStoredToken()
+        removeStoredUser()
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login'
+        }
+      }
+
       throw new Error(
         data && typeof data === 'object' && 'message' in data
           ? (data as { message: string }).message

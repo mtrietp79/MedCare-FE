@@ -4,8 +4,8 @@ import { Eye, EyeOff, Mail, Lock, User, Phone, Heart } from 'lucide-react'
 import { getGoogleAuthUrl, getFacebookAuthUrl } from '@/services/auth'
 import { useAuth } from '@/context/AuthContext'
 
-const GOOGLE_CB = `${window.location.origin}/auth/google/callback`
-const FACEBOOK_CB = `${window.location.origin}/auth/facebook/callback`
+const GOOGLE_CB = 'http://localhost:5173/auth/google/callback'
+const FACEBOOK_CB = 'http://localhost:5173/auth/facebook/callback'
 
 function randomState() {
   return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
@@ -155,16 +155,16 @@ export function RegisterPage() {
             <button
               type="button"
               onClick={() => handleSocialLogin('google')}
-              className="border rounded-lg py-2 flex justify-center items-center hover:bg-gray-100"
+              className="flex items-center justify-center gap-2 rounded-lg py-2 border bg-white text-gray-700 hover:shadow"
             >
-              Google
+              <span className="font-medium">Google</span>
             </button>
             <button
               type="button"
               onClick={() => handleSocialLogin('facebook')}
-              className="border rounded-lg py-2 hover:bg-gray-100"
+              className="flex items-center justify-center gap-2 rounded-lg py-2 border bg-[#1877F2] text-white hover:shadow"
             >
-              Facebook
+              <span className="font-medium">Facebook</span>
             </button>
           </div>
 

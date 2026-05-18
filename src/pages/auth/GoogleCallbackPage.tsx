@@ -12,35 +12,55 @@ export function GoogleCallbackPage() {
     ;(async () => {
       const q = new URLSearchParams(search)
       const code = q.get('code')
-      const state = q.get('state')
       const err = q.get('error')
 
-      if (err) return nav(`/login?error=${encodeURIComponent('Google từ chối đăng nhập')}`)
-      if (!code) return nav(`/login?error=${encodeURIComponent('Thiếu code Google')}`)
-
-      const expected = sessionStorage.getItem('oauth_google_state')
-      if (!expected || expected !== state) {
-        return nav(`/login?error=${encodeURIComponent('State không hợp lệ')}`)
+      // Handle OAuth provider errors
+      if (err) {
+        return nav(`/login?error=${encodeURIComponent('Google từ chối đăng nhập')}`)
       }
 
-      const auth = await loginGoogleByCode(code, GOOGLE_CB)
-      const token = auth.token ?? auth.accessToken ?? ''
-      setStoredToken(token)
-      setStoredUser({
-        username: auth.username,
-        displayName: auth.displayName ?? auth.username,
-        role: auth.role,
-        profileCompleted: auth.profileCompleted ?? false,
-      })
+      // Check if code is present
+      if (!code) {
+        return nav(`/login?error=${encodeURIComponent('Thiếu code từ Google. Vui lòng thử lại.')}`)
+      }
 
-      // Dispatch event để AuthContext cập nhật state
-      window.dispatchEvent(new Event('auth-sync'))
+      try {
+        const auth = await loginGoogleByCode(code, GOOGLE_CB)
+        const token = auth.accessToken ?? auth.token ?? ''
+        
+        setStoredToken(token)
+        setStoredUser({
+          username: auth.username,
+          displayName: auth.displayName ?? auth.username,
+          role: auth.role,
+          profileCompleted: auth.profileCompleted ?? false,
+        })
 
-      nav('/', { replace: true })
-    })().catch((e) => {
-      const msg = e?.response?.data?.message || 'Đăng nhập Google thất bại'
-      nav(`/login?error=${encodeURIComponent(msg)}`)
-    })
+        // Dispatch event để AuthContext cập nhật state
+        window.dispatchEvent(new Event('auth-sync'))
+
+        // Route based on role
+        const role = auth.role
+        if (role === 'ROLE_PATIENT') {
+          nav('/', { replace: true })
+        } else if (role === 'ROLE_ADMIN') {
+          nav('/admin', { replace: true })
+        } else if (role === 'ROLE_DOCTOR') {
+          nav('/doctor', { replace: true })
+        } else {
+          nav('/', { replace: true })
+        }
+      } catch (error) {
+        // Extract error message from error object
+        let errorMsg = 'Đăng nhập Google thất bại'
+        
+        if (error instanceof Error) {
+          errorMsg = error.message
+        }
+        
+        nav(`/login?error=${encodeURIComponent(errorMsg)}`)
+      }
+    })()
   }, [search, nav])
 
   return (

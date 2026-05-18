@@ -3,6 +3,18 @@ import axios, { type AxiosError } from 'axios'
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
 
+// Custom error class to preserve API error information
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public status?: number,
+    public data?: any
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
@@ -18,9 +30,8 @@ api.interceptors.response.use(
         responseData?.message ||
         (typeof responseData === 'string' ? responseData : undefined) ||
         error.message
-      return Promise.reject(
-        new Error(status ? `Request failed with status code ${status}: ${message}` : message)
-      )
+      const apiError = new ApiError(message, status, responseData)
+      return Promise.reject(apiError)
     }
     return Promise.reject(error)
   }

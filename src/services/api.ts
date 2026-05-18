@@ -1,4 +1,3 @@
-
 import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule} from '@/types'
 import { mockApi } from './mock-api'
 import { getStoredToken, removeStoredToken } from './auth'

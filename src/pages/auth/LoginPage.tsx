@@ -1,5 +1,5 @@
-import { useNavigate, Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { Eye, EyeOff, Mail, Lock, Heart } from 'lucide-react'
 import { getGoogleAuthUrl, getFacebookAuthUrl } from '@/services/auth'
 import { useAuth } from '@/context/AuthContext'
@@ -13,6 +13,7 @@ function randomState() {
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -24,15 +25,31 @@ export function LoginPage() {
     remember: false,
   })
 
+  // Check for error query parameter (from callback pages)
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search)
+    const errorParam = searchParams.get('error')
+    if (errorParam) {
+      setError(decodeURIComponent(errorParam))
+      // Clear the error from URL
+      navigate('/login', { replace: true })
+    }
+  }, [location.search, navigate])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setIsLoading(true)
 
     try {
-      await login({ username: formData.username, password: formData.password })
+      await login({ username: formData.username.trim(), password: formData.password })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Đăng nhập thất bại')
+      // Extract error message from error object
+      let errorMessage = 'Đăng nhập thất bại'
+      if (err instanceof Error) {
+        errorMessage = err.message
+      }
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -157,14 +174,14 @@ export function LoginPage() {
               </div>
             ) : null}
 
-            {/* Email */}
+            {/* Identifier */}
             <div>
-              <label className="text-sm">Email</label>
+              <label className="text-sm">Email / SĐT / Username</label>
               <div className="relative mt-1">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Email hoặc số điện thoại"
+                  placeholder="Email, số điện thoại hoặc tên người dùng"
                   className="w-full pl-10 pr-3 py-2 border rounded-lg"
                   value={formData.username}
                   onChange={(e) =>

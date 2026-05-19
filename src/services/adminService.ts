@@ -32,8 +32,49 @@ interface AdminDoctor {
   phone: string
   specialty: string
   status: 'active' | 'inactive'
-  experience: number
+  experience?: number
+  experienceYears?: number
   createdAt: string
+}
+
+interface AdminSpecialty {
+  id: string
+  name: string
+  slug?: string
+  description?: string | null
+  totalDoctors?: number
+  doctorCount?: number
+}
+
+interface CreateDoctorPayload {
+  fullName: string
+  email: string | null
+  phone: string | null
+  experienceYears?: number
+  specialty?: { id: string } | null
+  account: {
+    username: string
+    password: string
+  }
+}
+
+interface UpdateDoctorPayload {
+  fullName: string
+  email: string | null
+  phone: string | null
+  experienceYears?: number
+  specialty?: { id: string } | null
+  status: 'active' | 'inactive'
+}
+
+interface CreateSpecialtyPayload {
+  name: string
+  description: string | null
+}
+
+interface UpdateSpecialtyPayload {
+  name: string
+  description: string | null
 }
 
 export const adminApi = {
@@ -69,7 +110,7 @@ export const adminApi = {
     });
   },
 
-  createDoctor: (data: any) => {
+  createDoctor: (data: CreateDoctorPayload) => {
     const token = getStoredToken();
     return fetchJson(`${API_BASE_URL}/doctors`, {
       method: 'POST',
@@ -78,7 +119,7 @@ export const adminApi = {
     });
   },
 
-  updateDoctor: (id: string, data: any) => {
+  updateDoctor: (id: string, data: UpdateDoctorPayload) => {
     const token = getStoredToken();
     return fetchJson(`${API_BASE_URL}/doctors/${id}`, {
       method: 'PUT',
@@ -146,14 +187,14 @@ export const adminApi = {
   },
 
   // Specialty Management APIs
-  getSpecialties: () => {
+  getSpecialties: (): Promise<AdminSpecialty[]> => {
     const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/specialties`, {
+    return fetchJson<AdminSpecialty[]>(`${API_BASE_URL}/specialties`, {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
 
-  createSpecialty: (data: any) => {
+  createSpecialty: (data: CreateSpecialtyPayload) => {
     const token = getStoredToken();
     return fetchJson(`${API_BASE_URL}/specialties`, {
       method: 'POST',
@@ -162,7 +203,7 @@ export const adminApi = {
     });
   },
 
-  updateSpecialty: (id: string, data: any) => {
+  updateSpecialty: (id: string, data: UpdateSpecialtyPayload) => {
     const token = getStoredToken();
     return fetchJson(`${API_BASE_URL}/specialties/${id}`, {
       method: 'PUT',

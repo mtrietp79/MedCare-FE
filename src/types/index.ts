@@ -34,6 +34,7 @@ export interface Specialty {
   slug: string
   icon?: string
   description?: string | null
+  totalDoctors?: number
   doctorCount?: number
 }
 

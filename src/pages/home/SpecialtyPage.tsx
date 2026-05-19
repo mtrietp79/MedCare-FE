@@ -40,7 +40,7 @@ export function SpecialtyPage() {
         setSpecialties(
           specialtiesArray.map((specialty) => ({
             ...specialty,
-            doctorCount: countBySpecialty[specialty.id] ?? 0,
+            doctorCount: specialty.totalDoctors ?? specialty.doctorCount ?? countBySpecialty[specialty.id] ?? 0,
           }))
         )
       } catch (err) {

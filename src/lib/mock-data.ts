@@ -8,6 +8,7 @@ export const specialties: Specialty[] = [
     icon: 'Heart',
     description: 'Chẩn đoán và điều trị các bệnh về tim và mạch máu',
     doctorCount: 12,
+    totalDoctors: 12,
   },
   {
     id: '2',
@@ -16,6 +17,7 @@ export const specialties: Specialty[] = [
     icon: 'Sparkles',
     description: 'Điều trị các bệnh về da, tóc và móng',
     doctorCount: 8,
+    totalDoctors: 8,
   },
   {
     id: '3',
@@ -24,6 +26,7 @@ export const specialties: Specialty[] = [
     icon: 'Baby',
     description: 'Chăm sóc sức khỏe trẻ em từ sơ sinh đến 18 tuổi',
     doctorCount: 15,
+    totalDoctors: 15,
   },
   {
     id: '4',
@@ -32,6 +35,7 @@ export const specialties: Specialty[] = [
     icon: 'Stethoscope',
     description: 'Khám và điều trị các bệnh nội khoa tổng quát',
     doctorCount: 20,
+    totalDoctors: 20,
   },
   {
     id: '5',
@@ -40,6 +44,7 @@ export const specialties: Specialty[] = [
     icon: 'Brain',
     description: 'Điều trị các bệnh về não và hệ thần kinh',
     doctorCount: 6,
+    totalDoctors: 6,
   },
   {
     id: '6',
@@ -48,6 +53,7 @@ export const specialties: Specialty[] = [
     icon: 'Bone',
     description: 'Điều trị các bệnh về xương khớp và cơ',
     doctorCount: 10,
+    totalDoctors: 10,
   },
   {
     id: '7',
@@ -56,6 +62,7 @@ export const specialties: Specialty[] = [
     icon: 'HeartPulse',
     description: 'Chăm sóc sức khỏe phụ nữ và thai sản',
     doctorCount: 14,
+    totalDoctors: 14,
   },
   {
     id: '8',
@@ -64,6 +71,7 @@ export const specialties: Specialty[] = [
     icon: 'Eye',
     description: 'Khám và điều trị các bệnh về mắt',
     doctorCount: 7,
+    totalDoctors: 7,
   },
 ]
 
@@ -75,6 +83,7 @@ export const doctors: Doctor[] = [
     specialtySlug: 'tim-mach',
     image: '/doctors/doctor-1.jpg',
     experience: 15,
+    experienceYears: 15,
     rating: 4.9,
     reviewCount: 234,
     education: 'Tiến sĩ Y khoa - Đại học Y Hà Nội',
@@ -95,6 +104,7 @@ export const doctors: Doctor[] = [
     specialtySlug: 'da-lieu',
     image: '/doctors/doctor-2.jpg',
     experience: 12,
+    experienceYears: 12,
     rating: 4.8,
     reviewCount: 189,
     education: 'Thạc sĩ Y khoa - Đại học Y Dược TP.HCM',
@@ -115,6 +125,7 @@ export const doctors: Doctor[] = [
     specialtySlug: 'nhi-khoa',
     image: '/doctors/doctor-3.jpg',
     experience: 18,
+    experienceYears: 18,
     rating: 4.9,
     reviewCount: 312,
     education: 'Tiến sĩ Y khoa - Đại học Y Hà Nội',
@@ -135,6 +146,7 @@ export const doctors: Doctor[] = [
     specialtySlug: 'noi-khoa',
     image: '/doctors/doctor-4.jpg',
     experience: 10,
+    experienceYears: 10,
     rating: 4.7,
     reviewCount: 156,
     education: 'Thạc sĩ Y khoa - Đại học Y Dược Cần Thơ',
@@ -155,6 +167,7 @@ export const doctors: Doctor[] = [
     specialtySlug: 'than-kinh',
     image: '/doctors/doctor-5.jpg',
     experience: 20,
+    experienceYears: 20,
     rating: 4.9,
     reviewCount: 278,
     education: 'Tiến sĩ Y khoa - Đại học Y Hà Nội',
@@ -175,6 +188,7 @@ export const doctors: Doctor[] = [
     specialtySlug: 'san-phu-khoa',
     image: '/doctors/doctor-6.jpg',
     experience: 14,
+    experienceYears: 14,
     rating: 4.8,
     reviewCount: 245,
     education: 'Tiến sĩ Y khoa - Đại học Y Dược TP.HCM',

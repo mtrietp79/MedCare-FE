@@ -44,7 +44,10 @@ export function normalizeDoctor(raw: any): NormalizedDoctor {
     specialization: specialtyName,
     username: safeString(raw?.username ?? raw?.account?.username),
     specialtyId: safeString(raw?.specialtyId ?? raw?.specialty?.id),
-    experience: safeNumber(raw?.experience ?? raw?.experienceYears, 0),
+    experience: safeNumber(
+      raw?.experienceYears ?? raw?.yearsExperience ?? raw?.years_of_experience ?? raw?.experience_years ?? raw?.experience,
+      0
+    ),
     status: safeString(raw?.status).toLowerCase() === 'inactive' ? 'inactive' : 'active',
     raw,
   }
@@ -63,7 +66,7 @@ export function normalizeSpecialty(raw: any): NormalizedSpecialty {
     id: safeString(raw?.id),
     name: safeString(raw?.name),
     description: safeString(raw?.description),
-    doctorCount: safeNumber(raw?.doctorCount),
+    doctorCount: safeNumber(raw?.totalDoctors ?? raw?.doctorCount, 0),
     createdAt: safeString(raw?.createdAt),
   }
 }

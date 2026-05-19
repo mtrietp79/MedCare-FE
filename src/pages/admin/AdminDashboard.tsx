@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 import { Activity, Calendar, Clock, DollarSign, TrendingUp, Users } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
 import { safeLower } from '@/lib/admin-normalizers'
@@ -114,65 +115,79 @@ export function AdminDashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Dashboard Quản trị</h1>
-        <p className="text-muted-foreground">Tổng quan vận hành hệ thống MedCare</p>
-      </div>
+    <motion.div
+      className="space-y-8"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+    >
+      <section className="space-y-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.28em] text-muted-foreground">Bảng điều khiển</p>
+            <h1 className="text-3xl font-semibold">Tổng quan MedCare</h1>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm">Làm mới</Button>
+            <Button size="sm">Báo cáo</Button>
+          </div>
+        </div>
+        <p className="max-w-2xl text-muted-foreground">Theo dõi tình hình hoạt động, lịch hẹn và doanh thu với giao diện trực quan, rõ ràng.</p>
+      </section>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tổng bệnh nhân</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary?.totalPatients || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              <TrendingUp className="mr-1 inline h-3 w-3" />
-              +12% so với tháng trước
-            </p>
+      <section className="grid gap-6 xl:grid-cols-[1.8fr_1fr]">
+        <Card className="overflow-hidden bg-gradient-to-br from-sky-700 via-sky-600 to-cyan-500 text-white shadow-xl">
+          <CardContent className="space-y-6 px-6 py-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.24em] text-cyan-100/80">Tổng quan nhanh</p>
+                <h2 className="text-2xl font-semibold">Hiệu suất hệ thống</h2>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm text-white/90">
+                <TrendingUp className="h-4 w-4" /> Tăng trưởng ổn định
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="rounded-3xl bg-white/10 p-4">
+                <p className="text-sm text-cyan-100/80">Bệnh nhân</p>
+                <p className="mt-3 text-3xl font-semibold">{summary?.totalPatients || 0}</p>
+              </div>
+              <div className="rounded-3xl bg-white/10 p-4">
+                <p className="text-sm text-cyan-100/80">Bác sĩ</p>
+                <p className="mt-3 text-3xl font-semibold">{summary?.totalDoctors || 0}</p>
+              </div>
+              <div className="rounded-3xl bg-white/10 p-4">
+                <p className="text-sm text-cyan-100/80">Doanh thu</p>
+                <p className="mt-3 text-3xl font-semibold">{(summary?.totalRevenue || 0).toLocaleString('vi-VN')} VND</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tổng bác sĩ</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+        <Card className="border border-border shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-lg">Hoạt động hôm nay</CardTitle>
+            <CardDescription>Các chỉ số chính được cập nhật theo thời gian thực.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary?.totalDoctors || 0}</div>
-            <p className="text-xs text-muted-foreground">Đang hoạt động</p>
+          <CardContent className="grid gap-4">
+            <div className="rounded-3xl border border-border/80 bg-slate-950/5 p-4">
+              <p className="text-sm font-medium">Lịch hẹn hôm nay</p>
+              <p className="text-muted-foreground">{summary?.todayAppointments || 0} cuộc hẹn</p>
+            </div>
+            <div className="rounded-3xl border border-border/80 bg-slate-950/5 p-4">
+              <p className="text-sm font-medium">Chờ xác nhận</p>
+              <p className="text-muted-foreground">{summary?.pendingAppointments || 0} lịch chờ duyệt</p>
+            </div>
+            <div className="rounded-3xl border border-border/80 bg-slate-950/5 p-4">
+              <p className="text-sm font-medium">Đơn vị</p>
+              <p className="text-muted-foreground">Giao diện quản trị sạch và rõ ràng</p>
+            </div>
           </CardContent>
         </Card>
+      </section>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Lịch hẹn hôm nay</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary?.todayAppointments || 0}</div>
-            <p className="text-xs text-muted-foreground">{summary?.pendingAppointments || 0} chờ xác nhận</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Doanh thu tháng</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{(summary?.totalRevenue || 0).toLocaleString('vi-VN')} VND</div>
-            <p className="text-xs text-muted-foreground">
-              <TrendingUp className="mr-1 inline h-3 w-3" />
-              +8% so với tháng trước
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
+      <section className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Lịch hẹn gần đây</CardTitle>
@@ -183,15 +198,15 @@ export function AdminDashboard() {
             {recentAppointments.length > 0 && (
               <div className="space-y-4">
                 {recentAppointments.slice(0, 5).map((appointment) => (
-                  <div key={appointment.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div key={appointment.id} className="flex flex-col gap-3 rounded-3xl border border-border/80 bg-background p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-sm font-medium">{appointment.patientName || '-'}</p>
+                      <p className="text-sm font-semibold">{appointment.patientName || '-'}</p>
                       <p className="text-xs text-muted-foreground">{appointment.doctorName || '-'} • {appointment.specialty || '-'}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="space-y-1 text-right">
                       <p className="text-sm">{appointment.date || '-'}</p>
-                      <p className="text-xs text-muted-foreground flex items-center justify-end">
-                        <Clock className="mr-1 h-3 w-3" />
+                      <p className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
                         {appointment.time || '-'}
                       </p>
                       {getStatusBadge(appointment.status)}
@@ -213,10 +228,10 @@ export function AdminDashboard() {
             {revenueData.length > 0 && (
               <div className="space-y-3">
                 {revenueData.slice(-6).map((item, index) => (
-                  <div key={`${item.month}-${index}`} className="flex items-center justify-between">
-                    <span className="text-sm">{item.month || '-'}</span>
+                  <div key={`${item.month}-${index}`} className="flex flex-col rounded-2xl border border-border/80 bg-slate-950/5 p-4 sm:flex-row sm:justify-between">
+                    <span className="text-sm font-medium">{item.month || '-'}</span>
                     <div className="text-right">
-                      <p className="text-sm font-medium">{item.revenue.toLocaleString('vi-VN')} VND</p>
+                      <p className="text-sm font-semibold">{item.revenue.toLocaleString('vi-VN')} VND</p>
                       <p className="text-xs text-muted-foreground">{item.appointments} lịch hẹn</p>
                     </div>
                   </div>
@@ -225,7 +240,7 @@ export function AdminDashboard() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </section>
 
       <Tabs defaultValue="patients" className="w-full">
         <TabsList>
@@ -243,6 +258,6 @@ export function AdminDashboard() {
       <div className="flex justify-end">
         <Button variant="outline" onClick={() => void fetchDashboardData()}>Làm mới dữ liệu</Button>
       </div>
-    </div>
+    </motion.div>
   )
 }

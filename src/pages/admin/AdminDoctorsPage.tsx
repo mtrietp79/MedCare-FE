@@ -203,7 +203,7 @@ export function AdminDoctorsPage() {
     fullName: form.fullName.trim(),
     email: form.email.trim() || null,
     phone: form.phone.trim() || null,
-    experience: Number(form.experience) || 0,
+    experienceYears: Number(form.experience),
     specialty: form.specialtyId ? { id: form.specialtyId } : null,
     account: {
       username: form.username.trim(),
@@ -215,7 +215,7 @@ export function AdminDoctorsPage() {
     fullName: form.fullName.trim(),
     email: form.email.trim() || null,
     phone: form.phone.trim() || null,
-    experience: Number(form.experience) || 0,
+    ...(form.experience !== '' ? { experienceYears: Number(form.experience) } : {}),
     specialty: form.specialtyId ? { id: form.specialtyId } : null,
     status: form.status,
   })

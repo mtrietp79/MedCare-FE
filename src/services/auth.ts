@@ -1,5 +1,4 @@
 import axios, { type AxiosError, type AxiosRequestHeaders } from 'axios'
-import { FACEBOOK_CALLBACK_URL, GOOGLE_CALLBACK_URL } from '@/constants/auth'
 
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
@@ -114,36 +113,6 @@ export interface AuthUser {
   role: string
   profileCompleted: boolean
 }
-
-export async function getGoogleAuthUrl(redirectUri: string, state: string) {
-  const { data } = await api.get('/auth/google/url', {
-    params: { redirectUri, state },
-  })
-  return data.url as string
-}
-
-export async function getFacebookAuthUrl(redirectUri: string, state: string) {
-  const { data } = await api.get('/auth/facebook/url', {
-    params: { redirectUri, state },
-  })
-  return data.url as string
-}
-
-export async function loginGoogleByCode(code: string, redirectUri: string) {
-  if (import.meta.env.DEV) console.debug('[services] loginGoogleByCode called. code exists:', !!code, 'endpoint: /api/auth/google/code')
-  const resp = await api.post<AuthResponse>('/auth/google/code', { code, redirectUri })
-  if (import.meta.env.DEV) console.debug('[services] loginGoogleByCode status:', resp.status)
-  return resp.data
-}
-
-export async function loginFacebookByCode(code: string, redirectUri: string) {
-  if (import.meta.env.DEV) console.debug('[services] loginFacebookByCode called. code exists:', !!code, 'endpoint: /api/auth/facebook/code')
-  const resp = await api.post<AuthResponse>('/auth/facebook/code', { code, redirectUri })
-  if (import.meta.env.DEV) console.debug('[services] loginFacebookByCode status:', resp.status)
-  return resp.data
-}
-
-export { GOOGLE_CALLBACK_URL, FACEBOOK_CALLBACK_URL }
 
 export async function register(data: { username: string; password: string }) {
   return api.post<AuthResponse>('/auth/register', data)

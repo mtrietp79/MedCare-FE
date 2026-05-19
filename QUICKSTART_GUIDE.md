@@ -23,8 +23,6 @@ npm run preview
 Create `.env.local`:
 ```env
 VITE_API_URL=http://localhost:3000/api
-VITE_GOOGLE_CLIENT_ID=your_google_client_id
-VITE_FACEBOOK_APP_ID=your_facebook_app_id
 ```
 
 ## 📁 Project Structure

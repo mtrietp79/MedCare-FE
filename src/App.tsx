@@ -29,8 +29,6 @@ import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
-import { GoogleCallbackPage } from '@/pages/auth/GoogleCallbackPage'
-import { FacebookCallbackPage } from '@/pages/auth/FacebookCallbackPage'
 import { ForbiddenPage } from '@/pages/auth/ForbiddenPage'
 
 import { PatientDashboardPage } from '@/pages/patient/PatientDashboardPage'
@@ -74,8 +72,6 @@ function App() {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
-              <Route path="/auth/facebook/callback" element={<FacebookCallbackPage />} />
             </Route>
 
             <Route path="/403" element={<ForbiddenPage />} />

@@ -1,273 +1,264 @@
-import { useNavigate, Link, useSearchParams } from 'react-router-dom'
-import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Mail, Lock, Heart } from 'lucide-react'
-import {
-  FACEBOOK_CALLBACK_URL,
-  GOOGLE_CALLBACK_URL,
-  getFacebookAuthUrl,
-  getGoogleAuthUrl,
-} from '@/services/auth'
+import { useNavigate, Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Eye, EyeOff, Mail, Lock, Heart, Loader2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
+import { motion } from 'framer-motion'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  pageTransitionVariants,
+  containerVariants,
+  itemVariants,
+  fadeInVariants,
+  slideUpVariants,
+} from '@/lib/animations'
 
-function randomState() {
-  return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
-}
+const loginSchema = z.object({
+  username: z.string().min(1, 'Vui lòng nhập Email / SĐT / Username'),
+  password: z.string().min(1, 'Vui lòng nhập mật khẩu'),
+  remember: z.boolean().optional(),
+})
+
+type LoginFormValues = z.infer<typeof loginSchema>
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
 
-  const [formData, setFormData] = useState({
-    username: '',
-    password: '',
-    remember: false,
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      username: '',
+      password: '',
+      remember: false,
+    },
   })
 
-  // Check for error message from OAuth callback
-  useEffect(() => {
-    const errorFromUrl = searchParams.get('error')
-    if (errorFromUrl) {
-      setError(decodeURIComponent(errorFromUrl))
-    }
-  }, [searchParams])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    
-    if (!formData.username.trim()) {
-      setError('Vui lòng nhập Email / SĐT / Username')
-      return
-    }
-    
-    if (!formData.password) {
-      setError('Vui lòng nhập mật khẩu')
-      return
-    }
-
+  const onSubmit = async (data: LoginFormValues) => {
+    setApiError(null)
     setIsLoading(true)
 
     try {
-      await login({ username: formData.username.trim(), password: formData.password })
+      await login({ username: data.username.trim(), password: data.password })
+      // navigation is usually handled in context or component
     } catch (err: any) {
-      // Lấy message từ BE error response có ưu tiên cao nhất
-      const message = 
-        err?.response?.data?.message || 
-        err?.message || 
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
         'Đăng nhập thất bại. Vui lòng thử lại.'
-      setError(message)
+      setApiError(message)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const loginWithSocial = async (provider: 'google' | 'facebook') => {
-    setError(null)
-    setIsLoading(true)
-
-    try {
-      const state = randomState()
-      sessionStorage.setItem(`oauth_${provider}_state`, state)
-      
-      const redirectUri = provider === 'google' ? GOOGLE_CALLBACK_URL : FACEBOOK_CALLBACK_URL
-      const url =
-        provider === 'google'
-          ? await getGoogleAuthUrl(redirectUri, state)
-          : await getFacebookAuthUrl(redirectUri, state)
-
-      window.location.href = url
-    } catch (err: any) {
-      // Lấy message từ BE error response
-      const message = 
-        err?.response?.data?.message || 
-        err?.message || 
-        `Không thể kết nối với ${provider}. Vui lòng thử lại.`
-      setError(message)
-      setIsLoading(false)
-    }
-  }
-
   return (
-    <div className="min-h-screen flex">
-      
+    <motion.div
+      className="min-h-screen flex"
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      variants={pageTransitionVariants}
+    >
       {/* LEFT SIDE */}
-      <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-blue-600 to-blue-500 text-white p-10 flex-col justify-between">
-        
+      <motion.div
+        className="hidden lg:flex w-1/2 bg-primary text-primary-foreground p-12 flex-col justify-between relative overflow-hidden"
+        variants={fadeInVariants}
+      >
+        {/* Background decorations */}
+        <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-white/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-accent/20 rounded-full blur-3xl" />
+
         {/* Logo */}
-        <div className="flex items-center gap-2 text-xl font-semibold">
-          <div className="bg-white text-blue-600 p-2 rounded-lg">
-            <Heart />
+        <motion.div variants={slideUpVariants} className="relative z-10 flex items-center gap-2 text-xl font-bold">
+          <div className="bg-background text-primary p-2.5 rounded-xl shadow-sm">
+            <Heart className="w-6 h-6" />
           </div>
-          MedCare
-        </div>
+          <span className="text-2xl tracking-tight">MedCare</span>
+        </motion.div>
 
         {/* Content */}
-        <div>
-          <h2 className="text-4xl font-bold leading-tight mb-6">
-            Chăm sóc sức khỏe của bạn một cách dễ dàng
-          </h2>
+        <motion.div
+          className="relative z-10 space-y-8"
+          variants={containerVariants}
+        >
+          <motion.h2 variants={itemVariants} className="text-5xl font-bold leading-tight tracking-tight">
+            Chăm sóc sức khỏe <br />
+            của bạn một cách <span className="text-accent">dễ dàng</span>
+          </motion.h2>
 
-          <p className="text-blue-100 mb-10">
-            Đặt lịch khám bệnh trực tuyến với các bác sĩ hàng đầu. 
-            Tiết kiệm thời gian, không cần chờ đợi.
-          </p>
+          <motion.p variants={itemVariants} className="text-primary-foreground/80 text-lg max-w-md leading-relaxed">
+            Đặt lịch khám bệnh trực tuyến với các bác sĩ hàng đầu. Tiết kiệm thời gian, không cần chờ đợi.
+          </motion.p>
 
-          <div className="flex gap-10">
-            <div>
-              <p className="text-3xl font-bold">85+</p>
-              <p className="text-blue-100 text-sm">Bác sĩ chuyên khoa</p>
-            </div>
-            <div>
-              <p className="text-3xl font-bold">15K+</p>
-              <p className="text-blue-100 text-sm">Bệnh nhân tin tưởng</p>
-            </div>
-            <div>
-              <p className="text-3xl font-bold">98%</p>
-              <p className="text-blue-100 text-sm">Đánh giá hài lòng</p>
-            </div>
-          </div>
-        </div>
+          <motion.div variants={containerVariants} className="flex gap-12 pt-8">
+            <motion.div variants={itemVariants}>
+              <p className="text-4xl font-bold mb-1">85+</p>
+              <p className="text-primary-foreground/70 text-sm font-medium uppercase tracking-wider">Bác sĩ chuyên khoa</p>
+            </motion.div>
+            <motion.div variants={itemVariants}>
+              <p className="text-4xl font-bold mb-1">15K+</p>
+              <p className="text-primary-foreground/70 text-sm font-medium uppercase tracking-wider">Bệnh nhân tin tưởng</p>
+            </motion.div>
+            <motion.div variants={itemVariants}>
+              <p className="text-4xl font-bold mb-1">98%</p>
+              <p className="text-primary-foreground/70 text-sm font-medium uppercase tracking-wider">Đánh giá hài lòng</p>
+            </motion.div>
+          </motion.div>
+        </motion.div>
 
-        <p className="text-blue-200 text-sm">
-          © 2026 MedCare. Tất cả quyền được bảo lưu.
-        </p>
-      </div>
+        <motion.p variants={fadeInVariants} className="relative z-10 text-primary-foreground/60 text-sm font-medium">
+          © {new Date().getFullYear()} MedCare. Tất cả quyền được bảo lưu.
+        </motion.p>
+      </motion.div>
 
       {/* RIGHT SIDE */}
-      <div className="flex w-full lg:w-1/2 items-center justify-center bg-gray-50 p-6">
-        <div className="w-full max-w-md space-y-6">
+      <div className="flex w-full lg:w-1/2 items-center justify-center bg-background p-6">
+        <motion.div
+          className="w-full max-w-md space-y-8"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          {/* Mobile Logo */}
+          <div className="lg:hidden flex items-center gap-2 text-xl font-bold mb-8">
+            <div className="bg-primary text-primary-foreground p-2 rounded-lg">
+              <Heart className="w-5 h-5" />
+            </div>
+            MedCare
+          </div>
 
           {/* Header */}
-          <div className="space-y-2 text-center lg:text-left">
-            <h1 className="text-2xl font-bold">
-              Chào mừng trở lại
-            </h1>
-            <p className="text-gray-500">
+          <motion.div variants={itemVariants} className="space-y-2 text-center lg:text-left">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Chào mừng trở lại</h1>
+            <p className="text-muted-foreground text-sm">
               Đăng nhập để tiếp tục đặt lịch khám bệnh
             </p>
-          </div>
-
-          {/* Social */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => loginWithSocial('google')}
-              className="flex items-center justify-center gap-2 rounded-lg py-2 border bg-white text-gray-700 hover:shadow"
-            >
-              <span className="font-medium">Google</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => loginWithSocial('facebook')}
-              className="flex items-center justify-center gap-2 rounded-lg py-2 border bg-[#1877F2] text-white hover:shadow"
-            >
-              <span className="font-medium">Facebook</span>
-            </button>
-          </div>
+          </motion.div>
 
           {/* Divider */}
-          <div className="relative">
+          <motion.div variants={itemVariants} className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
+              <span className="w-full border-t border-border" />
             </div>
-            <div className="relative text-center text-xs">
-              <span className="bg-gray-50 px-2 text-gray-400">
-                HOẶC ĐĂNG NHẬP VỚI THÔNG TIN CÓ SẴN
+            <div className="relative text-center text-xs uppercase tracking-wider">
+              <span className="bg-background px-3 text-muted-foreground font-medium">
+                Thông tin đăng nhập
               </span>
             </div>
-          </div>
+          </motion.div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error ? (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-                {error}
-              </div>
-            ) : null}
+          <motion.form variants={itemVariants} onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            {apiError && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive font-medium flex items-center gap-2"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-destructive" />
+                {apiError}
+              </motion.div>
+            )}
 
-            {/* Identifier - Email/Phone/Username */}
-            <div>
-              <label className="text-sm">Email / SĐT / Username</label>
-              <div className="relative mt-1">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
+            {/* Identifier */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Email / SĐT / Username</label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
                   type="text"
-                  placeholder="VD: abc@gmail.com, 0912345678 hoặc username"
-                  className="w-full pl-10 pr-3 py-2 border rounded-lg"
-                  value={formData.username}
-                  onChange={(e) =>
-                    setFormData({ ...formData, username: e.target.value })
-                  }
+                  placeholder="VD: abc@gmail.com, 0912345678"
+                  className={`pl-10 h-12 rounded-xl bg-input/50 border-transparent focus:bg-background focus:border-ring transition-all ${
+                    errors.username ? 'border-destructive focus:border-destructive ring-destructive/20' : ''
+                  }`}
+                  {...register('username')}
                 />
               </div>
+              {errors.username && (
+                <p className="text-destructive text-sm mt-1 font-medium">{errors.username.message}</p>
+              )}
             </div>
 
             {/* Password */}
-            <div>
-              <label className="text-sm">Mật khẩu</label>
-              <div className="relative mt-1">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Mật khẩu</label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Nhập mật khẩu"
-                  className="w-full pl-10 pr-10 py-2 border rounded-lg"
-                  value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
+                  className={`pl-10 pr-12 h-12 rounded-xl bg-input/50 border-transparent focus:bg-background focus:border-ring transition-all ${
+                    errors.password ? 'border-destructive focus:border-destructive ring-destructive/20' : ''
+                  }`}
+                  {...register('password')}
                 />
-
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+              {errors.password && (
+                <p className="text-destructive text-sm mt-1 font-medium">{errors.password.message}</p>
+              )}
             </div>
 
-            {/* Footer */}
-            <div className="flex justify-between text-sm">
-              <label className="flex items-center gap-2">
+            {/* Footer Options */}
+            <div className="flex items-center justify-between text-sm">
+              <label className="flex items-center gap-2 text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
                 <input
                   type="checkbox"
-                  checked={formData.remember}
-                  onChange={(e) =>
-                    setFormData({ ...formData, remember: e.target.checked })
-                  }
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary/20 accent-primary"
+                  {...register('remember')}
                 />
                 Ghi nhớ đăng nhập
               </label>
 
-              <Link to="/forgot-password" className="text-blue-600">
+              <Link to="/forgot-password" className="text-primary font-medium hover:underline hover:underline-offset-4">
                 Quên mật khẩu?
               </Link>
             </div>
 
-            {/* Button */}
-            <button
+            {/* Submit Button */}
+            <Button
               type="submit"
-              className="w-full bg-blue-600 text-white py-2 rounded-lg disabled:opacity-70"
+              size="lg"
+              className="w-full h-12 text-base font-semibold rounded-xl shadow-md hover:shadow-lg transition-all"
               disabled={isLoading}
             >
-              {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
-            </button>
-          </form>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Đang đăng nhập...
+                </>
+              ) : (
+                'Đăng nhập'
+              )}
+            </Button>
+          </motion.form>
 
-          {/* Register */}
-          <p className="text-center text-sm text-gray-500">
+          {/* Register Link */}
+          <motion.p variants={itemVariants} className="text-center text-sm text-muted-foreground mt-8">
             Chưa có tài khoản?{' '}
-            <Link to="/register" className="text-blue-600">
+            <Link to="/register" className="text-primary font-semibold hover:underline hover:underline-offset-4 transition-all">
               Đăng ký ngay
             </Link>
-          </p>
-        </div>
+          </motion.p>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   )
 }

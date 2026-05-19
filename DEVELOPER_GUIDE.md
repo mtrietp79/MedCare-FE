@@ -433,10 +433,6 @@ describe('DoctorCard', () => {
 # API
 VITE_API_URL=http://localhost:3000/api
 
-# Auth
-VITE_GOOGLE_CLIENT_ID=your_google_client_id
-VITE_FACEBOOK_APP_ID=your_facebook_app_id
-
 # Analytics
 VITE_GA_ID=your_google_analytics_id
 ```

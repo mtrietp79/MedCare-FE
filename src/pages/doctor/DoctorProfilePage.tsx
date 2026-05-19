@@ -75,7 +75,7 @@ export function DoctorProfilePage() {
         phone: data.phone,
         address: data.address,
         specialty: data.specialty,
-        experience: data.experience,
+        experience: data.experienceYears ?? data.experience,
         bio: data.bio
       })
     } catch (error) {
@@ -92,7 +92,7 @@ export function DoctorProfilePage() {
   const onSubmit = async (data: ProfileFormData) => {
     try {
       setSaving(true)
-      await doctorApi.updateProfile(data)
+      await doctorApi.updateProfile({ ...data, experienceYears: Number(data.experience) })
       toast({
         title: 'Thành công',
         description: 'Đã cập nhật hồ sơ cá nhân'

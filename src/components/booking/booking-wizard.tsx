@@ -151,7 +151,7 @@ export function BookingWizard() {
         const response = await api.doctors.getAvailableSlots(formData.doctorId, apiDate)
         const processed = (response || []).map((slot: any) => ({
           ...slot,
-          disabled: Boolean(slot.disabled),
+          disabled: Boolean(slot.disabled || slot.disabledReason),
         })) as SlotItem[]
 
         setSlots(processed)
@@ -201,17 +201,17 @@ export function BookingWizard() {
   const formatDateForApi = (dateString: string) => {
     const date = parseDateString(dateString)
     if (!date) return dateString
-    const day = String(date.getDate()).padStart(2, '0')
-    const month = String(date.getMonth() + 1).padStart(2, '0')
     const year = date.getFullYear()
-    return `${day}/${month}/${year}`
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
   const getDoctorName = (doctor?: Doctor) => doctor?.name ?? doctor?.fullName ?? 'Bác sĩ'
   const getDoctorSpecialty = (specialty?: Doctor['specialty']) =>
     typeof specialty === 'string' ? specialty : specialty?.name ?? ''
   const getDoctorExperienceYears = (doctor?: Doctor) => {
-    const raw = doctor?.experience ?? doctor?.experienceYears ?? 0
+    const raw = doctor?.experienceYears ?? (doctor as any)?.yearsExperience ?? doctor?.experience ?? 0
     const value = Number(raw)
     return Number.isFinite(value) ? value : 0
   }
@@ -222,8 +222,6 @@ export function BookingWizard() {
         return 'Khung giờ đã qua.'
       case 'LESS_THAN_2H':
         return 'Chỉ được đặt trước ít nhất 2 giờ.'
-      case 'OFF_SHIFT':
-        return 'Bác sĩ không trực khung giờ này.'
       case 'FULL':
         return 'Khung giờ đã đầy.'
       default:

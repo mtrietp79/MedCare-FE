@@ -1,7 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
-import { Plus, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ScheduleDialog } from '@/components/schedule/schedule-dialog'
 import { ScheduleList } from '@/components/schedule/schedule-list'
 import { scheduleApi, doctorApi } from '@/services/api'
 import { useToast } from '@/hooks/use-toast'
@@ -15,9 +14,6 @@ export function AdminSchedulePage() {
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [selectedSchedule, setSelectedSchedule] = useState<DoctorSchedule | undefined>()
   const [filter, setFilter] = useState({ date: '', doctorId: '' })
 
   useEffect(() => {
@@ -69,64 +65,15 @@ export function AdminSchedulePage() {
     }
   }
 
-  const handleAdd = () => {
-    setSelectedSchedule(undefined)
-    setDialogOpen(true)
-  }
-
-  const handleEdit = (schedule: DoctorSchedule) => {
-    setSelectedSchedule(schedule)
-    setDialogOpen(true)
-  }
-
-  const handleSubmit = async (data: Omit<DoctorSchedule, 'id' | 'createdAt' | 'updatedAt'>) => {
-    try {
-      if (selectedSchedule) {
-        await scheduleApi.update(selectedSchedule.id, data)
-        toast({ title: 'Thành công', description: 'Lịch khám đã được cập nhật.' })
-      } else {
-        await scheduleApi.create(data)
-        toast({ title: 'Thành công', description: 'Lịch khám đã được thêm.' })
-      }
-
-      setDialogOpen(false)
-      await loadSchedules()
-    } catch (submitError) {
-      console.error('handleSubmit error', submitError)
-      toast({
-        title: 'Lỗi',
-        description: submitError instanceof Error ? submitError.message : 'Không thể lưu lịch khám.',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleDelete = async (id: string) => {
-    try {
-      await scheduleApi.delete(id)
-      toast({ title: 'Thành công', description: 'Lịch khám đã được xóa.' })
-      await loadSchedules()
-    } catch (deleteError) {
-      console.error('handleDelete error', deleteError)
-      toast({
-        title: 'Lỗi',
-        description: deleteError instanceof Error ? deleteError.message : 'Không thể xóa lịch khám.',
-        variant: 'destructive',
-      })
-    }
-  }
-
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Quản lý lịch khám</h1>
-          <p className="mt-1 text-muted-foreground">Thêm, sửa và xóa lịch khám của bác sĩ</p>
+          <h1 className="text-3xl font-bold">Lịch khám tham khảo</h1>
+          <p className="mt-1 text-muted-foreground">
+            Trang này chỉ dùng để tham khảo lịch khám. Giao diện không hỗ trợ thêm/sửa/xóa lịch làm việc.
+          </p>
         </div>
-        <Button onClick={handleAdd} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Thêm lịch khám
-        </Button>
       </div>
 
       <div className="rounded-lg border bg-white p-4 flex flex-wrap gap-4">
@@ -166,16 +113,7 @@ export function AdminSchedulePage() {
 
       {error && <AdminErrorState message={error} onRetry={() => void loadSchedules()} />}
 
-      <ScheduleList schedules={schedules} isLoading={isLoading} onEdit={handleEdit} onDelete={handleDelete} />
-
-      <ScheduleDialog
-        open={dialogOpen}
-        schedule={selectedSchedule}
-        doctors={doctors}
-        isLoading={isLoading}
-        onOpenChange={setDialogOpen}
-        onSubmit={handleSubmit}
-      />
+      <ScheduleList schedules={schedules} isLoading={isLoading} />
     </div>
   )
 }

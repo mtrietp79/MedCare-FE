@@ -1,4 +1,5 @@
-﻿import {
+﻿import { motion } from 'framer-motion'
+import {
   Calendar,
   DollarSign,
   LayoutDashboard,
@@ -79,20 +80,20 @@ function AdminSidebar() {
   }
 
   return (
-    <Sidebar>
-      <SidebarFooter className="border-b">
-        <Link to="/admin" className="flex items-center gap-2 px-2 py-1">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <LayoutDashboard className="h-5 w-5 text-primary-foreground" />
+    <Sidebar className="border-r border-border/70 bg-background shadow-sm">
+      <SidebarFooter className="border-b border-border/80 px-4 py-4">
+        <Link to="/admin" className="group flex items-center gap-3 rounded-3xl bg-primary/10 p-3 transition hover:bg-primary/15">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+            <LayoutDashboard className="h-5 w-5" />
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold">MedCare Admin</span>
-            <span className="text-xs text-muted-foreground">Quản lý hệ thống</span>
+          <div>
+            <p className="text-sm font-semibold">MedCare Admin</p>
+            <p className="text-xs text-muted-foreground">Quản lý hệ thống</p>
           </div>
         </Link>
       </SidebarFooter>
 
-      <SidebarContent>
+      <SidebarContent className="px-2 py-3">
         <SidebarMenu>
           {adminMenuItems.map((item) => {
             const Icon = item.icon
@@ -100,8 +101,13 @@ function AdminSidebar() {
 
             return (
               <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                  <Link to={item.href}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive}
+                  tooltip={item.label}
+                  className={isActive ? 'bg-primary/10 text-primary shadow-sm' : 'hover:bg-secondary/80'}
+                >
+                  <Link to={item.href} className="flex items-center gap-3 rounded-2xl px-3 py-3 font-medium transition">
                     <Icon className="h-4 w-4" />
                     <span>{item.title}</span>
                   </Link>
@@ -112,10 +118,10 @@ function AdminSidebar() {
         </SidebarMenu>
       </SidebarContent>
 
-      <SidebarFooter className="border-t">
-        <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
+      <SidebarFooter className="border-t border-border/80 px-4 py-4">
+        <Button variant="outline" className="w-full justify-center" onClick={handleLogout}>
           <LogOut className="h-4 w-4" />
-          <span>Đăng xuất</span>
+          Đăng xuất
         </Button>
       </SidebarFooter>
     </Sidebar>
@@ -123,19 +129,37 @@ function AdminSidebar() {
 }
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
+
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full">
+      <div className="flex min-h-screen w-full bg-background text-foreground">
         <AdminSidebar />
+
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="border-b bg-background p-4 flex items-center gap-2">
-            <SidebarTrigger className="h-8 w-8" />
-            <Separator orientation="vertical" className="h-6" />
-            <h1 className="text-lg font-semibold">MedCare Admin Panel</h1>
-          </div>
-          <div className="flex-1 overflow-auto">
-            {children}
-          </div>
+          <header className="sticky top-0 z-20 border-b border-border/70 bg-card/95 backdrop-blur-xl px-6 py-4 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.24em] text-muted-foreground">Bảng điều khiển</p>
+                <h1 className="text-2xl font-semibold">MedCare Admin Panel</h1>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm">Hỗ trợ</Button>
+                <Button size="sm">Tạo mới</Button>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-auto p-6">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+            >
+              {children}
+            </motion.div>
+          </main>
         </div>
       </div>
     </SidebarProvider>

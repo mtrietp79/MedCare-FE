@@ -47,7 +47,7 @@ export function DoctorsPage() {
     if (sortBy === 'rating') {
       filtered = filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0))
     } else if (sortBy === 'experience') {
-      filtered = filtered.sort((a, b) => (b.experience || 0) - (a.experience || 0))
+      filtered = filtered.sort((a, b) => ((b.experienceYears ?? b.experience) || 0) - ((a.experienceYears ?? a.experience) || 0))
     } else if (sortBy === 'price-low') {
       filtered = filtered.sort((a, b) => (a.fee || a.consultationFee || 0) - (b.fee || b.consultationFee || 0))
     } else if (sortBy === 'price-high') {

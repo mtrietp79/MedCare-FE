@@ -34,39 +34,6 @@ export const doctorApi = {
     });
   },
 
-  // Doctor Schedules Management
-  getSchedules: (params?: { date?: string }) => {
-    const token = getStoredToken();
-    const query = params ? `?${new URLSearchParams(params)}` : '';
-    return fetchJson(`${API_BASE_URL}/doctor-schedules${query}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-  },
-
-  getSchedulesByDate: (date: string) => {
-    const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/doctor-schedules/filter?date=${date}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-  },
-
-  createSchedule: (data: any) => {
-    const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/doctor-schedules`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify(data)
-    });
-  },
-
-  deleteSchedule: (id: string) => {
-    const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/doctor-schedules/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` }
-    });
-  },
-
   // Patients Management
   getPatients: (params?: { search?: string; page?: number; size?: number }) => {
     const token = getStoredToken();

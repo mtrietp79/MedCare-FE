@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   FACEBOOK_CALLBACK_URL,
@@ -9,62 +9,68 @@ import {
 } from '@/services/auth'
 import { FACEBOOK_CODE_EXCHANGE_ENDPOINT } from '@/constants/auth'
 
-<<<<<<< HEAD
 const processedCodeKeys = new Set<string>()
 const submittingCodeKeys = new Set<string>()
-=======
-const FACEBOOK_CB = 'http://localhost:5173/auth/facebook/callback'
->>>>>>> 579fb5d2a5fccbf39d708523236fabab2a5b8bde
+const LOG_TAG = '[oauth/facebook]'
+type LogLevel = 'info' | 'warn' | 'error'
+
+function logDev(level: LogLevel, message: string, payload?: unknown) {
+  if (!import.meta.env.DEV) return
+  const writer = level === 'error' ? console.error : level === 'warn' ? console.warn : console.info
+  if (typeof payload === 'undefined') {
+    writer(LOG_TAG, message)
+    return
+  }
+  writer(LOG_TAG, message, payload)
+}
 
 export function FacebookCallbackPage() {
   const nav = useNavigate()
   const { search } = useLocation()
-<<<<<<< HEAD
   const hasStarted = useRef(false)
   const isSubmitting = useRef(false)
 
   useEffect(() => {
     if (hasStarted.current) return
     hasStarted.current = true
-=======
-  const calledApi = useRef(false)
-  const isSubmitting = useRef(false)
-
-  useEffect(() => {
-    ;(async () => {
->>>>>>> 579fb5d2a5fccbf39d708523236fabab2a5b8bde
 
     void (async () => {
       const q = new URLSearchParams(search)
       const code = q.get('code')
       const state = q.get('state')
       const error = q.get('error')
+      const startAt = performance.now()
+      const callbackPath = `${window.location.origin}${window.location.pathname}`
 
-      if (import.meta.env.DEV) {
-<<<<<<< HEAD
-        console.debug('[oauth/facebook] code exists:', Boolean(code))
-=======
-        console.debug('[FacebookCallback] code present:', !!code)
-        console.debug('[FacebookCallback] endpoint:', '/api/auth/facebook/code')
-      }
-
-      if (err) {
-        return nav(`/login?error=${encodeURIComponent('Facebook từ chối đăng nhập')}`, { replace: true })
->>>>>>> 579fb5d2a5fccbf39d708523236fabab2a5b8bde
-      }
+      logDev('info', 'callback loaded', {
+        callbackPath,
+        exchangeEndpoint: FACEBOOK_CODE_EXCHANGE_ENDPOINT,
+        redirectUri: FACEBOOK_CALLBACK_URL,
+        hasCode: Boolean(code),
+        codeLength: code?.length ?? 0,
+        hasState: Boolean(state),
+        hasError: Boolean(error),
+      })
 
       if (error) {
+        logDev('warn', 'provider returned error', { error })
         nav(`/login?error=${encodeURIComponent('Facebook từ chối đăng nhập.')}`, { replace: true })
         return
       }
 
       if (!code) {
-<<<<<<< HEAD
+        logDev('warn', 'missing authorization code')
         nav(`/login?error=${encodeURIComponent('Thiếu authorization code từ Facebook.')}`, { replace: true })
         return
       }
 
       const expectedState = sessionStorage.getItem('oauth_facebook_state')
+      logDev('info', 'state validation', {
+        expectedStateExists: Boolean(expectedState),
+        incomingStateExists: Boolean(state),
+        stateMatched: Boolean(expectedState && state && expectedState === state),
+      })
+
       if (!expectedState || expectedState !== state) {
         nav(`/login?error=${encodeURIComponent('Xác thực trạng thái (state) thất bại.')}`, { replace: true })
         return
@@ -72,44 +78,30 @@ export function FacebookCallbackPage() {
 
       const codeKey = `facebook:${code}`
       if (processedCodeKeys.has(codeKey) || submittingCodeKeys.has(codeKey) || isSubmitting.current) {
+        logDev('warn', 'skip duplicate code exchange', {
+          alreadyProcessed: processedCodeKeys.has(codeKey),
+          alreadySubmitting: submittingCodeKeys.has(codeKey),
+          localSubmitting: isSubmitting.current,
+        })
         return
       }
 
       isSubmitting.current = true
       submittingCodeKeys.add(codeKey)
+      logDev('info', 'start code exchange', { exchangeEndpoint: FACEBOOK_CODE_EXCHANGE_ENDPOINT })
 
-=======
-        return nav(`/login?error=${encodeURIComponent('Thiếu mã xác thực (code) từ Facebook')}`, { replace: true })
-      }
-
-      const expected = sessionStorage.getItem('oauth_facebook_state')
-      if (!expected || expected !== state) {
-        return nav(`/login?error=${encodeURIComponent('Xác thực trạng thái (state) thất bại')}`, { replace: true })
-      }
-
-      const handledKey = `oauth_facebook_handled_${code}`
-      if (sessionStorage.getItem(handledKey)) {
-        if (import.meta.env.DEV) console.debug('[FacebookCallback] already handled for code:', code)
-        return
-      }
-      if (calledApi.current || isSubmitting.current) return
-
-      calledApi.current = true
-      isSubmitting.current = true
-      sessionStorage.setItem(handledKey, '1')
->>>>>>> 579fb5d2a5fccbf39d708523236fabab2a5b8bde
       try {
-        if (import.meta.env.DEV) {
-          console.debug('[oauth/facebook] exchange endpoint:', FACEBOOK_CODE_EXCHANGE_ENDPOINT)
-        }
-
         const auth = await loginFacebookByCode(code, FACEBOOK_CALLBACK_URL)
-        if (import.meta.env.DEV) {
-          console.debug('[oauth/facebook] response status:', 200)
-        }
+        logDev('info', 'exchange response received', {
+          status: 200,
+          hasToken: Boolean(auth.token ?? auth.accessToken),
+          role: auth.role ?? 'unknown',
+          usernameExists: Boolean(auth.username),
+        })
 
         const token = auth.token ?? auth.accessToken ?? ''
         if (!token) {
+          logDev('error', 'exchange response missing token')
           nav(`/login?error=${encodeURIComponent('Xác thực Facebook thất bại.')}`, { replace: true })
           return
         }
@@ -124,32 +116,36 @@ export function FacebookCallbackPage() {
 
         window.dispatchEvent(new Event('auth-sync'))
         processedCodeKeys.add(codeKey)
+        logDev('info', 'auth sync dispatched and redirecting', {
+          role: auth.role,
+          durationMs: Math.round(performance.now() - startAt),
+        })
         nav(getRoleHomePath(auth.role), { replace: true })
       } catch (e: any) {
-<<<<<<< HEAD
         const status = Number(e?.response?.status ?? 0)
-        if (import.meta.env.DEV) {
-          console.debug('[oauth/facebook] response status:', status || 'unknown')
-        }
+        const backendMessage = e?.response?.data?.message ?? e?.message ?? 'unknown'
+        logDev('error', 'exchange failed', {
+          status: status || 'unknown',
+          backendMessage,
+          responsePath: e?.response?.data?.path ?? 'unknown',
+          requestId: e?.response?.data?.requestId ?? e?.response?.headers?.['x-request-id'] ?? 'n/a',
+          durationMs: Math.round(performance.now() - startAt),
+        })
 
-        const message = status === 401
-          ? 'Xác thực Facebook thất bại.'
-          : 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.'
+        const message =
+          status === 401 ? 'Xác thực Facebook thất bại.' : 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.'
+        const messageForLogin =
+          import.meta.env.DEV && backendMessage ? `${message} [BE: ${backendMessage}]` : message
 
-        nav(`/login?error=${encodeURIComponent(message)}`, { replace: true })
-=======
-        const status = e?.response?.status
-        if (import.meta.env.DEV) console.debug('[FacebookCallback] status:', status)
-        let msg = 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.'
-        if (status === 401) {
-          msg = 'Xác thực Facebook thất bại.'
-        }
-        nav(`/login?error=${encodeURIComponent(msg)}`, { replace: true })
->>>>>>> 579fb5d2a5fccbf39d708523236fabab2a5b8bde
+        nav(`/login?error=${encodeURIComponent(messageForLogin)}`, { replace: true })
       } finally {
         submittingCodeKeys.delete(codeKey)
         isSubmitting.current = false
         sessionStorage.removeItem('oauth_facebook_state')
+        logDev('info', 'cleanup complete', {
+          removedStateKey: 'oauth_facebook_state',
+          codeProcessed: processedCodeKeys.has(codeKey),
+        })
       }
     })()
   }, [search, nav])

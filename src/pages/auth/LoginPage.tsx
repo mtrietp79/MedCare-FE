@@ -9,12 +9,6 @@ import {
 } from '@/services/auth'
 import { useAuth } from '@/context/AuthContext'
 
-<<<<<<< HEAD
-=======
-const GOOGLE_CB = 'http://localhost:5173/auth/google/callback'
-const FACEBOOK_CB = 'http://localhost:5173/auth/facebook/callback'
-
->>>>>>> 579fb5d2a5fccbf39d708523236fabab2a5b8bde
 function randomState() {
   return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
 }

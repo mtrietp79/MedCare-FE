@@ -9,6 +9,12 @@ interface FetchOptions extends RequestInit {
   headers?: Record<string, string>
 }
 
+export interface ApiRequestError extends Error {
+  status?: number
+  code?: string
+  data?: unknown
+}
+
 async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`
   const token = getStoredToken()
@@ -51,7 +57,17 @@ async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise
         data && typeof data === 'object' && 'message' in data
           ? (data as { message: string }).message
           : `API Error: ${response.status} ${response.statusText}`
-      throw new Error(message)
+      const apiError = new Error(message) as ApiRequestError
+      apiError.status = response.status
+
+      if (data && typeof data === 'object') {
+        if ('code' in data && typeof data.code === 'string') {
+          apiError.code = data.code
+        }
+        apiError.data = data
+      }
+
+      throw apiError
     }
 
     return data as T

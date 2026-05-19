@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, CalendarDays, Check, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { api } from '@/services/api'
+import { PatientProfileForm } from '@/pages/patient/PatientProfilePage'
+import { api, type ApiRequestError } from '@/services/api'
 import { useToast } from '@/hooks/use-toast'
 import type { BookingRules, Doctor, Patient } from '@/types'
 
@@ -42,6 +43,22 @@ interface SlotItem {
   disabledReason?: string
 }
 
+const isRequiredProfileFieldFilled = (value?: string | null) => Boolean(value && String(value).trim())
+
+const isPatientProfileCompleted = (patient?: Patient | null) => {
+  if (!patient) return false
+  if (patient.profileCompleted === true) return true
+
+  return (
+    isRequiredProfileFieldFilled(patient.fullName || patient.name) &&
+    isRequiredProfileFieldFilled(patient.dateOfBirth) &&
+    isRequiredProfileFieldFilled(patient.phone) &&
+    isRequiredProfileFieldFilled(patient.gender) &&
+    isRequiredProfileFieldFilled(patient.nationalId) &&
+    isRequiredProfileFieldFilled(patient.address)
+  )
+}
+
 export function BookingWizard() {
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -70,10 +87,40 @@ export function BookingWizard() {
   const [error, setError] = useState<string | null>(null)
   const [slotsError, setSlotsError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [patientProfileLoading, setPatientProfileLoading] = useState(false)
+  const [patientProfileError, setPatientProfileError] = useState<string | null>(null)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
 
   const queryDoctorId =
     typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('doctor') : null
+
+  const syncPatientIntoBookingForm = useCallback((patientData: Patient | null) => {
+    if (!patientData) return
+
+    setFormData((prev) => ({
+      ...prev,
+      patientName: patientData.fullName || patientData.name || prev.patientName,
+      patientPhone: patientData.phone || prev.patientPhone,
+      patientEmail: patientData.email || prev.patientEmail,
+    }))
+  }, [])
+
+  const loadCurrentPatient = useCallback(async () => {
+    try {
+      setPatientProfileLoading(true)
+      setPatientProfileError(null)
+      const data = await api.patients.getCurrent()
+      setPatient(data)
+      syncPatientIntoBookingForm(data)
+      return data
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Khong the tai ho so benh nhan'
+      setPatientProfileError(message)
+      return null
+    } finally {
+      setPatientProfileLoading(false)
+    }
+  }, [syncPatientIntoBookingForm])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -92,15 +139,7 @@ export function BookingWizard() {
         )
         setPatient(patientData)
         setBookingRules(bookingRulesData)
-
-        if (patientData) {
-          setFormData((prev) => ({
-            ...prev,
-            patientName: patientData.fullName || patientData.name || '',
-            patientPhone: patientData.phone || '',
-            patientEmail: patientData.email || '',
-          }))
-        }
+        syncPatientIntoBookingForm(patientData)
 
         if (queryDoctorId) {
           try {
@@ -134,7 +173,7 @@ export function BookingWizard() {
     }
 
     void fetchData()
-  }, [queryDoctorId])
+  }, [queryDoctorId, syncPatientIntoBookingForm])
 
   useEffect(() => {
     const fetchSlots = async () => {
@@ -168,6 +207,11 @@ export function BookingWizard() {
 
     void fetchSlots()
   }, [formData.doctorId, formData.date])
+
+  useEffect(() => {
+    if (currentStep !== 4) return
+    void loadCurrentPatient()
+  }, [currentStep, loadCurrentPatient])
 
   const selectedDoctor = (Array.isArray(doctors) ? doctors : []).find((doc) => doc.id === formData.doctorId)
 
@@ -251,6 +295,8 @@ export function BookingWizard() {
       : ''
   }
 
+  const needsProfileCompletion = !isPatientProfileCompleted(patient)
+
   const canProceed = () => {
     switch (currentStep) {
       case 1:
@@ -260,6 +306,7 @@ export function BookingWizard() {
       case 3:
         return isSelectedSlotBookable(selectedSlot)
       case 4:
+        if (needsProfileCompletion) return false
         return Boolean(formData.patientName && formData.patientPhone && formData.patientEmail)
       case 5:
         return true
@@ -335,9 +382,17 @@ export function BookingWizard() {
 
       navigate(`/patient/appointments/${appointment.id}`, { replace: true })
     } catch (submitErrorValue: any) {
+      const apiError = submitErrorValue as ApiRequestError
+      if (apiError?.code === 'PROFILE_INCOMPLETE') {
+        setSubmitError('Ho so benh nhan chua hoan tat. Vui long cap nhat thong tin trong buoc nay de tiep tuc.')
+        setCurrentStep(4)
+        void loadCurrentPatient()
+        return
+      }
+
       const message =
         submitErrorValue?.response?.data?.message ||
-        (submitErrorValue instanceof Error ? submitErrorValue.message : 'Không thể đặt lịch khám')
+        (submitErrorValue instanceof Error ? submitErrorValue.message : 'Khong the dat lich kham')
       setSubmitError(message)
     } finally {
       setSubmitLoading(false)
@@ -606,35 +661,73 @@ export function BookingWizard() {
               <div className="space-y-6">
                 <div>
                   <h2 className="text-2xl font-bold text-foreground mb-2">Thông tin bệnh nhân</h2>
-                  <p className="text-muted-foreground">Cập nhật thông tin liên hệ của bạn</p>
+                  <p className="text-muted-foreground">Kiểm tra và cập nhật hồ sơ trước khi xác nhận đặt lịch.</p>
                 </div>
 
-                <div className="space-y-5">
-                  <div>
-                    <Label htmlFor="patient-name" className="text-base font-semibold mb-2 block">
-                      Họ và tên <span className="text-destructive">*</span>
-                    </Label>
-                    <Input id="patient-name" placeholder="Nhập họ và tên" value={formData.patientName} onChange={(e) => setFormData({ ...formData, patientName: e.target.value })} className="text-base p-3 h-12" />
+                {submitError ? (
+                  <div className="rounded-lg border-2 border-destructive/30 bg-destructive/5 p-4">
+                    <p className="text-destructive font-medium">{submitError}</p>
                   </div>
-                  <div>
-                    <Label htmlFor="patient-phone" className="text-base font-semibold mb-2 block">
-                      Số điện thoại <span className="text-destructive">*</span>
-                    </Label>
-                    <Input id="patient-phone" placeholder="Nhập số điện thoại" value={formData.patientPhone} onChange={(e) => setFormData({ ...formData, patientPhone: e.target.value })} className="text-base p-3 h-12" />
+                ) : null}
+
+                {patientProfileLoading ? (
+                  <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-8 text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2" />
+                    <p className="text-muted-foreground">Đang tải hồ sơ bệnh nhân...</p>
                   </div>
-                  <div>
-                    <Label htmlFor="patient-email" className="text-base font-semibold mb-2 block">
-                      Email <span className="text-destructive">*</span>
-                    </Label>
-                    <Input id="patient-email" type="email" placeholder="Nhập email" value={formData.patientEmail} onChange={(e) => setFormData({ ...formData, patientEmail: e.target.value })} className="text-base p-3 h-12" />
+                ) : patientProfileError ? (
+                  <div className="rounded-lg border-2 border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
+                    <p className="text-destructive font-medium">{patientProfileError}</p>
+                    <Button type="button" variant="outline" onClick={() => void loadCurrentPatient()}>
+                      Tải lại hồ sơ
+                    </Button>
                   </div>
-                  <div>
-                    <Label htmlFor="symptoms" className="text-base font-semibold mb-2 block">
-                      Triệu chứng / Ghi chú <span className="text-muted-foreground">(không bắt buộc)</span>
-                    </Label>
-                    <Textarea id="symptoms" placeholder="Mô tả triệu chứng hoặc lý do khám..." value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={5} className="text-base p-3" />
+                ) : needsProfileCompletion && patient ? (
+                  <div className="space-y-4">
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+                      Hồ sơ của bạn chưa hoàn tất. Vui lòng cập nhật đầy đủ các trường bắt buộc để tiếp tục đặt lịch.
+                    </div>
+                    <PatientProfileForm
+                      patient={patient}
+                      onSuccess={(updatedPatient) => {
+                        setPatient(updatedPatient)
+                        syncPatientIntoBookingForm(updatedPatient)
+                        setSubmitError(null)
+                      }}
+                    />
                   </div>
-                </div>
+                ) : needsProfileCompletion ? (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+                    Không thể lấy dữ liệu hồ sơ. Vui lòng tải lại bước này để tiếp tục.
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    <div>
+                      <Label htmlFor="patient-name" className="text-base font-semibold mb-2 block">
+                        Họ và tên <span className="text-destructive">*</span>
+                      </Label>
+                      <Input id="patient-name" placeholder="Nhập họ và tên" value={formData.patientName} onChange={(e) => setFormData({ ...formData, patientName: e.target.value })} className="text-base p-3 h-12" />
+                    </div>
+                    <div>
+                      <Label htmlFor="patient-phone" className="text-base font-semibold mb-2 block">
+                        Số điện thoại <span className="text-destructive">*</span>
+                      </Label>
+                      <Input id="patient-phone" placeholder="Nhập số điện thoại" value={formData.patientPhone} onChange={(e) => setFormData({ ...formData, patientPhone: e.target.value })} className="text-base p-3 h-12" />
+                    </div>
+                    <div>
+                      <Label htmlFor="patient-email" className="text-base font-semibold mb-2 block">
+                        Email <span className="text-destructive">*</span>
+                      </Label>
+                      <Input id="patient-email" type="email" placeholder="Nhập email" value={formData.patientEmail} onChange={(e) => setFormData({ ...formData, patientEmail: e.target.value })} className="text-base p-3 h-12" />
+                    </div>
+                    <div>
+                      <Label htmlFor="symptoms" className="text-base font-semibold mb-2 block">
+                        Triệu chứng / Ghi chú <span className="text-muted-foreground">(không bắt buộc)</span>
+                      </Label>
+                      <Textarea id="symptoms" placeholder="Mô tả triệu chứng hoặc lý do khám..." value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={5} className="text-base p-3" />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

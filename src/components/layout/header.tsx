@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Heart, Menu, ChevronDown, User, Calendar, LogOut } from 'lucide-react'
+import { Heart, Menu, ChevronDown, User, Calendar, LogOut, BriefcaseMedical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -19,13 +19,43 @@ import {
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 
+type AccountMenuItem = {
+  label: string
+  href?: string
+  icon: React.ComponentType<{ className?: string }>
+  isLogout?: boolean
+}
+
 const navigation = [
-  { name: 'Trang chủ', href: '/' },
-  { name: 'Chuyên khoa', href: '/specialty' },
-  { name: 'Bác sĩ', href: '/doctors' },
-  { name: 'Đặt lịch', href: '/booking' },
-  { name: 'Liên hệ', href: '/contact' },
+  { name: 'Trang ch\u1EE7', href: '/' },
+  { name: 'Chuy\u00ean khoa', href: '/specialty' },
+  { name: 'B\u00e1c s\u0129', href: '/doctors' },
+  { name: '\u0110\u1eb7t l\u1ecbch', href: '/booking' },
+  { name: 'Li\u00ean h\u1ec7', href: '/contact' },
 ]
+
+function getAccountMenu(role: string | undefined): AccountMenuItem[] {
+  if (role === 'ROLE_ADMIN') {
+    return [
+      { label: 'Trang qu\u1ea3n tr\u1ecb', href: '/admin', icon: User },
+      { label: '\u0110\u0103ng xu\u1ea5t', icon: LogOut, isLogout: true },
+    ]
+  }
+
+  if (role === 'ROLE_DOCTOR') {
+    return [
+      { label: 'H\u1ed3 s\u01a1 c\u00e1 nh\u00e2n', href: '/profile', icon: User },
+      { label: 'L\u1ecbch l\u00e0m vi\u1ec7c', href: '/doctor/schedule', icon: BriefcaseMedical },
+      { label: '\u0110\u0103ng xu\u1ea5t', icon: LogOut, isLogout: true },
+    ]
+  }
+
+  return [
+    { label: 'H\u1ed3 s\u01a1 c\u00e1 nh\u00e2n', href: '/profile', icon: User },
+    { label: 'L\u1ecbch kh\u00e1m', href: '/appointments', icon: Calendar },
+    { label: '\u0110\u0103ng xu\u1ea5t', icon: LogOut, isLogout: true },
+  ]
+}
 
 export function Header() {
   const location = useLocation()
@@ -33,11 +63,12 @@ export function Header() {
   const [isOpen, setIsOpen] = useState(false)
   const { user, logout } = useAuth()
 
+  const accountMenu = getAccountMenu(user?.role)
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <nav className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
             <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
               <Heart className="w-5 h-5 text-primary-foreground" />
@@ -45,7 +76,6 @@ export function Header() {
             <span className="text-xl font-bold text-foreground">MedCare</span>
           </Link>
 
-          {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-1">
             {navigation.map((item) => (
               <Link
@@ -63,7 +93,6 @@ export function Header() {
             ))}
           </div>
 
-          {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center gap-3">
             {user ? (
               <DropdownMenu>
@@ -77,43 +106,44 @@ export function Header() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <div className="px-2 py-1.5">
-                    <p className="text-sm font-medium">{user.displayName ?? user.username}</p>
-                    <p className="text-xs text-muted-foreground">{user.role}</p>
-                  </div>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link to="/patient" className="cursor-pointer">
-                      <User className="w-4 h-4 mr-2" />
-                      Dashboard
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/patient/appointments" className="cursor-pointer">
-                      <Calendar className="w-4 h-4 mr-2" />
-                      Lịch hẹn
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={logout} className="text-destructive cursor-pointer">
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Đăng xuất
-                  </DropdownMenuItem>
+                  {accountMenu.map((item, index) => {
+                    const Icon = item.icon
+                    const isLogout = item.isLogout === true
+                    const needsSeparator = isLogout && index > 0
+
+                    return (
+                      <div key={item.label}>
+                        {needsSeparator && <DropdownMenuSeparator />}
+                        {item.href ? (
+                          <DropdownMenuItem asChild>
+                            <Link to={item.href} className="cursor-pointer">
+                              <Icon className="w-4 h-4 mr-2" />
+                              {item.label}
+                            </Link>
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onSelect={logout} className="text-destructive cursor-pointer">
+                            <Icon className="w-4 h-4 mr-2" />
+                            {item.label}
+                          </DropdownMenuItem>
+                        )}
+                      </div>
+                    )
+                  })}
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
               <>
                 <Button variant="ghost" asChild>
-                  <Link to="/login">Đăng nhập</Link>
+                  <Link to="/login">{'\u0110\u0103ng nh\u1eadp'}</Link>
                 </Button>
                 <Button asChild>
-                  <Link to="/register">Đăng ký</Link>
+                  <Link to="/register">{'\u0110\u0103ng k\u00fd'}</Link>
                 </Button>
               </>
             )}
           </div>
 
-          {/* Mobile Menu Button */}
           <Sheet open={isOpen} onOpenChange={setIsOpen}>
             <SheetTrigger asChild className="md:hidden">
               <Button variant="ghost" size="icon">
@@ -130,9 +160,8 @@ export function Header() {
                   MedCare
                 </SheetTitle>
               </SheetHeader>
-              
+
               <div className="flex flex-col gap-4 mt-6">
-                {/* Mobile Navigation */}
                 <nav className="flex flex-col gap-1">
                   {navigation.map((item) => (
                     <Link
@@ -151,7 +180,6 @@ export function Header() {
                   ))}
                 </nav>
 
-                {/* Mobile Auth */}
                 <div className="border-t pt-4 flex flex-col gap-2">
                   {user ? (
                     <>
@@ -164,40 +192,49 @@ export function Header() {
                           <p className="text-xs text-muted-foreground">{user.role}</p>
                         </div>
                       </div>
-                      <Link
-                        to="/patient"
-                        onClick={() => setIsOpen(false)}
-                        className="px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted"
-                      >
-                        Dashboard
-                      </Link>
-                      <Link
-                        to="/patient/appointments"
-                        onClick={() => setIsOpen(false)}
-                        className="px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted"
-                      >
-                        Lịch hẹn
-                      </Link>
-                      <button
-                        onClick={() => {
-                          logout()
-                          setIsOpen(false)
-                        }}
-                        className="px-4 py-3 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 text-left"
-                      >
-                        Đăng xuất
-                      </button>
+
+                      {accountMenu.map((item) => {
+                        const Icon = item.icon
+
+                        if (item.href) {
+                          return (
+                            <Link
+                              key={item.label}
+                              to={item.href}
+                              onClick={() => setIsOpen(false)}
+                              className="px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted flex items-center gap-2"
+                            >
+                              <Icon className="w-4 h-4" />
+                              {item.label}
+                            </Link>
+                          )
+                        }
+
+                        return (
+                          <button
+                            key={item.label}
+                            onClick={() => {
+                              logout()
+                              setIsOpen(false)
+                            }}
+                            className="px-4 py-3 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 text-left flex items-center gap-2"
+                          >
+                            <Icon className="w-4 h-4" />
+                            {item.label}
+                          </button>
+                        )
+                      })}
                     </>
                   ) : (
                     <>
                       <Button variant="outline" asChild className="w-full">
                         <Link to="/login" onClick={() => setIsOpen(false)}>
-                          Đăng nhập
+                          {'\u0110\u0103ng nh\u1eadp'}
                         </Link>
                       </Button>
                       <Button asChild className="w-full">
                         <Link to="/register" onClick={() => setIsOpen(false)}>
-                          Đăng ký
+                          {'\u0110\u0103ng k\u00fd'}
                         </Link>
                       </Button>
                     </>

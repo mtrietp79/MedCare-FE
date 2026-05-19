@@ -109,7 +109,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (response.role === 'ROLE_PATIENT') {
       navigate('/', { replace: true })
     } else if (response.role === 'ROLE_ADMIN') {
-      navigate('/admin', { replace: true })
+      navigate('/', { replace: true })
     } else if (response.role === 'ROLE_DOCTOR') {
       navigate('/doctor', { replace: true })
     } else {

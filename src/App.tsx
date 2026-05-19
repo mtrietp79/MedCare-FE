@@ -1,7 +1,7 @@
-﻿import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
-import { AuthProvider } from '@/context/AuthContext'
+import { AuthProvider, useAuth } from '@/context/AuthContext'
 
 import { MainLayout } from '@/layouts/MainLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
@@ -50,6 +50,30 @@ import { DoctorProfilePage } from '@/pages/doctor/DoctorProfilePage'
 import { DoctorMedicalRecordsPage } from '@/pages/doctor/DoctorMedicalRecordsPage'
 import { DoctorSchedulePage } from '@/pages/doctor/DoctorSchedulePage'
 
+function ProfileRedirect() {
+  const { user } = useAuth()
+
+  if (user?.role === 'ROLE_DOCTOR') {
+    return <Navigate to="/doctor/profile" replace />
+  }
+
+  if (user?.role === 'ROLE_PATIENT') {
+    return <Navigate to="/patient/profile" replace />
+  }
+
+  return <Navigate to="/403" replace />
+}
+
+function AppointmentsRedirect() {
+  const { user } = useAuth()
+
+  if (user?.role === 'ROLE_PATIENT') {
+    return <Navigate to="/patient/appointments" replace />
+  }
+
+  return <Navigate to="/403" replace />
+}
+
 function App() {
   return (
     <ThemeProvider defaultTheme="light">
@@ -75,6 +99,22 @@ function App() {
             </Route>
 
             <Route path="/403" element={<ForbiddenPage />} />
+            <Route
+              path="/profile"
+              element={
+                <RequireAuth>
+                  <ProfileRedirect />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/appointments"
+              element={
+                <RequireAuth>
+                  <AppointmentsRedirect />
+                </RequireAuth>
+              }
+            />
 
             <Route
               element={

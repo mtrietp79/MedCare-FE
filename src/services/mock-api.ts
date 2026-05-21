@@ -1,57 +1,9 @@
 // Mock API for testing without backend
 import type { Doctor, Specialty, Appointment, Patient } from '@/types'
 
-const MOCK_DOCTORS: Doctor[] = [
-  {
-    id: '1',
-    fullName: 'Dr. Nguyễn Văn A',
-    specialty: { id: '1', name: 'Tim mạch', slug: 'tim-mach' },
-    specialtyId: '1',
-    avatar: 'https://api.example.com/avatars/doctor1.jpg',
-    experience: 15,
-    experienceYears: 15,
-    qualifications: ['Bác sĩ CK II', 'Chứng chỉ Tim mạch'],
-    bio: 'Bác sĩ chuyên khoa Tim mạch với 15 năm kinh nghiệm',
-    rating: 4.8,
-    reviewCount: 245,
-    fee: 500000,
-  },
-  {
-    id: '2',
-    fullName: 'Dr. Trần Thị B',
-    specialty: { id: '2', name: 'Nhi khoa', slug: 'nhi-khoa' },
-    specialtyId: '2',
-    avatar: 'https://api.example.com/avatars/doctor2.jpg',
-    experience: 12,
-    experienceYears: 12,
-    qualifications: ['Bác sĩ CK II', 'Chứng chỉ Nhi khoa'],
-    bio: 'Bác sĩ chuyên khoa Nhi khoa tận tâm chăm sóc trẻ em',
-    rating: 4.9,
-    reviewCount: 189,
-    fee: 450000,
-  },
-  {
-    id: '3',
-    fullName: 'Dr. Lê Văn C',
-    specialty: { id: '3', name: 'Da liễu', slug: 'da-lieu' },
-    specialtyId: '3',
-    avatar: 'https://api.example.com/avatars/doctor3.jpg',
-    experience: 10,
-    experienceYears: 10,
-    qualifications: ['Bác sĩ CK II', 'Chứng chỉ Da liễu'],
-    bio: 'Bác sĩ chuyên khoa Da liễu với công nghệ hiện đại',
-    rating: 4.7,
-    reviewCount: 156,
-    fee: 400000,
-  },
-]
+const MOCK_DOCTORS: Doctor[] = []
 
-const MOCK_SPECIALTIES: Specialty[] = [
-  { id: '1', name: 'Tim mạch', slug: 'tim-mach', description: 'Chuyên khoa Tim mạch' },
-  { id: '2', name: 'Nhi khoa', slug: 'nhi-khoa', description: 'Chuyên khoa Nhi khoa' },
-  { id: '3', name: 'Da liễu', slug: 'da-lieu', description: 'Chuyên khoa Da liễu' },
-  { id: '4', name: 'Tai Mũi Họng', slug: 'tai-mui-hong', description: 'Chuyên khoa Tai Mũi Họng' },
-]
+const MOCK_SPECIALTIES: Specialty[] = []
 
 const MOCK_APPOINTMENTS: Map<string, Appointment> = new Map()
 

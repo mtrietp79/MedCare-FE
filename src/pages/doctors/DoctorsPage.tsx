@@ -18,14 +18,12 @@ export function DoctorsPage() {
       try {
         setLoading(true)
         setError(null)
-        const params: { specialtyId?: string; search?: string } = {}
+        const params: { specialtyId?: string } = {}
         if (selectedSpecialty !== 'all') {
           params.specialtyId = selectedSpecialty
         }
-        if (searchQuery.trim()) {
-          params.search = searchQuery.trim()
-        }
 
+        // Load doctors from API (without search) and filter on client for name search
         const data = await api.doctors.getAll(params)
         setDoctors(data)
       } catch (err: any) {
@@ -38,10 +36,19 @@ export function DoctorsPage() {
     }
 
     fetchDoctors()
-  }, [selectedSpecialty, searchQuery])
+  }, [selectedSpecialty])
 
   useEffect(() => {
     let filtered = [...doctors]
+
+    // Client-side search (case-insensitive) by possible name fields
+    const q = searchQuery.trim().toLowerCase()
+    if (q) {
+      filtered = filtered.filter((d) => {
+        const name = (d.name || d.fullName || '')
+        return name.toLowerCase().includes(q)
+      })
+    }
 
     // Sort
     if (sortBy === 'rating') {
@@ -55,7 +62,7 @@ export function DoctorsPage() {
     }
 
     setFilteredDoctors(filtered)
-  }, [doctors, sortBy])
+  }, [doctors, sortBy, searchQuery])
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -64,8 +71,8 @@ export function DoctorsPage() {
         <p className="text-muted-foreground">Tìm kiếm và đặt lịch với bác sĩ chuyên khoa</p>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        <div className="lg:col-span-1">
+      <div className="space-y-6">
+        <div>
           <DoctorFilter 
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
@@ -75,8 +82,8 @@ export function DoctorsPage() {
             onSortChange={setSortBy}
           />
         </div>
-        
-        <div className="lg:col-span-3">
+
+        <div>
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {[...Array(6)].map((_, i) => (

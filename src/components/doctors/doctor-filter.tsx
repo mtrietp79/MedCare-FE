@@ -114,7 +114,7 @@ export function DoctorFilter({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Tìm theo tên bác sĩ..."
+            placeholder="Tìm kiếm theo tên bác sĩ"
             className="pl-10"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}

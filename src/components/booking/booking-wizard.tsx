@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { PatientProfileForm } from '@/pages/patient/PatientProfilePage'
 import { api, type ApiRequestError } from '@/services/api'
 import { useToast } from '@/hooks/use-toast'
-import type { BookingRules, Doctor, Patient } from '@/types'
+import type { BookingRules, Doctor, MedicalService, Patient } from '@/types'
 
 const steps = [
   { id: 1, name: 'Chọn chuyên khoa' },
@@ -77,6 +77,10 @@ export function BookingWizard() {
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [specialties, setSpecialties] = useState<Array<{ id: string; name: string }>>([])
   const [selectedSpecialtyId, setSelectedSpecialtyId] = useState<string | null>(null)
+  const [medicalServices, setMedicalServices] = useState<MedicalService[]>([])
+  const [selectedMedicalServiceId, setSelectedMedicalServiceId] = useState<string | null>(null)
+  const [servicesLoading, setServicesLoading] = useState(false)
+  const [servicesError, setServicesError] = useState<string | null>(null)
   const [bookingRules, setBookingRules] = useState<BookingRules | null>(null)
   const [patient, setPatient] = useState<Patient | null>(null)
   const [slots, setSlots] = useState<SlotItem[]>([])
@@ -187,7 +191,7 @@ export function BookingWizard() {
         setSlotsError(null)
         setSlotsLoading(true)
         const apiDate = formatDateForApi(formData.date)
-        const response = await api.doctors.getAvailableSlots(formData.doctorId, apiDate)
+        const response = await api.schedules.getByDoctorId(formData.doctorId, { date: apiDate })
         const processed = (response || []).map((slot: any) => ({
           ...slot,
           disabled: Boolean(slot.disabled || slot.disabledReason),
@@ -373,12 +377,18 @@ export function BookingWizard() {
             : (selectedDoctor.specialty?.id ?? selectedDoctor.specialtyId ?? '')
       }
 
-      const appointment = await api.appointments.create({
+      const appointmentPayload: any = {
         specialty: { id: String(specialtyIdToSend || '') },
         doctor: { id: selectedDoctor.id },
         appointmentDate: selectedSlot.startTime,
         symptoms: formData.notes,
-      })
+      }
+
+      if (selectedMedicalServiceId) {
+        appointmentPayload.medicalService = { id: selectedMedicalServiceId }
+      }
+
+      const appointment = await api.appointments.create(appointmentPayload)
 
       navigate(`/patient/appointments/${appointment.id}`, { replace: true })
     } catch (submitErrorValue: any) {
@@ -476,22 +486,32 @@ export function BookingWizard() {
                         type="button"
                         onClick={async () => {
                           setSelectedSpecialtyId(specialty.id)
+                          setSelectedMedicalServiceId(null)
                           setFormData({ ...formData, doctorId: '', date: '', time: '' })
                           setSelectedSlot(null)
+                          setServicesError(null)
+                          setServicesLoading(true)
 
                           try {
-                            const list = await api.doctors.getBySpecialtyId(specialty.id)
+                            const [list, services] = await Promise.all([
+                              api.doctors.getBySpecialtyId(specialty.id),
+                              api.medicalServices.getAll({ specialtyId: specialty.id }),
+                            ])
                             setDoctors(Array.isArray(list) ? list : [])
-                            setCurrentStep(2)
-                          } catch (doctorError: any) {
+                            setMedicalServices(Array.isArray(services) ? services : [])
+                          } catch (fetchError: any) {
+                            const message =
+                              fetchError?.response?.data?.message ||
+                              fetchError?.message ||
+                              'Không thể tải dữ liệu chuyên khoa.'
                             toast({
                               title: 'Lỗi',
-                              description:
-                                doctorError?.response?.data?.message ||
-                                doctorError?.message ||
-                                'Không thể tải bác sĩ',
+                              description: message,
                               variant: 'destructive',
                             })
+                            setServicesError(message)
+                          } finally {
+                            setServicesLoading(false)
                           }
                         }}
                         className={`p-4 rounded-lg border-2 text-center ${
@@ -501,6 +521,56 @@ export function BookingWizard() {
                         {specialty.name}
                       </button>
                     ))}
+                  </div>
+                )}
+
+                {selectedSpecialtyId && (
+                  <div className="space-y-4 pt-6">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-xl font-semibold text-foreground">Gói dịch vụ tùy chọn</h3>
+                        <p className="text-sm text-muted-foreground">Chọn gói nếu bạn muốn, nhưng không bắt buộc.</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedMedicalServiceId(null)}
+                      >
+                        Bỏ chọn gói
+                      </Button>
+                    </div>
+
+                    {servicesLoading ? (
+                      <div className="rounded-3xl border border-border/60 bg-muted/10 p-6 text-center text-muted-foreground">Đang tải gói dịch vụ...</div>
+                    ) : servicesError ? (
+                      <div className="rounded-3xl border border-destructive/60 bg-destructive/10 p-6 text-center text-destructive">{servicesError}</div>
+                    ) : medicalServices.length === 0 ? (
+                      <div className="rounded-3xl border border-border/60 bg-muted/10 p-6 text-center text-muted-foreground">Không có gói dịch vụ cho chuyên khoa này.</div>
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {medicalServices.map((service) => (
+                          <button
+                            key={service.id}
+                            type="button"
+                            onClick={() => setSelectedMedicalServiceId(service.id)}
+                            className={`rounded-3xl border p-4 text-left transition-all ${
+                              selectedMedicalServiceId === service.id ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border hover:border-primary/50'
+                            }`}
+                          >
+                            <div className="flex items-start gap-4">
+                              <div className="flex-1 min-w-0">
+                                <h4 className="text-lg font-semibold text-foreground">{service.name}</h4>
+                                <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{service.description || 'Không có mô tả.'}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-primary font-semibold">{formatCurrency(service.price ?? 0)}</p>
+                                <p className="text-xs text-muted-foreground">{service.specialty?.name || 'Chuyên khoa'}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -881,6 +951,11 @@ export function BookingWizard() {
                 ) : (
                   <p className="text-muted-foreground italic">Chưa chọn</p>
                 )}
+              </div>
+
+              <div className="pb-4 border-b">
+                <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Gói dịch vụ</p>
+                <p className="font-semibold text-foreground">{selectedMedicalServiceId ? medicalServices.find((item) => item.id === selectedMedicalServiceId)?.name : 'Khám bệnh'}</p>
               </div>
 
               {selectedDoctor?.consultationFee && (

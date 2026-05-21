@@ -38,6 +38,12 @@ const adminMenuItems = [
     label: 'Quản lý chuyên khoa',
   },
   {
+    title: 'Dịch vụ',
+    href: '/admin/medical-services',
+    icon: Pill,
+    label: 'Quản lý gói dịch vụ',
+  },
+  {
     title: 'Bác sĩ',
     href: '/admin/doctors',
     icon: Users,

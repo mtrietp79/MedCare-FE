@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Heart, Menu, ChevronDown, User, Calendar, LogOut, BriefcaseMedical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -29,8 +29,7 @@ type AccountMenuItem = {
 const navigation = [
   { name: 'Trang ch\u1EE7', href: '/' },
   { name: 'Chuy\u00ean khoa', href: '/specialty' },
-  { name: 'B\u00e1c s\u0129', href: '/doctors' },
-  { name: '\u0110\u1eb7t l\u1ecbch', href: '/booking' },
+  { name: 'B\u00e1c s\u0129', href: '/doctors' },  { name: 'D\u1ecbch v\u1ee5', href: '/services' },  { name: '\u0110\u1eb7t l\u1ecbch', href: '/booking' },
   { name: 'Li\u00ean h\u1ec7', href: '/contact' },
 ]
 
@@ -248,3 +247,6 @@ export function Header() {
     </header>
   )
 }
+
+
+

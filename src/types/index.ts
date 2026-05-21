@@ -2,7 +2,7 @@ export interface Doctor {
   id: string
   name?: string
   fullName?: string
-  specialty?: string | { id?: string; name?: string; slug?: string }
+  specialty?: string | { id?: string; name?: string; slug?: string; description?: string; createdAt?: string }
   specialtySlug?: string
   specialtyId?: string
   image?: string
@@ -26,6 +26,25 @@ export interface Doctor {
 export interface TimeSlot {
   date: string
   times: string[]
+}
+
+export interface MedicalService {
+  id: string
+  name: string
+  description?: string | null
+  price?: number
+  specialty?: {
+    id?: string
+    name?: string
+  }
+  specialtyId?: string
+  imageUrl?: string | null
+  active?: boolean
+  prescriptionItems?: Array<{
+    medicine?: { id?: string; name?: string }
+    quantity?: number
+    dosage?: string
+  }>
 }
 
 export interface Specialty {
@@ -87,6 +106,10 @@ export interface Appointment {
   paymentStatus?: string
   symptoms?: string
   consultationFee?: number
+  medicalService?: {
+    id?: string
+    name?: string
+  }
   notes?: string
   createdAt?: string
 }

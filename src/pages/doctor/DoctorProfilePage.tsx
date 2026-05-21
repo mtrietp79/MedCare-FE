@@ -32,15 +32,34 @@ interface DoctorProfile {
   email: string
   phone: string
   address: string
-  specialty: string
-  experience: string
-  bio: string
+  specialty?: string | { id?: number | string; name?: string; description?: string; createdAt?: string }
+  specialtyName?: string
+  specialization?: string
+  experience?: string
+  experienceYears?: number
+  bio?: string
   avatar?: string
   licenseNumber: string
   department: string
   joinDate: string
   rating: number
   totalPatients: number
+}
+
+function getSpecialtyLabel(profile: DoctorProfile) {
+  return (
+    profile.specialtyName ??
+    profile.specialization ??
+    (typeof profile.specialty === 'string' ? profile.specialty : profile.specialty?.name) ??
+    'Chưa cập nhật'
+  )
+}
+
+function getExperienceValue(profile: DoctorProfile) {
+  if (profile.experienceYears != null) {
+    return String(profile.experienceYears)
+  }
+  return profile.experience ?? ''
 }
 
 export function DoctorProfilePage() {
@@ -74,9 +93,9 @@ export function DoctorProfilePage() {
         email: data.email,
         phone: data.phone,
         address: data.address,
-        specialty: data.specialty,
-        experience: data.experienceYears ?? data.experience,
-        bio: data.bio
+        specialty: getSpecialtyLabel(data),
+        experience: getExperienceValue(data),
+        bio: data.bio ?? ''
       })
     } catch (error) {
       toast({
@@ -117,9 +136,9 @@ export function DoctorProfilePage() {
         email: profile.email,
         phone: profile.phone,
         address: profile.address,
-        specialty: profile.specialty,
-        experience: profile.experience,
-        bio: profile.bio
+        specialty: getSpecialtyLabel(profile),
+        experience: getExperienceValue(profile),
+        bio: profile.bio ?? ''
       })
     }
     setIsEditing(false)
@@ -184,7 +203,7 @@ export function DoctorProfilePage() {
               </AvatarFallback>
             </Avatar>
             <CardTitle>{profile.fullName}</CardTitle>
-            <CardDescription>{profile.specialty}</CardDescription>
+            <CardDescription>{getSpecialtyLabel(profile)}</CardDescription>
             <div className="flex justify-center space-x-2 mt-2">
               <Badge variant="secondary">{profile.department}</Badge>
             </div>
@@ -260,7 +279,7 @@ export function DoctorProfilePage() {
                 <div className="space-y-2">
                   <Label htmlFor="specialty">Chuyên khoa</Label>
                   <Select
-                    value={profile.specialty}
+                    value={getSpecialtyLabel(profile)}
                     onValueChange={(value) => setValue('specialty', value)}
                     disabled={!isEditing}
                   >

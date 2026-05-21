@@ -220,6 +220,68 @@ export const adminApi = {
     });
   },
 
+  // Medical Service Management APIs
+  getMedicalServices: (): Promise<any[]> => {
+    const token = getStoredToken();
+    return fetchJson<any[]>(`${API_BASE_URL}/medical-services/admin`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+
+  createMedicalService: (data: any) => {
+    const token = getStoredToken();
+    return fetchJson(`${API_BASE_URL}/medical-services`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data)
+    });
+  },
+
+  updateMedicalService: (id: string, data: any) => {
+    const token = getStoredToken();
+    return fetchJson(`${API_BASE_URL}/medical-services/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data)
+    });
+  },
+
+  setMedicalServiceActive: (id: string, active: boolean) => {
+    const token = getStoredToken();
+    return fetchJson(`${API_BASE_URL}/medical-services/${id}/active?active=${active}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+
+  uploadMedicalServicePhoto: (id: string, file: File) => {
+    const token = getStoredToken();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return fetch(`${API_BASE_URL}/medical-services/${id}/photo`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: formData
+    }).then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || 'Không thể upload ảnh')
+      }
+      return response.json()
+    });
+  },
+
+  deleteMedicalServicePhoto: (id: string) => {
+    const token = getStoredToken();
+    return fetchJson(`${API_BASE_URL}/medical-services/${id}/photo`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+
   // Medicine Management APIs
   getMedicines: () => {
     const token = getStoredToken();

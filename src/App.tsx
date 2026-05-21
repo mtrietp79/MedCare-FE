@@ -19,6 +19,7 @@ import { SpecialtyPage } from '@/pages/home/SpecialtyPage'
 import { SpecialtyDetailPage } from '@/pages/home/SpecialtyDetailPage'
 import { ContactPage } from '@/pages/home/ContactPage'
 import { AboutPage } from '@/pages/home/AboutPage'
+import { ServicesPage } from '@/pages/services/ServicesPage'
 
 import { DoctorsPage } from '@/pages/doctors/DoctorsPage'
 import { DoctorDetailPage } from '@/pages/doctors/DoctorDetailPage'
@@ -43,6 +44,7 @@ import { AdminSpecialtiesPage } from '@/pages/admin/AdminSpecialtiesPage'
 import { AdminFinancePage } from '@/pages/admin/AdminFinancePage'
 import { AdminMedicinesPage } from '@/pages/admin/AdminMedicinesPage'
 import { AdminSchedulePage } from '@/pages/admin/AdminSchedulePage'
+import { AdminMedicalServicesPage } from '@/pages/admin/AdminMedicalServicesPage'
 
 import { DoctorDashboardPage } from '@/pages/doctor/DoctorDashboardPage'
 import { DoctorAppointmentsPage } from '@/pages/doctor/DoctorAppointmentsPage'
@@ -83,6 +85,7 @@ function App() {
             <Route element={<MainLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/doctors" element={<DoctorsPage />} />
+              <Route path="/services" element={<ServicesPage />} />
               <Route path="/doctors/:id" element={<DoctorDetailPage />} />
               <Route path="/specialty" element={<SpecialtyPage />} />
               <Route path="/specialty/:id" element={<SpecialtyDetailPage />} />
@@ -145,6 +148,7 @@ function App() {
               <Route path="doctors" element={<AdminDoctorsPage />} />
               <Route path="patients" element={<AdminPatientsPage />} />
               <Route path="specialties" element={<AdminSpecialtiesPage />} />
+              <Route path="medical-services" element={<AdminMedicalServicesPage />} />
               <Route path="finance" element={<AdminFinancePage />} />
               <Route path="schedule" element={<AdminSchedulePage />} />
               <Route path="medicines" element={<AdminMedicinesPage />} />

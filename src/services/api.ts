@@ -1,5 +1,5 @@
 
-import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, SearchResponse } from '@/types'
+import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, SearchResponse, MedicalService } from '@/types'
 import { mockApi } from './mock-api'
 import { getStoredToken, removeStoredToken, removeStoredUser } from './auth'
 
@@ -138,31 +138,18 @@ export const doctorApi = {
   async getBySpecialtyId(specialtyId: string): Promise<Doctor[]> {
     return apiCall<Doctor[]>(`/doctors?specialtyId=${specialtyId}`)
   },
+}
 
-  async create(data: Omit<Doctor, 'id'>): Promise<Doctor> {
-    return apiCall<Doctor>('/doctors', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
+export const medicalServicesApi = {
+  async getAll(query?: { specialtyId?: string }): Promise<MedicalService[]> {
+    const params = new URLSearchParams()
+    if (query?.specialtyId) params.append('specialtyId', query.specialtyId)
+    const endpoint = `/medical-services${params.toString() ? `?${params.toString()}` : ''}`
+    return apiCall<MedicalService[]>(endpoint)
   },
 
-  async update(id: string, data: Partial<Doctor>): Promise<Doctor> {
-    return apiCall<Doctor>(`/doctors/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    })
-  },
-
-  async delete(id: string): Promise<void> {
-    return apiCall<void>(`/doctors/${id}`, {
-      method: 'DELETE',
-    })
-  },
-
-  async getAvailableSlots(doctorId: string, date: string): Promise<Array<{ startTime: string; endTime: string; shift: string; maxPatients: number; bookedPatients: number; full: boolean; disabled: boolean }>> {
-    return apiCall<Array<{ startTime: string; endTime: string; shift: string; maxPatients: number; bookedPatients: number; full: boolean; disabled: boolean }>>(
-      `/appointments/doctor/${doctorId}/slots?date=${date}`
-    )
+  async getById(id: string): Promise<MedicalService> {
+    return apiCall<MedicalService>(`/medical-services/${id}`)
   },
 }
 
@@ -412,6 +399,7 @@ export const api = {
   feedbacks: feedbackApi,
   payments: paymentApi,
   medicines: medicineApi,
+  medicalServices: medicalServicesApi,
   dashboard: dashboardApi,
 }
 

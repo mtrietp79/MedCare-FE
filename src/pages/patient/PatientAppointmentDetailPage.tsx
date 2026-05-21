@@ -88,13 +88,9 @@ export function PatientAppointmentDetailPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Bác sĩ</p>
-              <p className="mt-2 font-medium">{appointment.doctor?.fullName || appointment.doctorName}</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {typeof appointment.specialty === 'string'
-                  ? appointment.specialty
-                  : appointment.specialty?.name || ''}
-              </p>
+              <p className="text-sm text-muted-foreground">Loại khám</p>
+              <p className="mt-2 font-medium">{appointment.medicalService?.name ?? 'Khám bệnh'}</p>
+              <p className="text-sm text-muted-foreground mt-1">{typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name || ''}</p>
             </div>
             <div className="rounded-3xl border p-5">
               <p className="text-sm text-muted-foreground">Thời gian khám</p>

@@ -44,10 +44,7 @@ export function RescheduleAppointmentDialog({
       try {
         setSlotsLoading(true)
         setError(null)
-        const data = await api.doctors.getAvailableSlots(
-          doctorId,
-          selectedDate
-        )
+        const data = await api.schedules.getByDoctorId(doctorId, { date: selectedDate })
         setSlots(data || [])
       } catch (err) {
         setError(

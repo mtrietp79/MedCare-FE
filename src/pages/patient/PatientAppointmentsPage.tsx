@@ -55,6 +55,7 @@ export function PatientAppointmentsPage() {
                   <p className="text-sm text-muted-foreground">Mã đặt lịch</p>
                   <p className="font-semibold">{appointment.appointmentCode || `#${appointment.id}`}</p>
                   <p className="text-sm text-muted-foreground mt-2">{appointment.doctor?.fullName || appointment.doctorName || 'Bác sĩ'}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{appointment.medicalService?.name ?? 'Khám bệnh'}</p>
                 </div>
                 <div className="space-y-2 text-right">
                   <p className="text-sm text-muted-foreground">{appointment.appointmentDate}</p>

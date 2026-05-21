@@ -165,7 +165,6 @@ export function setStoredUser(user: AuthUser) {
 export function removeStoredUser() {
   localStorage.removeItem(USER_KEY)
 }
-<<<<<<< Updated upstream
 
 export const FACEBOOK_CALLBACK_URL = (typeof window !== 'undefined' && (import.meta.env.VITE_FACEBOOK_CALLBACK_URL || '')) || '/auth/facebook/callback'
 export const GOOGLE_CALLBACK_URL = (typeof window !== 'undefined' && (import.meta.env.VITE_GOOGLE_CALLBACK_URL || '')) || '/auth/google/callback'
@@ -179,5 +178,4 @@ export async function loginGoogleByCode(code: string, redirectUri?: string) {
   const { data } = await api.post('/auth/oauth/google/exchange', { code, redirectUri })
   return data
 }
-=======
->>>>>>> Stashed changes
+

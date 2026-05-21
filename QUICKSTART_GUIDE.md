@@ -67,7 +67,7 @@ medcare-fe/
 
 | Name | Color | Usage |
 |------|-------|-------|
-| Primary | `#0084FF` (Blue) | Buttons, links, primary actions |
+| Primary | `#0a8bd8` (Blue) | Buttons, links, primary actions |
 | Secondary | `#F5F7FA` | Backgrounds, secondary elements |
 | Accent | `#00D4FF` (Cyan) | Highlights, icons, accents |
 | Destructive | `#FF4444` | Errors, delete actions |

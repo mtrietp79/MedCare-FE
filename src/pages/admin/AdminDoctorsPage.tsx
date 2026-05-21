@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { Plus, Search, Edit, Trash2 } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
@@ -9,7 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -119,6 +118,9 @@ export function AdminDoctorsPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [formData, setFormData] = useState<DoctorForm>(initialForm)
   const [formErrors, setFormErrors] = useState<FormErrors>({})
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState('')
+  const [photoError, setPhotoError] = useState('')
 
   const fetchDoctors = async () => {
     setLoading(true)
@@ -147,6 +149,14 @@ export function AdminDoctorsPage() {
   useEffect(() => {
     void fetchDoctors()
   }, [])
+
+  useEffect(() => {
+    return () => {
+      if (photoPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(photoPreview)
+      }
+    }
+  }, [photoPreview])
 
   const filteredDoctors = useMemo(() => {
     const keyword = safeLower(debouncedSearch)
@@ -178,6 +188,12 @@ export function AdminDoctorsPage() {
   }, [doctors, debouncedSearch, statusFilter, sortBy])
 
   const resetForm = () => {
+    if (photoPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(photoPreview)
+    }
+    setPhotoFile(null)
+    setPhotoPreview('')
+    setPhotoError('')
     setFormData(initialForm)
     setFormErrors({})
     setSelectedDoctor(null)
@@ -185,6 +201,9 @@ export function AdminDoctorsPage() {
 
   const openEditDialog = (doctor: NormalizedDoctor) => {
     setSelectedDoctor(doctor)
+    setPhotoFile(null)
+    setPhotoPreview(doctor.imageUrl || '')
+    setPhotoError('')
     setFormData({
       fullName: doctor.fullName,
       email: doctor.email,
@@ -197,6 +216,42 @@ export function AdminDoctorsPage() {
     })
     setFormErrors({})
     setIsEditDialogOpen(true)
+  }
+
+  const parseFieldErrors = (message?: string): FormErrors => {
+    const errors: FormErrors = {}
+    const lower = String(message || '').toLowerCase()
+
+    if (lower.includes('email')) {
+      errors.email = 'Email đã tồn tại hoặc không hợp lệ.'
+    }
+    if (lower.includes('username')) {
+      errors.username = 'Tên đăng nhập đã tồn tại.'
+    }
+
+    return errors
+  }
+
+  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setPhotoError('')
+    const file = event.target.files?.[0]
+    if (!file) {
+      setPhotoFile(null)
+      setPhotoPreview(selectedDoctor?.imageUrl || '')
+      return
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Vui lòng chọn file ảnh hợp lệ.')
+      return
+    }
+
+    if (photoPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(photoPreview)
+    }
+
+    setPhotoFile(file)
+    setPhotoPreview(URL.createObjectURL(file))
   }
 
   const getCreatePayload = (form: DoctorForm) => ({
@@ -220,6 +275,11 @@ export function AdminDoctorsPage() {
     status: form.status,
   })
 
+  const uploadDoctorPhoto = async (doctorId: string) => {
+    if (!photoFile) return
+    await adminApi.uploadDoctorPhoto(doctorId, photoFile)
+  }
+
   const handleCreate = async () => {
     const errors = validateDoctorForm(formData, false)
     setFormErrors(errors)
@@ -227,12 +287,19 @@ export function AdminDoctorsPage() {
 
     setIsSubmitting(true)
     try {
-      await adminApi.createDoctor(getCreatePayload(formData))
+      const createdDoctor: any = await adminApi.createDoctor(getCreatePayload(formData))
+      if (photoFile && createdDoctor?.id) {
+        await uploadDoctorPhoto(createdDoctor.id)
+      }
       toast({ title: 'Thành công', description: 'Đã tạo bác sĩ mới.' })
       setIsCreateDialogOpen(false)
       resetForm()
       await fetchDoctors()
     } catch (createError: any) {
+      const fieldErrors = parseFieldErrors(createError?.message || createError?.data?.message)
+      if (Object.keys(fieldErrors).length > 0) {
+        setFormErrors(fieldErrors)
+      }
       toast({
         title: 'Lỗi',
         description: createError?.message || 'Không thể tạo bác sĩ.',
@@ -253,11 +320,18 @@ export function AdminDoctorsPage() {
     setIsSubmitting(true)
     try {
       await adminApi.updateDoctor(selectedDoctor.id, getUpdatePayload(formData))
+      if (photoFile) {
+        await uploadDoctorPhoto(selectedDoctor.id)
+      }
       toast({ title: 'Thành công', description: 'Đã cập nhật thông tin bác sĩ.' })
       setIsEditDialogOpen(false)
       resetForm()
       await fetchDoctors()
     } catch (updateError: any) {
+      const fieldErrors = parseFieldErrors(updateError?.message || updateError?.data?.message)
+      if (Object.keys(fieldErrors).length > 0) {
+        setFormErrors(fieldErrors)
+      }
       toast({
         title: 'Lỗi',
         description: updateError?.message || 'Không thể cập nhật bác sĩ.',
@@ -345,6 +419,36 @@ export function AdminDoctorsPage() {
           value={formData.experience}
           onChange={(e) => setFormData((prev) => ({ ...prev, experience: e.target.value }))}
         />
+      </div>
+
+      <div className="grid gap-2">
+        <Label>Ảnh bác sĩ</Label>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="relative h-24 w-24 overflow-hidden rounded-3xl border border-border bg-slate-100">
+            {photoPreview || selectedDoctor?.imageUrl ? (
+              <img
+                src={photoPreview || selectedDoctor?.imageUrl || ''}
+                alt={formData.fullName || 'Ảnh bác sĩ'}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-muted text-muted-foreground text-3xl font-semibold">
+                {(formData.fullName || formData.username || 'B').charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-2 flex-1">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoChange}
+              className="text-sm text-foreground file:rounded-full file:border-0 file:bg-primary file:px-4 file:py-2 file:text-primary-foreground file:hover:bg-primary/90"
+            />
+            <p className="text-xs text-muted-foreground">Chọn ảnh bác sĩ để hiển thị trong danh sách quản lý.</p>
+            {photoError && <p className="text-xs text-red-600">{photoError}</p>}
+          </div>
+        </div>
       </div>
 
       {!isEdit && (
@@ -471,32 +575,50 @@ export function AdminDoctorsPage() {
           )}
 
           {!loading && !error && filteredDoctors.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Họ tên</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Điện thoại</TableHead>
-                  <TableHead>Chuyên khoa</TableHead>
-                  <TableHead>Kinh nghiệm</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead className="text-right">Hành động</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredDoctors.map((doctor) => (
-                  <TableRow key={doctor.id}>
-                    <TableCell className="font-medium">{doctor.fullName || '-'}</TableCell>
-                    <TableCell>{doctor.email || '-'}</TableCell>
-                    <TableCell>{doctor.phone || '-'}</TableCell>
-                    <TableCell>{doctor.specialtyName || '-'}</TableCell>
-                    <TableCell>{doctor.experience} năm</TableCell>
-                    <TableCell>{statusBadge(doctor.status)}</TableCell>
-                    <TableCell className="text-right">
+            <div className="space-y-4">
+              {filteredDoctors.map((doctor) => (
+                <div
+                  key={doctor.id}
+                  className="grid gap-4 rounded-3xl border border-border bg-card p-4 shadow-sm sm:grid-cols-[auto_1fr_auto] sm:items-center"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="relative h-20 w-20 overflow-hidden rounded-3xl bg-slate-100 border border-border">
+                      {doctor.imageUrl ? (
+                        <img
+                          src={doctor.imageUrl}
+                          alt={doctor.fullName || 'Bác sĩ'}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-primary text-primary-foreground text-3xl font-semibold">
+                          {(doctor.fullName || doctor.username || 'B').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-lg font-semibold text-foreground">{doctor.fullName || '-'}</p>
+                      <p className="text-sm text-muted-foreground">{doctor.specialtyName || '-'}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 text-sm text-muted-foreground">
+                    <div>
+                      <span className="font-medium text-foreground">Email:</span> {doctor.email || '-'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Điện thoại:</span> {doctor.phone || '-'}
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Kinh nghiệm:</span> {doctor.experience} năm
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-start justify-between gap-3 sm:items-end">
+                    {statusBadge(doctor.status)}
+                    <div className="flex gap-2">
                       <Button variant="ghost" size="sm" onClick={() => openEditDialog(doctor)}>
                         <Edit className="h-4 w-4" />
                       </Button>
-
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button variant="ghost" size="sm">
@@ -516,11 +638,11 @@ export function AdminDoctorsPage() {
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

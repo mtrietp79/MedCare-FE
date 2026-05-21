@@ -4,8 +4,8 @@
 
 ### Primary Colors
 ```css
---primary: oklch(0.59 0.17 240);         /* Blue #0084FF - Trust */
---primary-foreground: oklch(1 0 0);       /* White - Foreground */
+--primary: oklch(0.55 0.175 195);        /* Blue #0a8bd8 - Trust */
+--primary-foreground: oklch(1 0 0);      /* White - Foreground */
 ```
 
 ### Secondary Colors

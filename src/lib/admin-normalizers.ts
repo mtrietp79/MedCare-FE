@@ -27,7 +27,35 @@ export interface NormalizedDoctor {
   specialtyId: string
   experience: number
   status: 'active' | 'inactive'
+  imageUrl: string
   raw: any
+}
+
+function normalizeDoctorImageUrl(raw: any): string {
+  const candidate = safeString(raw?.imageUrl ?? raw?.photoUrl ?? raw?.photo)
+  const hasPhotoId = safeString(raw?.photoId)
+  const doctorId = safeString(raw?.id)
+  const baseUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api'
+
+  let imagePath = candidate
+  if (!imagePath && hasPhotoId && doctorId) {
+    imagePath = `/api/doctors/${doctorId}/photo`
+  }
+
+  if (!imagePath) {
+    return ''
+  }
+
+  if (/^https?:\/\//i.test(imagePath)) {
+    return imagePath
+  }
+
+  const normalizedBase = baseUrl.replace(/\/$/, '')
+  const normalizedPath = imagePath.startsWith('/api') && normalizedBase.endsWith('/api')
+    ? imagePath.replace(/^\/api/, '')
+    : imagePath
+
+  return `${normalizedBase}${normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`}`
 }
 
 export function normalizeDoctor(raw: any): NormalizedDoctor {
@@ -49,6 +77,7 @@ export function normalizeDoctor(raw: any): NormalizedDoctor {
       0
     ),
     status: safeString(raw?.status).toLowerCase() === 'inactive' ? 'inactive' : 'active',
+    imageUrl: normalizeDoctorImageUrl(raw),
     raw,
   }
 }

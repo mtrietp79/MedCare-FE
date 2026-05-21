@@ -274,6 +274,26 @@ export const adminApi = {
     });
   },
 
+  uploadDoctorPhoto: (id: string, file: File) => {
+    const token = getStoredToken();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return fetch(`${API_BASE_URL}/doctors/${id}/photo`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: formData
+    }).then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || 'Không thể upload ảnh bác sĩ')
+      }
+      return response.json()
+    });
+  },
+
   deleteMedicalServicePhoto: (id: string) => {
     const token = getStoredToken();
     return fetchJson(`${API_BASE_URL}/medical-services/${id}/photo`, {

@@ -4,7 +4,7 @@
 
 MedCare frontend is built with a **clean, minimal, and healthcare-oriented** design approach:
 
-- **Primary Colors**: Blue (#0084FF) - Trust, professionalism, healthcare
+- **Primary Colors**: Blue (#0a8bd8) - Trust, professionalism, healthcare
 - **Secondary Colors**: White, light grays - Clarity and simplicity
 - **Accent Colors**: Cyan/Turquoise - Energy and innovation
 - **Spacing**: Consistent 8px grid system

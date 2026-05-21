@@ -221,7 +221,7 @@ Fixed complete authentication flow to support:
 ## 🎨 Design Consistency
 
 ### Color System
-- Blue (#0084FF) - Trust & professionalism
+- Blue (#0a8bd8) - Trust & professionalism
 - White - Clarity & simplicity  
 - Cyan (#00D4FF) - Energy & innovation
 - Grays - Hierarchy & readability

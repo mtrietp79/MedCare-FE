@@ -159,7 +159,7 @@ src/lib/
 ## 🎨 Design System at a Glance
 
 ### Colors
-- **Primary**: Blue (#0084FF) - Trust, healthcare
+- **Primary**: Blue (#0a8bd8) - Trust, healthcare
 - **Secondary**: White & Light Gray - Clean, minimal
 - **Accent**: Cyan (#00D4FF) - Energy, innovation
 - **Semantic**: Green (success), Red (error), Yellow (warning)

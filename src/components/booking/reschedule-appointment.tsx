@@ -12,7 +12,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { api } from '@/services/api'
+import { api, type ApiRequestError, type AppointmentSlot } from '@/services/api'
 import type { Appointment } from '@/types'
 
 interface RescheduleAppointmentProps {
@@ -28,7 +28,8 @@ export function RescheduleAppointmentDialog({
   const [isLoading, setIsLoading] = useState(false)
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [slots, setSlots] = useState<any[]>([])
+  const [slotsFetchError, setSlotsFetchError] = useState<string | null>(null)
+  const [slots, setSlots] = useState<AppointmentSlot[]>([])
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedTime, setSelectedTime] = useState('')
 
@@ -37,16 +38,32 @@ export function RescheduleAppointmentDialog({
     const doctorId = appointment.doctorId
     if (!selectedDate || !doctorId) {
       setSlots([])
+      setSlotsFetchError(null)
       return
     }
 
     const fetchSlots = async () => {
       try {
         setSlotsLoading(true)
-        setError(null)
-        const data = await api.schedules.getByDoctorId(doctorId, { date: selectedDate })
-        setSlots(data || [])
-      } catch (err) {
+        setSlotsFetchError(null)
+        const data = await api.appointments.getDoctorSlots(doctorId, selectedDate)
+        setSlots(
+          (data || []).map((slot) => ({
+            ...slot,
+            disabled: Boolean(slot.disabled),
+            full: Boolean(slot.full),
+          }))
+        )
+      } catch (err: unknown) {
+        const apiError = err as ApiRequestError
+        console.error('[RescheduleAppointmentDialog] Failed to fetch doctor slots', {
+          doctorId,
+          inputDate: selectedDate,
+          status: apiError?.status,
+          body: apiError?.data,
+          message: apiError?.message,
+        })
+        setSlotsFetchError(apiError?.message || 'Khong the tai khung gio kha dung')
         setError(
           err instanceof Error ? err.message : 'Không thể tải khung giờ khả dụng'
         )
@@ -56,7 +73,7 @@ export function RescheduleAppointmentDialog({
       }
     }
 
-    fetchSlots()
+    void fetchSlots()
   }, [selectedDate, appointment.doctorId])
 
   const handleReschedule = async () => {
@@ -80,6 +97,8 @@ export function RescheduleAppointmentDialog({
       setIsOpen(false)
       setSelectedDate('')
       setSelectedTime('')
+      setSlots([])
+      setSlotsFetchError(null)
       onSuccess?.(updatedAppointment)
     } catch (err) {
       setError(
@@ -163,6 +182,7 @@ export function RescheduleAppointmentDialog({
                   setSelectedDate(e.target.value)
                   setSelectedTime('')
                   setError(null)
+                  setSlotsFetchError(null)
                 }}
                 min={new Date().toISOString().split('T')[0]}
                 className="text-base"
@@ -179,6 +199,10 @@ export function RescheduleAppointmentDialog({
                   <div className="text-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
                     <p className="text-sm text-muted-foreground">Đang tải khung giờ...</p>
+                  </div>
+                ) : slotsFetchError ? (
+                  <div className="text-center py-8 text-destructive text-sm">
+                    <p className="font-medium">{slotsFetchError}</p>
                   </div>
                 ) : slots.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground text-sm">
@@ -236,6 +260,7 @@ export function RescheduleAppointmentDialog({
                 setSelectedDate('')
                 setSelectedTime('')
                 setError(null)
+                setSlotsFetchError(null)
               }}
               disabled={isLoading}
             >

@@ -1,4 +1,4 @@
-import { BookingWizard } from '@/components/booking/booking-wizard'
+﻿import { BookingWizard } from '@/components/booking/booking-wizard'
 
 export function BookingPage() {
   return (
@@ -9,13 +9,14 @@ export function BookingPage() {
             Đặt lịch khám bệnh
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl">
-            Hãy làm theo 4 bước đơn giản: chọn bác sĩ, ngày giờ, nhập thông tin và xác nhận để hoàn tất đặt lịch
+            Đặt lịch theo bác sĩ/chuyên khoa như thông thường hoặc đi thẳng từ gói dịch vụ đã chọn.
           </p>
         </div>
-        
+
         <BookingWizard />
       </div>
     </div>
   )
 }
+
 

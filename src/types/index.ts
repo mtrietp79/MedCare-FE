@@ -6,6 +6,9 @@ export interface Doctor {
   specialtySlug?: string
   specialtyId?: string
   image?: string
+  imageUrl?: string | null
+  photoUrl?: string | null
+  photoId?: string | number | null
   avatar?: string
   experience?: number
   experienceYears?: number
@@ -21,6 +24,7 @@ export interface Doctor {
   fee?: number
   availableSlots?: Array<{ date: string; times: string[] }>
   specialtyName?: string
+  specialization?: string
 }
 
 export interface TimeSlot {
@@ -40,6 +44,15 @@ export interface MedicalService {
   specialtyId?: string
   imageUrl?: string | null
   active?: boolean
+  assignedDoctor?: {
+    id?: string
+    fullName?: string
+    price?: number
+    specialty?: {
+      id?: string
+      name?: string
+    }
+  } | null
   prescriptionItems?: Array<{
     medicine?: { id?: string; name?: string }
     quantity?: number

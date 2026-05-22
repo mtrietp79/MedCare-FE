@@ -46,6 +46,7 @@ interface DoctorForm {
   username: string
   password: string
   experience: string
+  price: string
   status: 'active' | 'inactive'
 }
 
@@ -56,6 +57,7 @@ interface FormErrors {
   specialtyId?: string
   username?: string
   password?: string
+  price?: string
 }
 
 const initialForm: DoctorForm = {
@@ -66,6 +68,7 @@ const initialForm: DoctorForm = {
   username: '',
   password: '',
   experience: '0',
+  price: '0',
   status: 'active',
 }
 
@@ -94,6 +97,10 @@ function validateDoctorForm(form: DoctorForm, isEdit: boolean): FormErrors {
 
   if (!isEdit && form.password.trim().length < 6) {
     errors.password = 'Mật khẩu tối thiểu 6 ký tự.'
+  }
+
+  if (Number(form.price) < 0 || Number.isNaN(Number(form.price))) {
+    errors.price = 'Giá khám phải là số lớn hơn hoặc bằng 0.'
   }
 
   return errors
@@ -212,6 +219,7 @@ export function AdminDoctorsPage() {
       username: doctor.username,
       password: '',
       experience: String(doctor.experience),
+      price: String(doctor.price ?? 0),
       status: doctor.status,
     })
     setFormErrors({})
@@ -258,6 +266,7 @@ export function AdminDoctorsPage() {
     fullName: form.fullName.trim(),
     email: form.email.trim() || null,
     phone: form.phone.trim() || null,
+    price: Number(form.price) || 0,
     experienceYears: Number(form.experience),
     specialty: form.specialtyId ? { id: form.specialtyId } : null,
     account: {
@@ -270,6 +279,7 @@ export function AdminDoctorsPage() {
     fullName: form.fullName.trim(),
     email: form.email.trim() || null,
     phone: form.phone.trim() || null,
+    price: Number(form.price) || 0,
     ...(form.experience !== '' ? { experienceYears: Number(form.experience) } : {}),
     specialty: form.specialtyId ? { id: form.specialtyId } : null,
     status: form.status,
@@ -419,6 +429,18 @@ export function AdminDoctorsPage() {
           value={formData.experience}
           onChange={(e) => setFormData((prev) => ({ ...prev, experience: e.target.value }))}
         />
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor={isEdit ? 'edit-price' : 'create-price'}>Giá khám (VND)</Label>
+        <Input
+          id={isEdit ? 'edit-price' : 'create-price'}
+          type="number"
+          min={0}
+          value={formData.price}
+          onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
+        />
+        {formErrors.price && <p className="text-xs text-red-600">{formErrors.price}</p>}
       </div>
 
       <div className="grid gap-2">
@@ -611,6 +633,9 @@ export function AdminDoctorsPage() {
                     <div>
                       <span className="font-medium text-foreground">Kinh nghiệm:</span> {doctor.experience} năm
                     </div>
+                    <div>
+                      <span className="font-medium text-foreground">Giá khám:</span> {(doctor.price || 0).toLocaleString('vi-VN')} VND
+                    </div>
                   </div>
 
                   <div className="flex flex-col items-start justify-between gap-3 sm:items-end">
@@ -670,3 +695,5 @@ export function AdminDoctorsPage() {
     </div>
   )
 }
+
+

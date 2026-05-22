@@ -26,6 +26,7 @@ export interface NormalizedDoctor {
   username: string
   specialtyId: string
   experience: number
+  price: number
   status: 'active' | 'inactive'
   imageUrl: string
   raw: any
@@ -76,6 +77,7 @@ export function normalizeDoctor(raw: any): NormalizedDoctor {
       raw?.experienceYears ?? raw?.yearsExperience ?? raw?.years_of_experience ?? raw?.experience_years ?? raw?.experience,
       0
     ),
+    price: safeNumber(raw?.price ?? raw?.consultationFee ?? raw?.fee, 0),
     status: safeString(raw?.status).toLowerCase() === 'inactive' ? 'inactive' : 'active',
     imageUrl: normalizeDoctorImageUrl(raw),
     raw,

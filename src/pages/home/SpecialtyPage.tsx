@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
+import { Activity, HeartPulse, ShieldCheck, Stethoscope, Users, Sparkles } from 'lucide-react'
 import { api } from '@/services/api'
 import type { Doctor, Specialty } from '@/types'
 
@@ -8,6 +9,17 @@ function getSpecialtyId(doctor: Doctor) {
     return doctor.specialty?.id || doctor.specialtyId
   }
   return doctor.specialtyId
+}
+
+const specialtyIcons = [Stethoscope, HeartPulse, ShieldCheck, Activity, Users, Sparkles]
+
+function getIconBySpecialtyId(id: string | number | undefined) {
+  if (!id) {
+    return Stethoscope
+  }
+
+  const index = Number(String(id).split('').reduce((sum, char) => sum + char.charCodeAt(0), 0))
+  return specialtyIcons[index % specialtyIcons.length]
 }
 
 export function SpecialtyPage() {
@@ -55,49 +67,97 @@ export function SpecialtyPage() {
     fetchSpecialties()
   }, [])
 
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2">Chuyên khoa</h1>
-        <p className="text-muted-foreground">Chọn chuyên khoa để tìm bác sĩ phù hợp</p>
-      </div>
-      
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-40 bg-gray-200 rounded-lg animate-pulse"></div>
-          ))}
-        </div>
-      ) : error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-8 text-center">
-          <p className="text-red-700 mb-4">Lỗi: {error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
+  const cards = useMemo(
+    () =>
+      specialties.map((specialty) => {
+        const Icon = getIconBySpecialtyId(specialty.id)
+        return (
+          <Link
+            key={specialty.id}
+            to={`/specialty/${specialty.id}`}
+            className="group block overflow-hidden rounded-[2rem] border border-slate-200 bg-white/95 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-2xl"
           >
-            Thử lại
-          </button>
+            <div className="p-6 lg:p-8">
+              <div className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-primary/10 text-primary transition group-hover:bg-primary/15">
+                <Icon className="h-8 w-8" />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-900 mb-3">{specialty.name}</h3>
+              <p className="text-sm leading-6 text-slate-600 min-h-[3rem]">
+                {specialty.description || 'Khám chuyên sâu với đội ngũ bác sĩ giàu kinh nghiệm.'}
+              </p>
+            </div>
+            <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 flex items-center justify-between text-sm text-slate-700">
+              <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+                {specialty.doctorCount ?? 0} bác sĩ
+              </span>
+              <span className="font-semibold text-primary">Xem chuyên khoa →</span>
+            </div>
+          </Link>
+        )
+      }),
+    [specialties]
+  )
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="relative overflow-hidden pb-24">
+        <div className="absolute inset-x-0 top-0 h-64 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 opacity-90 blur-3xl" />
+        <div className="container relative mx-auto px-4 pt-20">
+          <div className="rounded-[2rem] border border-white/20 bg-white/90 p-8 shadow-2xl backdrop-blur-xl sm:p-12">
+            <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.25em] text-white/80 mb-3">Khám phá chuyên khoa</p>
+                <h1 className="text-4xl font-bold text-slate-950 sm:text-5xl">
+                  Chuyên khoa chăm sóc sức khỏe chuẩn chỉnh
+                </h1>
+                <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600">
+                  Chọn đúng chuyên khoa, kết nối với bác sĩ phù hợp và đặt lịch khám nhanh chóng.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-3xl bg-slate-100 p-5">
+                  <p className="text-sm text-slate-500">Tổng chuyên khoa</p>
+                  <p className="mt-2 text-3xl font-semibold text-slate-900">{specialties.length}</p>
+                </div>
+                <div className="rounded-3xl bg-slate-100 p-5">
+                  <p className="text-sm text-slate-500">Bác sĩ chuyên khoa</p>
+                  <p className="mt-2 text-3xl font-semibold text-slate-900">
+                    {specialties.reduce((sum, item) => sum + (item.doctorCount ?? 0), 0)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      ) : specialties.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 p-8 text-center">
-          <p className="text-muted-foreground">Chưa có chuyên khoa nào</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {specialties.map((specialty) => (
-            <Link
-              key={specialty.id}
-              to={`/specialty/${specialty.id}`}
-              className="p-6 border rounded-lg hover:shadow-lg transition-shadow cursor-pointer hover:border-primary"
+      </div>
+
+      <div className="container mx-auto px-4 pb-16">
+        {loading ? (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[...Array(6)].map((_, index) => (
+              <div key={index} className="h-60 rounded-[1.5rem] bg-slate-200/80 animate-pulse" />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="rounded-[1.5rem] border border-red-200 bg-red-50 p-8 text-center">
+            <p className="text-red-700 mb-4">Lỗi: {error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
             >
-              <div className="text-4xl mb-4">🏥</div>
-              <h3 className="font-semibold text-lg mb-2">{specialty.name}</h3>
-              <p className="text-sm text-muted-foreground">{specialty.description || 'Dịch vụ chuyên khoa'}</p>
-              <p className="text-sm text-primary mt-3 font-medium">{specialty.doctorCount ?? 0} bác sĩ</p>
-            </Link>
-          ))}
-        </div>
-      )}
+              Thử lại
+            </button>
+          </div>
+        ) : specialties.length === 0 ? (
+          <div className="rounded-[1.5rem] border border-slate-200 bg-white p-12 text-center">
+            <p className="text-slate-500">Hiện chưa có chuyên khoa nào để hiển thị.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {cards}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

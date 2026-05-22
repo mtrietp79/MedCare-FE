@@ -28,7 +28,11 @@ function getDoctorSpecialtyName(doctor: Doctor) {
   if (typeof doctor.specialty === 'string') {
     return doctor.specialty || 'Chưa cập nhật'
   }
-  return doctor.specialty?.name || 'Chưa cập nhật'
+  return doctor.specialty?.name || doctor.specialtyName || doctor.specialization || 'Chưa cập nhật'
+}
+
+function getDoctorImageUrl(doctor: Doctor) {
+  return doctor.imageUrl || doctor.photoUrl || doctor.image || doctor.avatar || null
 }
 
 export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCardProps) {
@@ -41,6 +45,7 @@ export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCar
   const experienceYears = doctor.experienceYears ?? doctor.experience ?? 0
   const priceLabel = formatPrice(doctor.price ?? doctor.consultationFee ?? doctor.fee)
   const ratingValue = typeof doctor.rating === 'number' ? doctor.rating.toFixed(1) : '0.0'
+  const imageUrl = getDoctorImageUrl(doctor)
 
   const cardVariants = {
     hidden: { opacity: 0, y: 18 },
@@ -55,18 +60,6 @@ export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCar
     },
   }
 
-  const hoverVariants = {
-    hover: {
-      y: -6,
-      boxShadow: '0 18px 30px rgba(0, 0, 0, 0.08)',
-      transition: {
-        type: 'spring',
-        stiffness: 260,
-        damping: 18,
-      },
-    },
-  }
-
   if (variant === 'compact') {
     return (
       <Link to={`/doctors/${doctor.id}`}>
@@ -74,9 +67,17 @@ export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCar
           <Card className="group cursor-pointer overflow-hidden">
             <CardContent className="p-4">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
-                  {doctorName.split(' ').pop()?.charAt(0)}
-                </div>
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={doctorName}
+                    className="h-16 w-16 rounded-2xl object-cover bg-muted"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
+                    {doctorName.split(' ').pop()?.charAt(0)}
+                  </div>
+                )}
                 <div className="min-w-0">
                   <h3 className="text-lg font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                     {doctorName}
@@ -100,10 +101,18 @@ export function DoctorCard({ doctor, variant = 'default', index = 0 }: DoctorCar
       <motion.div variants={cardVariants} initial="hidden" animate="visible" whileHover="hover">
         <Card className="group cursor-pointer overflow-hidden h-full">
           <CardContent className="p-0">
-            <div className="relative h-44 bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-              <div className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center text-4xl font-bold text-primary">
-                {doctorName.split(' ').pop()?.charAt(0)}
-              </div>
+            <div className="relative h-52 bg-slate-100 flex items-center justify-center">
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt={doctorName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-slate-100 flex items-center justify-center text-muted-foreground">
+                  Không có ảnh
+                </div>
+              )}
               <Badge className="absolute top-4 right-4 bg-accent text-accent-foreground px-3 py-1 text-xs font-medium">
                 {doctorSpecialty}
               </Badge>

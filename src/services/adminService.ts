@@ -1,4 +1,4 @@
-import { API_BASE_URL, fetchJson, getStoredToken } from './auth';
+﻿import { API_BASE_URL, fetchJson, getStoredToken } from './auth';
 
 interface AdminDashboardSummary {
   totalPatients: number
@@ -50,6 +50,7 @@ interface CreateDoctorPayload {
   fullName: string
   email: string | null
   phone: string | null
+  price?: number
   experienceYears?: number
   specialty?: { id: string } | null
   account: {
@@ -62,6 +63,7 @@ interface UpdateDoctorPayload {
   fullName: string
   email: string | null
   phone: string | null
+  price?: number
   experienceYears?: number
   specialty?: { id: string } | null
   status: 'active' | 'inactive'
@@ -221,9 +223,13 @@ export const adminApi = {
   },
 
   // Medical Service Management APIs
-  getMedicalServices: (): Promise<any[]> => {
+  getMedicalServices: (query?: { q?: string }) => {
     const token = getStoredToken();
-    return fetchJson<any[]>(`${API_BASE_URL}/medical-services/admin`, {
+    const params = new URLSearchParams()
+    if (query?.q) params.append('q', query.q)
+    const endpoint = `${API_BASE_URL}/medical-services/admin${params.toString() ? `?${params.toString()}` : ''}`
+
+    return fetchJson<any[]>(endpoint, {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
@@ -268,7 +274,7 @@ export const adminApi = {
     }).then(async (response) => {
       if (!response.ok) {
         const text = await response.text()
-        throw new Error(text || 'Không thể upload ảnh')
+        throw new Error(text || 'KhÃ´ng thá»ƒ upload áº£nh')
       }
       return response.json()
     });
@@ -288,7 +294,7 @@ export const adminApi = {
     }).then(async (response) => {
       if (!response.ok) {
         const text = await response.text()
-        throw new Error(text || 'Không thể upload ảnh bác sĩ')
+        throw new Error(text || 'KhÃ´ng thá»ƒ upload áº£nh bÃ¡c sÄ©')
       }
       return response.json()
     });
@@ -399,3 +405,6 @@ export const adminApi = {
     });
   }
 };
+
+
+

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Plus, Edit, Archive, Upload, Trash2 } from 'lucide-react'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { Plus, Edit, Archive, Search } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -19,17 +20,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -43,6 +33,7 @@ interface ServiceFormData {
   description: string
   price: string
   specialtyId: string
+  assignedDoctorId: string
   prescriptionItems: Array<{ medicineId: string; quantity: string; dosage: string }>
   active: boolean
 }
@@ -52,6 +43,7 @@ const initialForm: ServiceFormData = {
   description: '',
   price: '0',
   specialtyId: '',
+  assignedDoctorId: '',
   prescriptionItems: [],
   active: true,
 }
@@ -60,8 +52,12 @@ export function AdminMedicalServicesPage() {
   const { toast } = useToast()
   const [services, setServices] = useState<any[]>([])
   const [specialties, setSpecialties] = useState<any[]>([])
+  const [doctors, setDoctors] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const debouncedSearch = useDebouncedValue(searchInput, 350)
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedService, setSelectedService] = useState<any | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -70,30 +66,31 @@ export function AdminMedicalServicesPage() {
   const [formError, setFormError] = useState('')
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoError, setPhotoError] = useState('')
-  const [photoUploading, setPhotoUploading] = useState(false)
 
-  const fetchData = async () => {
+  const fetchData = async (keyword?: string) => {
     setLoading(true)
     setError('')
 
     try {
-      const [servicesData, specialtiesData] = await Promise.all([
-        adminApi.getMedicalServices(),
+      const [servicesData, specialtiesData, doctorsData] = await Promise.all([
+        adminApi.getMedicalServices({ q: keyword?.trim() || undefined }),
         adminApi.getSpecialties(),
+        adminApi.getDoctors(),
       ])
 
       setServices(Array.isArray(servicesData) ? servicesData : [])
       setSpecialties(Array.isArray(specialtiesData) ? specialtiesData : [])
+      setDoctors(Array.isArray(doctorsData) ? doctorsData : [])
     } catch (fetchError: any) {
-      setError(fetchError?.message || 'Không thể tải dữ liệu dịch vụ y tế.')
+      setError(fetchError?.message || 'Không thể tải dữ liệu gói dịch vụ.')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    void fetchData()
-  }, [])
+    void fetchData(debouncedSearch)
+  }, [debouncedSearch])
 
   const validateForm = () => {
     if (!formData.name.trim()) {
@@ -110,7 +107,7 @@ export function AdminMedicalServicesPage() {
     }
     for (const item of formData.prescriptionItems) {
       if (!item.medicineId.trim() || !item.quantity.trim() || !item.dosage.trim()) {
-        setFormError('Các mục kê đơn phải có đầy đủ thuốc, số lượng và liều dùng hoặc bỏ trống toàn bộ.')
+        setFormError('Các mục kê đơn cần đầy đủ thuốc, số lượng và liều dùng hoặc để trống toàn bộ.')
         return false
       }
       if (Number(item.quantity) < 0 || Number.isNaN(Number(item.quantity))) {
@@ -126,13 +123,14 @@ export function AdminMedicalServicesPage() {
     name: formData.name.trim(),
     description: formData.description.trim() || null,
     price: Number(formData.price) || 0,
+    active: formData.active,
     specialty: { id: formData.specialtyId },
+    assignedDoctor: formData.assignedDoctorId ? { id: formData.assignedDoctorId } : null,
     prescriptionItems: formData.prescriptionItems.map((item) => ({
       medicine: { id: item.medicineId.trim() },
       quantity: Number(item.quantity) || 0,
       dosage: item.dosage.trim(),
     })),
-    active: formData.active,
   })
 
   const resetForm = () => {
@@ -143,18 +141,14 @@ export function AdminMedicalServicesPage() {
     setSelectedService(null)
   }
 
-  const openCreateDialog = () => {
-    resetForm()
-    setIsCreateDialogOpen(true)
-  }
-
   const openEditDialog = (service: any) => {
     setSelectedService(service)
     setFormData({
       name: service.name || '',
       description: service.description || '',
       price: String(service.price ?? 0),
-      specialtyId: service.specialty?.id || service.specialtyId || '',
+      specialtyId: String(service.specialty?.id || service.specialtyId || ''),
+      assignedDoctorId: service.assignedDoctor?.id ? String(service.assignedDoctor.id) : '',
       prescriptionItems: Array.isArray(service.prescriptionItems)
         ? service.prescriptionItems.map((item: any) => ({
             medicineId: item?.medicine?.id ? String(item.medicine.id) : '',
@@ -172,7 +166,6 @@ export function AdminMedicalServicesPage() {
 
   const handleCreate = async () => {
     if (!validateForm()) return
-
     setIsSubmitting(true)
     try {
       const created = await adminApi.createMedicalService(getPayload())
@@ -182,7 +175,7 @@ export function AdminMedicalServicesPage() {
       toast({ title: 'Thành công', description: 'Đã tạo gói dịch vụ mới.' })
       setIsCreateDialogOpen(false)
       resetForm()
-      await fetchData()
+      await fetchData(debouncedSearch)
     } catch (createError: any) {
       toast({ title: 'Lỗi', description: createError?.message || 'Không thể tạo gói dịch vụ.', variant: 'destructive' })
     } finally {
@@ -203,7 +196,7 @@ export function AdminMedicalServicesPage() {
       toast({ title: 'Thành công', description: 'Đã cập nhật gói dịch vụ.' })
       setIsEditDialogOpen(false)
       resetForm()
-      await fetchData()
+      await fetchData(debouncedSearch)
     } catch (updateError: any) {
       toast({ title: 'Lỗi', description: updateError?.message || 'Không thể cập nhật gói dịch vụ.', variant: 'destructive' })
     } finally {
@@ -214,8 +207,8 @@ export function AdminMedicalServicesPage() {
   const handleToggleActive = async (service: any) => {
     try {
       await adminApi.setMedicalServiceActive(service.id, !service.active)
-      toast({ title: 'Thành công', description: `Gói dịch vụ đã được ${service.active ? 'ngưng hoạt động' : 'kích hoạt'}.` })
-      await fetchData()
+      toast({ title: 'Thành công', description: `Dịch vụ đã được ${service.active ? 'ngừng hoạt động' : 'kích hoạt'}.` })
+      await fetchData(debouncedSearch)
     } catch (toggleError: any) {
       toast({ title: 'Lỗi', description: toggleError?.message || 'Không thể cập nhật trạng thái.', variant: 'destructive' })
     }
@@ -226,17 +219,20 @@ export function AdminMedicalServicesPage() {
     try {
       await adminApi.deleteMedicalServicePhoto(selectedService.id)
       toast({ title: 'Thành công', description: 'Đã xóa ảnh dịch vụ.' })
-      await fetchData()
+      await fetchData(debouncedSearch)
       setPhotoFile(null)
     } catch (deleteError: any) {
       toast({ title: 'Lỗi', description: deleteError?.message || 'Không thể xóa ảnh.', variant: 'destructive' })
     }
   }
 
-  const selectedSpecialtyName = useMemo(
-    () => specialties.find((item) => item.id === formData.specialtyId)?.name || '',
-    [formData.specialtyId, specialties]
-  )
+  const filteredDoctorsBySpecialty = useMemo(() => {
+    if (!formData.specialtyId) return doctors
+    return doctors.filter((doctor) => {
+      const doctorSpecialtyId = doctor?.specialty?.id || doctor?.specialtyId
+      return String(doctorSpecialtyId || '') === String(formData.specialtyId)
+    })
+  }, [doctors, formData.specialtyId])
 
   const renderPrescriptionItems = () => (
     <div className="space-y-4">
@@ -333,27 +329,55 @@ export function AdminMedicalServicesPage() {
             onChange={(event) => setFormData((prev) => ({ ...prev, name: event.target.value }))}
           />
         </div>
+
         <div className="grid gap-2">
           <Label htmlFor="service-specialty">Chuyên khoa</Label>
           <Select
             value={formData.specialtyId}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, specialtyId: value }))}
+            onValueChange={(value) =>
+              setFormData((prev) => ({
+                ...prev,
+                specialtyId: value,
+                assignedDoctorId: '',
+              }))
+            }
           >
             <SelectTrigger>
               <SelectValue placeholder="Chọn chuyên khoa" />
             </SelectTrigger>
             <SelectContent>
               {specialties.map((specialty) => (
-                <SelectItem key={specialty.id} value={specialty.id}>
+                <SelectItem key={specialty.id} value={String(specialty.id)}>
                   {specialty.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="service-assigned-doctor">Bác sĩ đảm nhận (tùy chọn)</Label>
+          <Select
+            value={formData.assignedDoctorId || 'none'}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, assignedDoctorId: value === 'none' ? '' : value }))}
+          >
+            <SelectTrigger id="service-assigned-doctor">
+              <SelectValue placeholder="Hệ thống tự phân bác sĩ" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Không chọn (hệ thống tự phân)</SelectItem>
+              {filteredDoctorsBySpecialty.map((doctor) => (
+                <SelectItem key={doctor.id} value={String(doctor.id)}>
+                  {doctor.fullName || doctor.name || `Bác sĩ #${doctor.id}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="service-price">Giá (VND)</Label>
+          <Label htmlFor="service-price">Giá (VND)</Label>
             <Input
               id="service-price"
               type="number"
@@ -378,6 +402,7 @@ export function AdminMedicalServicesPage() {
             </Select>
           </div>
         </div>
+
         <div className="grid gap-2">
           <Label htmlFor="service-description">Mô tả</Label>
           <Textarea
@@ -393,7 +418,7 @@ export function AdminMedicalServicesPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <Label className="text-base font-semibold">Danh sách kê đơn</Label>
-            <p className="text-sm text-muted-foreground">Có thể để trống nếu bác sĩ sẽ kê sau khám.</p>
+            <p className="text-sm text-muted-foreground">Có thể để trống nếu bác sĩ sẽ kê sau khi khám.</p>
           </div>
           <Button size="sm" variant="outline" type="button" onClick={() => setFormData((prev) => ({ ...prev, prescriptionItems: [] }))}>
             Xóa tất cả
@@ -451,7 +476,7 @@ export function AdminMedicalServicesPage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Quản lý gói dịch vụ</h1>
-          <p className="text-muted-foreground">Tạo, sửa, bật/tắt trạng thái và quản lý ảnh cho gói dịch vụ khám bệnh.</p>
+          <p className="text-muted-foreground">Tạo, sửa, bật/tắt trạng thái và gán bác sĩ đảm nhận cho gói dịch vụ.</p>
         </div>
         <Dialog
           open={isCreateDialogOpen}
@@ -466,7 +491,7 @@ export function AdminMedicalServicesPage() {
               Thêm gói dịch vụ
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[720px]">
+          <DialogContent className="sm:max-w-[760px]">
             <DialogHeader>
               <DialogTitle>Thêm gói dịch vụ mới</DialogTitle>
               <DialogDescription>Nhập thông tin gói dịch vụ và upload ảnh riêng.</DialogDescription>
@@ -487,8 +512,18 @@ export function AdminMedicalServicesPage() {
           <CardDescription>{services.length} gói dịch vụ</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Tìm tên gói dịch vụ..."
+              className="pl-9"
+            />
+          </div>
+
           {loading && <AdminTableSkeleton rows={7} />}
-          {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchData()} />}
+          {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchData(debouncedSearch)} />}
           {!loading && !error && services.length === 0 && <AdminEmptyState title="Chưa có gói dịch vụ nào." />}
 
           {!loading && !error && services.length > 0 && (
@@ -497,6 +532,7 @@ export function AdminMedicalServicesPage() {
                 <TableRow>
                   <TableHead>Tên dịch vụ</TableHead>
                   <TableHead>Chuyên khoa</TableHead>
+                  <TableHead>Bác sĩ đảm nhận</TableHead>
                   <TableHead>Giá</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead className="text-right">Hành động</TableHead>
@@ -507,6 +543,7 @@ export function AdminMedicalServicesPage() {
                   <TableRow key={service.id}>
                     <TableCell className="font-medium">{service.name || '-'}</TableCell>
                     <TableCell>{service.specialty?.name || service.specialtyName || '-'}</TableCell>
+                    <TableCell>{service.assignedDoctor?.fullName || 'Hệ thống tự phân'}</TableCell>
                     <TableCell>{Number(service.price || 0).toLocaleString('vi-VN')} VND</TableCell>
                     <TableCell>
                       <Badge variant={service.active ? 'default' : 'secondary'}>
@@ -536,15 +573,15 @@ export function AdminMedicalServicesPage() {
           if (!open) resetForm()
         }}
       >
-        <DialogContent className="sm:max-w-[720px]">
+        <DialogContent className="sm:max-w-[760px]">
           <DialogHeader>
             <DialogTitle>Chỉnh sửa gói dịch vụ</DialogTitle>
             <DialogDescription>Thay đổi thông tin gói dịch vụ và upload ảnh mới nếu cần.</DialogDescription>
           </DialogHeader>
           {renderForm()}
           <DialogFooter>
-            <Button onClick={handleUpdate} disabled={isSubmitting || photoUploading}>
-              {isSubmitting || photoUploading ? 'Đang lưu...' : 'Lưu thay đổi'}
+            <Button onClick={handleUpdate} disabled={isSubmitting}>
+              {isSubmitting ? 'Đang lưu...' : 'Lưu thay đổi'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -552,3 +589,6 @@ export function AdminMedicalServicesPage() {
     </div>
   )
 }
+
+
+

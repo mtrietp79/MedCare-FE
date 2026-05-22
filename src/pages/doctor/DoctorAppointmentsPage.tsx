@@ -1,30 +1,69 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Calendar, Clock, User, MapPin, Search, Filter, Eye, Edit, Trash2 } from 'lucide-react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Calendar, Clock, User, Search, Eye, Edit } from 'lucide-react'
 import { doctorApi } from '@/services/doctorService'
 import { useToast } from '@/hooks/use-toast'
 
+type EditableStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled'
+
 interface Appointment {
   id: string
-  patientName: string
-  patientId: string
-  date: string
-  time: string
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
-  type: string
-  notes: string
-  specialty: string
-  createdAt: string
+  appointmentCode?: string | number
+  patientName?: string
+  patientId?: string
+  patient?: {
+    id?: string
+    fullName?: string
+  }
+  doctorName?: string
+  doctor?: {
+    id?: string
+    fullName?: string
+  }
+  specialtyName?: string
+  specialty?: string | { id?: string; name?: string }
+  serviceName?: string
+  medicalService?: {
+    id?: string
+    name?: string
+  } | null
+  date?: string
+  time?: string
+  status?: string
+  type?: string
+  notes?: string
+  createdAt?: string
 }
+
+const toSearchable = (value: unknown) => String(value ?? '').toLowerCase()
+
+const getPatientName = (appointment: Appointment) =>
+  appointment.patientName ?? appointment.patient?.fullName ?? ''
+
+const getDoctorName = (appointment: Appointment) =>
+  appointment.doctorName ?? appointment.doctor?.fullName ?? ''
+
+const getSpecialtyName = (appointment: Appointment) =>
+  appointment.specialtyName ??
+  (typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name) ??
+  ''
+
+const getServiceName = (appointment: Appointment) =>
+  appointment.serviceName ?? appointment.medicalService?.name ?? 'Khám bệnh'
+
+const getAppointmentCode = (appointment: Appointment) =>
+  String(appointment.appointmentCode ?? '')
+
+const getStatusValue = (appointment: Appointment) =>
+  String(appointment.status ?? '')
 
 export function DoctorAppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
@@ -39,14 +78,16 @@ export function DoctorAppointmentsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const { toast } = useToast()
 
-  // Form states
-  const [formData, setFormData] = useState({
-    status: 'confirmed' as 'pending' | 'confirmed' | 'completed' | 'cancelled',
-    notes: ''
+  const [formData, setFormData] = useState<{
+    status: EditableStatus
+    notes: string
+  }>({
+    status: 'confirmed',
+    notes: '',
   })
 
   useEffect(() => {
-    fetchAppointments()
+    void fetchAppointments()
   }, [statusFilter, dateFilter, currentPage])
 
   const fetchAppointments = async () => {
@@ -54,20 +95,20 @@ export function DoctorAppointmentsPage() {
       setLoading(true)
       const params: any = {
         page: currentPage - 1,
-        size: 10
+        size: 10,
       }
 
       if (statusFilter !== 'all') params.status = statusFilter
       if (dateFilter) params.date = dateFilter
 
       const data = await doctorApi.getAppointments(params)
-      setAppointments(data.content || data)
-      setTotalPages(data.totalPages || 1)
-    } catch (error) {
+      setAppointments(Array.isArray(data?.content) ? data.content : Array.isArray(data) ? data : [])
+      setTotalPages(Number(data?.totalPages || 1))
+    } catch {
       toast({
         title: 'Lỗi',
         description: 'Không thể tải danh sách lịch hẹn',
-        variant: 'destructive'
+        variant: 'destructive',
       })
     } finally {
       setLoading(false)
@@ -81,33 +122,16 @@ export function DoctorAppointmentsPage() {
       await doctorApi.updateAppointment(selectedAppointment.id, formData)
       toast({
         title: 'Thành công',
-        description: 'Đã cập nhật lịch hẹn'
+        description: 'Đã cập nhật lịch hẹn',
       })
       setIsEditDialogOpen(false)
       resetForm()
-      fetchAppointments()
-    } catch (error) {
+      await fetchAppointments()
+    } catch {
       toast({
         title: 'Lỗi',
         description: 'Không thể cập nhật lịch hẹn',
-        variant: 'destructive'
-      })
-    }
-  }
-
-  const handleDeleteAppointment = async (appointmentId: string) => {
-    try {
-      await doctorApi.deleteAppointment(appointmentId)
-      toast({
-        title: 'Thành công',
-        description: 'Đã xóa lịch hẹn'
-      })
-      fetchAppointments()
-    } catch (error) {
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể xóa lịch hẹn',
-        variant: 'destructive'
+        variant: 'destructive',
       })
     }
   }
@@ -115,16 +139,22 @@ export function DoctorAppointmentsPage() {
   const resetForm = () => {
     setFormData({
       status: 'confirmed',
-      notes: ''
+      notes: '',
     })
     setSelectedAppointment(null)
   }
 
   const openEditDialog = (appointment: Appointment) => {
+    const normalizedStatus = toSearchable(appointment.status) as EditableStatus
+    const editableStatus: EditableStatus =
+      normalizedStatus === 'pending' || normalizedStatus === 'confirmed' || normalizedStatus === 'completed' || normalizedStatus === 'cancelled'
+        ? normalizedStatus
+        : 'confirmed'
+
     setSelectedAppointment(appointment)
     setFormData({
-      status: appointment.status,
-      notes: appointment.notes
+      status: editableStatus,
+      notes: appointment.notes ?? '',
     })
     setIsEditDialogOpen(true)
   }
@@ -134,13 +164,29 @@ export function DoctorAppointmentsPage() {
     setIsDetailDialogOpen(true)
   }
 
-  const filteredAppointments = appointments.filter(appointment =>
-    appointment.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    appointment.type.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const searchTermNormalized = toSearchable(searchTerm)
+  const filteredAppointments = appointments.filter((appointment) => {
+    if (!searchTermNormalized) return true
+
+    const patientName = getPatientName(appointment)
+    const doctorName = getDoctorName(appointment)
+    const specialtyName = getSpecialtyName(appointment)
+    const serviceName = getServiceName(appointment)
+    const appointmentCode = getAppointmentCode(appointment)
+    const status = getStatusValue(appointment)
+
+    return [
+      patientName,
+      doctorName,
+      specialtyName,
+      serviceName,
+      appointmentCode,
+      status,
+    ].some((value) => toSearchable(value).includes(searchTermNormalized))
+  })
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    switch (toSearchable(status)) {
       case 'confirmed':
         return <Badge variant="default">Đã xác nhận</Badge>
       case 'pending':
@@ -150,7 +196,7 @@ export function DoctorAppointmentsPage() {
       case 'cancelled':
         return <Badge variant="destructive">Đã hủy</Badge>
       default:
-        return <Badge variant="secondary">{status}</Badge>
+        return <Badge variant="secondary">{status || 'pending'}</Badge>
     }
   }
 
@@ -159,7 +205,7 @@ export function DoctorAppointmentsPage() {
     { value: 'pending', label: 'Chờ xác nhận' },
     { value: 'confirmed', label: 'Đã xác nhận' },
     { value: 'completed', label: 'Hoàn thành' },
-    { value: 'cancelled', label: 'Đã hủy' }
+    { value: 'cancelled', label: 'Đã hủy' },
   ]
 
   return (
@@ -172,17 +218,14 @@ export function DoctorAppointmentsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Danh sách lịch hẹn</CardTitle>
-          <CardDescription>
-            Tổng cộng {appointments.length} lịch hẹn
-          </CardDescription>
+          <CardDescription>Tổng cộng {appointments.length} lịch hẹn</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="relative flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Tìm kiếm theo tên bệnh nhân hoặc loại khám..."
+                placeholder="Tìm kiếm theo bệnh nhân, bác sĩ, chuyên khoa, loại khám..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8"
@@ -193,7 +236,7 @@ export function DoctorAppointmentsPage() {
                 <SelectValue placeholder="Lọc theo trạng thái" />
               </SelectTrigger>
               <SelectContent>
-                {getStatusOptions().map(option => (
+                {getStatusOptions().map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
@@ -233,21 +276,21 @@ export function DoctorAppointmentsPage() {
                       <TableCell>
                         <div className="flex items-center space-x-2">
                           <User className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium">{appointment.patientName}</span>
+                          <span className="font-medium">{getPatientName(appointment) || '-'}</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span>{appointment.date}</span>
+                          <span>{appointment.date || '-'}</span>
                         </div>
                         <div className="flex items-center space-x-2 mt-1">
                           <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">{appointment.time}</span>
+                          <span className="text-sm text-muted-foreground">{appointment.time || '-'}</span>
                         </div>
                       </TableCell>
-                      <TableCell>{appointment.type}</TableCell>
-                      <TableCell>{getStatusBadge(appointment.status)}</TableCell>
+                      <TableCell>{getServiceName(appointment)}</TableCell>
+                      <TableCell>{getStatusBadge(getStatusValue(appointment))}</TableCell>
                       <TableCell className="text-right">
                         <Button
                           variant="ghost"
@@ -269,7 +312,6 @@ export function DoctorAppointmentsPage() {
                 </TableBody>
               </Table>
 
-              {/* Pagination */}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4">
                   <div className="text-sm text-muted-foreground">
@@ -279,7 +321,7 @@ export function DoctorAppointmentsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                       disabled={currentPage === 1}
                     >
                       Trước
@@ -287,7 +329,7 @@ export function DoctorAppointmentsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                       disabled={currentPage === totalPages}
                     >
                       Sau
@@ -300,41 +342,38 @@ export function DoctorAppointmentsPage() {
         </CardContent>
       </Card>
 
-      {/* Detail Dialog */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Chi tiết lịch hẹn</DialogTitle>
-            <DialogDescription>
-              Thông tin chi tiết về cuộc hẹn
-            </DialogDescription>
+            <DialogDescription>Thông tin chi tiết về cuộc hẹn</DialogDescription>
           </DialogHeader>
           {selectedAppointment && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-sm font-medium">Bệnh nhân</Label>
-                  <p className="text-sm">{selectedAppointment.patientName}</p>
+                  <p className="text-sm">{getPatientName(selectedAppointment) || '-'}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium">Loại khám</Label>
-                  <p className="text-sm">{selectedAppointment.type}</p>
+                  <p className="text-sm">{getServiceName(selectedAppointment)}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium">Ngày</Label>
-                  <p className="text-sm">{selectedAppointment.date}</p>
+                  <p className="text-sm">{selectedAppointment.date || '-'}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium">Giờ</Label>
-                  <p className="text-sm">{selectedAppointment.time}</p>
+                  <p className="text-sm">{selectedAppointment.time || '-'}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium">Chuyên khoa</Label>
-                  <p className="text-sm">{selectedAppointment.specialty}</p>
+                  <p className="text-sm">{getSpecialtyName(selectedAppointment) || '-'}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium">Trạng thái</Label>
-                  <div className="mt-1">{getStatusBadge(selectedAppointment.status)}</div>
+                  <div className="mt-1">{getStatusBadge(getStatusValue(selectedAppointment))}</div>
                 </div>
               </div>
               <div>
@@ -346,19 +385,19 @@ export function DoctorAppointmentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Chỉnh sửa lịch hẹn</DialogTitle>
-            <DialogDescription>
-              Cập nhật thông tin lịch hẹn
-            </DialogDescription>
+            <DialogDescription>Cập nhật thông tin lịch hẹn</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="status" className="text-right">Trạng thái</Label>
-              <Select value={formData.status} onValueChange={(value: any) => setFormData({...formData, status: value})}>
+              <Select
+                value={formData.status}
+                onValueChange={(value: EditableStatus) => setFormData((prev) => ({ ...prev, status: value }))}
+              >
                 <SelectTrigger className="col-span-3">
                   <SelectValue />
                 </SelectTrigger>
@@ -375,14 +414,14 @@ export function DoctorAppointmentsPage() {
               <Textarea
                 id="notes"
                 value={formData.notes}
-                onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
                 className="col-span-3"
                 rows={3}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button type="submit" onClick={handleUpdateAppointment}>Cập nhật</Button>
+            <Button type="submit" onClick={() => void handleUpdateAppointment()}>Cập nhật</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

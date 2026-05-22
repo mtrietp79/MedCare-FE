@@ -1,4 +1,4 @@
-
+﻿
 import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, SearchResponse, MedicalService } from '@/types'
 import { mockApi } from './mock-api'
 import { getStoredToken, removeStoredToken, removeStoredUser } from './auth'
@@ -13,6 +13,61 @@ export interface ApiRequestError extends Error {
   status?: number
   code?: string
   data?: unknown
+}
+
+export interface AppointmentSlot {
+  startTime: string
+  endTime: string
+  shift: string
+  maxPatients: number
+  bookedPatients: number
+  full: boolean
+  disabled: boolean
+  disabledReason?: string | null
+}
+
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
+const DMY_DATE_REGEX = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+
+function normalizeDateToIsoDate(input: string): string {
+  const raw = String(input || '').trim()
+  if (!raw) {
+    throw new Error('Ngày khám không hợp lệ')
+  }
+
+  if (ISO_DATE_REGEX.test(raw)) {
+    return raw
+  }
+
+  const dmyMatch = raw.match(DMY_DATE_REGEX)
+  if (dmyMatch) {
+    const day = Number(dmyMatch[1])
+    const month = Number(dmyMatch[2])
+    const year = Number(dmyMatch[3])
+    const date = new Date(year, month - 1, day)
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() + 1 !== month ||
+      date.getDate() !== day
+    ) {
+      throw new Error(`Ngày khám không hợp lệ: ${raw}`)
+    }
+
+    const mm = String(month).padStart(2, '0')
+    const dd = String(day).padStart(2, '0')
+    return `${year}-${mm}-${dd}`
+  }
+
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Không thể chuyển đổi ngày khám: ${raw}`)
+  }
+
+  const year = parsed.getFullYear()
+  const month = String(parsed.getMonth() + 1).padStart(2, '0')
+  const day = String(parsed.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
@@ -141,9 +196,10 @@ export const doctorApi = {
 }
 
 export const medicalServicesApi = {
-  async getAll(query?: { specialtyId?: string }): Promise<MedicalService[]> {
+  async getAll(query?: { specialtyId?: string; q?: string }): Promise<MedicalService[]> {
     const params = new URLSearchParams()
     if (query?.specialtyId) params.append('specialtyId', query.specialtyId)
+    if (query?.q) params.append('q', query.q)
     const endpoint = `/medical-services${params.toString() ? `?${params.toString()}` : ''}`
     return apiCall<MedicalService[]>(endpoint)
   },
@@ -211,6 +267,18 @@ export const appointmentApi = {
       method: 'POST',
       body: JSON.stringify(data),
     })
+  },
+
+  async getDoctorSlots(doctorId: string, date: string): Promise<AppointmentSlot[]> {
+    const normalizedDate = normalizeDateToIsoDate(date)
+    const params = new URLSearchParams({ date: normalizedDate })
+    return apiCall<AppointmentSlot[]>(`/appointments/doctor/${doctorId}/slots?${params.toString()}`)
+  },
+
+  async getMedicalServiceSlots(serviceId: string, date: string): Promise<AppointmentSlot[]> {
+    const normalizedDate = normalizeDateToIsoDate(date)
+    const params = new URLSearchParams({ date: normalizedDate })
+    return apiCall<AppointmentSlot[]>(`/appointments/medical-service/${serviceId}/slots?${params.toString()}`)
   },
 }
 
@@ -327,6 +395,13 @@ export const paymentApi = {
     amount: number
   }> {
     return apiCall(`/payments/${appointmentId}/status`)
+  },
+
+  async payAtClinic(appointmentId: string): Promise<Appointment> {
+    const params = new URLSearchParams({ appointmentId })
+    return apiCall<Appointment>(`/payment/pay-at-clinic?${params.toString()}`, {
+      method: 'PATCH',
+    })
   },
 }
 

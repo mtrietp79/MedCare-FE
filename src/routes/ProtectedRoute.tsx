@@ -1,20 +1,21 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { getStoredToken, USER_KEY } from '../services/auth';
+import { Navigate, Outlet } from 'react-router-dom'
+import { getStoredRole, getStoredToken, redirectByRole } from '@/services/auth'
 
 interface Props {
-  allowedRoles: string[];
+  allowedRoles: string[]
 }
 
 export const ProtectedRoute = ({ allowedRoles }: Props) => {
-  const token = getStoredToken();
-  const storedUser = localStorage.getItem(USER_KEY)
-  const userRole = storedUser ? (JSON.parse(storedUser).role as string) : null
+  const token = getStoredToken()
+  const userRole = getStoredRole()
 
-  if (!token) return <Navigate to="/login" replace />;
-  
-  if (!allowedRoles.includes(userRole || '')) {
-    return <Navigate to="/unauthorized" replace />;
+  if (!token) {
+    return <Navigate to="/login" replace />
   }
 
-  return <Outlet />;
-};
+  if (!allowedRoles.includes(userRole || '')) {
+    return <Navigate to={redirectByRole(userRole)} replace />
+  }
+
+  return <Outlet />
+}

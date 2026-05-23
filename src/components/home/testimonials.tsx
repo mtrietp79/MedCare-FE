@@ -1,123 +1,205 @@
-import { useState, useEffect } from 'react'
-import { Star, Quote } from 'lucide-react'
+﻿import { useEffect, useState } from 'react'
+import { Star } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { useToast } from '@/hooks/use-toast'
+import { websiteFeedbackService, type WebsiteFeedback } from '@/services/websiteFeedbackService'
 
-interface Testimonial {
-  id: string
-  name: string
-  avatar: string
-  rating: number
-  content: string
-  date: string
+function formatDateDDMMYYYY(value?: string | null) {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '-'
+  const day = String(parsed.getDate()).padStart(2, '0')
+  const month = String(parsed.getMonth() + 1).padStart(2, '0')
+  const year = parsed.getFullYear()
+  return `${day}-${month}-${year}`
 }
 
 export function Testimonials() {
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([])
+  const { toast } = useToast()
+  const MAX_VISIBLE_FEEDBACKS = 6
+
+  const [feedbacks, setFeedbacks] = useState<WebsiteFeedback[]>([])
+  const [showAllFeedbacks, setShowAllFeedbacks] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchTestimonials = async () => {
-      try {
-        setLoading(true)
-        const response = await fetch('/api/testimonials')
-        if (!response.ok) {
-          throw new Error('Failed to fetch testimonials')
-        }
-        const data = await response.json()
-        setTestimonials(Array.isArray(data) ? data : [])
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load testimonials')
-        console.error('Error fetching testimonials:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [rating, setRating] = useState(5)
+  const [comment, setComment] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitMessage, setSubmitMessage] = useState('')
+  const visibleFeedbacks = showAllFeedbacks ? feedbacks : feedbacks.slice(0, MAX_VISIBLE_FEEDBACKS)
 
-    fetchTestimonials()
+  const loadFeedbacks = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await websiteFeedbackService.getPublicFeedbacks()
+      setFeedbacks(Array.isArray(data) ? data : [])
+    } catch {
+      setError('Không thể tải danh sách đánh giá. Vui lòng thử lại sau.')
+      setFeedbacks([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadFeedbacks()
   }, [])
 
+  const submitFeedback = async () => {
+    if (!fullName.trim() || !email.trim() || !comment.trim()) {
+      toast({ title: 'Lỗi', description: 'Vui lòng nhập đầy đủ họ tên, email và nội dung góp ý.', variant: 'destructive' })
+      return
+    }
+
+    try {
+      setSubmitting(true)
+      setSubmitMessage('')
+      await websiteFeedbackService.createPublicFeedback({
+        fullName: fullName.trim(),
+        email: email.trim(),
+        rating,
+        comment: comment.trim(),
+      })
+
+      setFullName('')
+      setEmail('')
+      setRating(5)
+      setComment('')
+      setSubmitMessage('Cảm ơn bạn đã gửi đánh giá. Đánh giá sẽ được hiển thị sau khi được duyệt.')
+    } catch (submitError: any) {
+      toast({
+        title: 'Lỗi',
+        description: submitError?.message || 'Không thể gửi đánh giá. Vui lòng thử lại sau.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
-    <section className="py-16 md:py-24 bg-secondary/30">
+    <section className="bg-secondary/30 py-16 md:py-24">
       <div className="container mx-auto px-4">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4 text-balance">
-            Bệnh nhân nói gì về chúng tôi
+        <div className="mb-12 text-center">
+          <h2 className="mb-4 text-3xl font-bold text-foreground md:text-4xl">
+            Khách hàng nói gì về MedCare
           </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Hàng nghìn bệnh nhân đã tin tưởng và hài lòng với dịch vụ của MedCare
+          <p className="mx-auto max-w-2xl leading-relaxed text-muted-foreground">
+            Phản hồi thực tế từ khách hàng về chất lượng dịch vụ và trải nghiệm tại MedCare.
           </p>
         </div>
 
-        {/* Error State */}
-        {error && (
-          <div className="text-center text-red-500 mb-8">
-            <p>Lỗi: {error}</p>
+        {loading ? (
+          <div className="mb-8 text-center text-muted-foreground">Đang tải...</div>
+        ) : error ? (
+          <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center text-amber-800">
+            <p>{error}</p>
+            <Button variant="outline" className="mt-3" onClick={() => void loadFeedbacks()}>
+              Thử lại
+            </Button>
           </div>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <div className="text-center text-muted-foreground mb-8">
-            <p>Đang tải...</p>
-          </div>
-        )}
-
-        {/* Testimonials Grid */}
-        {!loading && testimonials.length > 0 && (
-          <div className="grid md:grid-cols-3 gap-6">
-            {testimonials.map((testimonial) => (
-              <Card key={testimonial.id} className="relative overflow-hidden">
-                <CardContent className="p-6">
-                  {/* Quote icon */}
-                  <Quote className="w-10 h-10 text-primary/20 mb-4" />
-                  
-                  {/* Content */}
-                  <p className="text-muted-foreground mb-6 leading-relaxed">
-                    {'"'}{testimonial.content}{'"'}
-                  </p>
-
-                  {/* Rating */}
-                  <div className="flex gap-1 mb-4">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`w-4 h-4 ${
-                          i < testimonial.rating
-                            ? 'fill-yellow-400 text-yellow-400'
-                            : 'text-muted'
-                        }`}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Author */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-semibold text-primary">
-                        {testimonial.name.charAt(0)}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="font-medium text-foreground">{testimonial.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {new Date(testimonial.date).toLocaleDateString('vi-VN')}
+        ) : feedbacks.length === 0 ? (
+          <div className="mb-8 text-center text-muted-foreground">Chưa có đánh giá nào.</div>
+        ) : (
+          <div className="mb-10">
+            <div className="grid gap-6 md:grid-cols-3">
+              {visibleFeedbacks.map((feedback) => (
+                <Card key={feedback.id} className="border border-border/70 shadow-sm">
+                  <CardContent className="p-6">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="font-semibold text-foreground">{feedback.fullName || 'Ẩn danh'}</p>
+                      <div className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                        {feedback.rating || 0}
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    <p className="mb-3 text-sm leading-6 text-slate-700">{feedback.comment || 'Không có nội dung.'}</p>
+                    <p className="text-xs text-muted-foreground">{formatDateDDMMYYYY(feedback.createdAt)}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {feedbacks.length > MAX_VISIBLE_FEEDBACKS ? (
+              <div className="mt-8 text-center">
+                <Button variant="outline" onClick={() => setShowAllFeedbacks((prev) => !prev)}>
+                  {showAllFeedbacks ? 'Thu gọn đánh giá' : 'Xem tất cả đánh giá'}
+                </Button>
+              </div>
+            ) : null}
           </div>
         )}
 
-        {/* No Data State */}
-        {!loading && testimonials.length === 0 && !error && (
-          <div className="text-center text-muted-foreground">
-            <p>Không có đánh giá nào</p>
-          </div>
-        )}
+        <Card className="mx-auto max-w-3xl border border-border/70 shadow-sm">
+          <CardContent className="space-y-4 p-6 md:p-8">
+            <h3 className="text-xl font-semibold text-foreground">Gửi đánh giá về MedCare</h3>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="mb-2 text-sm font-medium">Họ tên</p>
+                <Input
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  placeholder="Nguyễn Văn A"
+                />
+              </div>
+              <div>
+                <p className="mb-2 text-sm font-medium">Email</p>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="email@example.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-medium">Đánh giá</p>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: 5 }).map((_, index) => {
+                  const value = index + 1
+                  const active = value <= rating
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setRating(value)}
+                      className="rounded-md p-1 transition hover:scale-105"
+                      aria-label={`Chọn ${value} sao`}
+                    >
+                      <Star className={`h-6 w-6 ${active ? 'fill-yellow-400 text-yellow-400' : 'text-slate-300'}`} />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm font-medium">Nội dung góp ý</p>
+              <Textarea
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
+                rows={4}
+                placeholder="Chia sẻ trải nghiệm của bạn tại MedCare..."
+              />
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              {submitMessage ? <p className="text-sm text-emerald-700">{submitMessage}</p> : <span />}
+              <Button onClick={() => void submitFeedback()} disabled={submitting}>
+                {submitting ? 'Đang gửi...' : 'Gửi đánh giá'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </section>
   )

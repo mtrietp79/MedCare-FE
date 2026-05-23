@@ -60,6 +60,44 @@ export interface MedicalService {
   }>
 }
 
+export interface ServicePackage {
+  id: string
+  name: string
+  description?: string | null
+  price?: number
+  durationMinutes?: number
+  imageUrl?: string | null
+}
+
+export type ServicePackageBookingStatus =
+  | 'PENDING_PAYMENT'
+  | 'PAID'
+  | 'RECEIVED'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | string
+
+export interface ServicePackageBooking {
+  id: string
+  bookingCode?: string
+  packageId?: string
+  packageName?: string
+  servicePackage?: {
+    id?: string
+    name?: string
+    description?: string
+  }
+  bookingDate?: string
+  bookingTime?: string
+  amount?: number
+  paidAmount?: number
+  status?: ServicePackageBookingStatus
+  note?: string
+  paymentId?: string
+  invoiceCode?: string
+  createdAt?: string
+}
+
 export interface Specialty {
   id: string
   name: string

@@ -1,6 +1,7 @@
 import { useLocation, Navigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useAuth } from '@/context/AuthContext'
+import { redirectByRole } from '@/services/auth'
 
 export function PatientGuard({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -21,7 +22,7 @@ export function PatientGuard({ children }: { children: ReactNode }) {
   }
 
   if (user.role !== 'ROLE_PATIENT') {
-    return <Navigate to="/" replace />
+    return <Navigate to={redirectByRole(user.role)} replace />
   }
 
   return children

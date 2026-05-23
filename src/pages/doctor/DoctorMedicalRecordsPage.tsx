@@ -1,555 +1,400 @@
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { useEffect, useState } from 'react'
+import { Eye, Search } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
-import { Search, Plus, Eye, Edit, FileText, Calendar, User, Stethoscope } from 'lucide-react'
-import { doctorApi } from '@/services/doctorService'
+import { AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import {
+  doctorMedicalRecordService,
+  type MedicalRecordDetail,
+  type MedicalRecordPatient,
+} from '@/services/doctorMedicalRecordService'
+import { safeString } from '@/lib/admin-normalizers'
 import { useToast } from '@/hooks/use-toast'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
 
-const medicalRecordSchema = z.object({
-  patientId: z.string().min(1, 'Vui lòng chọn bệnh nhân'),
-  diagnosis: z.string().min(1, 'Vui lòng nhập chẩn đoán'),
-  symptoms: z.string().min(1, 'Vui lòng nhập triệu chứng'),
-  treatment: z.string().min(1, 'Vui lòng nhập phương pháp điều trị'),
-  notes: z.string().optional(),
-  prescription: z.string().optional()
-})
-
-type MedicalRecordFormData = z.infer<typeof medicalRecordSchema>
-
-interface MedicalRecord {
-  id: string
-  patientId: string
-  patientName: string
-  diagnosis: string
-  symptoms: string
-  treatment: string
-  notes: string
-  prescription: string
-  createdAt: string
-  updatedAt: string
+interface PatientDetailState {
+  patient?: {
+    id?: string
+    fullName?: string
+    phone?: string
+    email?: string
+    gender?: string
+    dateOfBirth?: string
+    address?: string
+  }
+  records: MedicalRecordDetail[]
 }
 
-interface Patient {
-  id: string
-  fullName: string
-  phone: string
-  dateOfBirth: string
+function formatDateDdMmYyyy(value?: string | null): string {
+  const source = safeString(value)
+  if (!source) return '-'
+
+  const ymd = source.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (ymd) return `${ymd[3]}-${ymd[2]}-${ymd[1]}`
+
+  const date = new Date(source)
+  if (Number.isNaN(date.getTime())) return '-'
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${day}-${month}-${year}`
+}
+
+function normalizeTypeLabel(value?: string): string {
+  const type = safeString(value).toLowerCase()
+  if (type.includes('tai') || type.includes('follow') || type.includes('revisit')) return 'Tái khám'
+  return 'Khám bệnh'
 }
 
 export function DoctorMedicalRecordsPage() {
-  const [records, setRecords] = useState<MedicalRecord[]>([])
-  const [patients, setPatients] = useState<Patient[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
   const { toast } = useToast()
+  const [summary, setSummary] = useState({ totalPatients: 0, newPatients: 0, revisitPatients: 0 })
+  const [patients, setPatients] = useState<MedicalRecordPatient[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [keywordInput, setKeywordInput] = useState('')
+  const [keyword, setKeyword] = useState('')
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [patientDetail, setPatientDetail] = useState<PatientDetailState>({ records: [] })
+  const [followUpRecordId, setFollowUpRecordId] = useState<string | null>(null)
+  const [followUpSubmitting, setFollowUpSubmitting] = useState(false)
+  const [followUpForm, setFollowUpForm] = useState({ date: '', time: '', note: '' })
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    setValue
-  } = useForm<MedicalRecordFormData>({
-    resolver: zodResolver(medicalRecordSchema)
-  })
+  const fetchSummary = async () => {
+    const data = await doctorMedicalRecordService.getSummary()
+    setSummary({
+      totalPatients: Number(data.totalPatients ?? 0),
+      newPatients: Number(data.newPatients ?? 0),
+      revisitPatients: Number(data.revisitPatients ?? 0),
+    })
+  }
 
-  useEffect(() => {
-    fetchMedicalRecords()
-    fetchPatients()
-  }, [currentPage])
+  const fetchPatients = async (searchKeyword: string) => {
+    const data = await doctorMedicalRecordService.getPatients(searchKeyword)
+    setPatients(Array.isArray(data) ? data : [])
+  }
 
-  const fetchMedicalRecords = async () => {
+  const loadPageData = async (searchKeyword: string) => {
+    setLoading(true)
+    setError('')
+
     try {
-      setLoading(true)
-      const params: any = {
-        page: currentPage - 1,
-        size: 10
-      }
-
-      const data = await doctorApi.getMedicalRecords(params)
-      setRecords(data.content || data)
-      setTotalPages(data.totalPages || 1)
-    } catch (error) {
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể tải danh sách bệnh án',
-        variant: 'destructive'
-      })
+      await Promise.all([fetchSummary(), fetchPatients(searchKeyword)])
+    } catch (fetchError: any) {
+      setError(fetchError?.message || 'Không thể tải dữ liệu bệnh án.')
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchPatients = async () => {
-    try {
-      const data = await doctorApi.getPatients({ size: 100 })
-      setPatients(data.content || data)
-    } catch (error) {
-      console.error('Failed to fetch patients:', error)
-    }
-  }
+  useEffect(() => {
+    void loadPageData(keyword)
+  }, [keyword])
 
-  const onSubmit = async (data: MedicalRecordFormData) => {
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setKeyword(keywordInput.trim())
+    }, 300)
+
+    return () => window.clearTimeout(timeout)
+  }, [keywordInput])
+
+  const openPatientDetail = async (patientId: string) => {
+    setDetailOpen(true)
+    setDetailLoading(true)
+    setFollowUpRecordId(null)
+    setFollowUpForm({ date: '', time: '', note: '' })
+
     try {
-      if (selectedRecord) {
-        await doctorApi.updateMedicalRecord(selectedRecord.id, data)
-        toast({
-          title: 'Thành công',
-          description: 'Đã cập nhật bệnh án'
-        })
-      } else {
-        await doctorApi.createMedicalRecord(data)
-        toast({
-          title: 'Thành công',
-          description: 'Đã tạo bệnh án mới'
-        })
-      }
-      setIsCreateDialogOpen(false)
-      setIsEditDialogOpen(false)
-      resetForm()
-      fetchMedicalRecords()
-    } catch (error) {
+      const data = await doctorMedicalRecordService.getPatientRecords(patientId)
+      setPatientDetail({
+        patient: data.patient,
+        records: Array.isArray(data.records) ? data.records : [],
+      })
+    } catch (fetchError: any) {
       toast({
         title: 'Lỗi',
-        description: selectedRecord ? 'Không thể cập nhật bệnh án' : 'Không thể tạo bệnh án',
-        variant: 'destructive'
+        description: fetchError?.message || 'Không thể tải chi tiết bệnh án.',
+        variant: 'destructive',
       })
+    } finally {
+      setDetailLoading(false)
     }
   }
 
-  const resetForm = () => {
-    reset({
-      patientId: '',
-      diagnosis: '',
-      symptoms: '',
-      treatment: '',
-      notes: '',
-      prescription: ''
-    })
-    setSelectedRecord(null)
-  }
-
-  const openEditDialog = (record: MedicalRecord) => {
-    setSelectedRecord(record)
-    setValue('patientId', record.patientId)
-    setValue('diagnosis', record.diagnosis)
-    setValue('symptoms', record.symptoms)
-    setValue('treatment', record.treatment)
-    setValue('notes', record.notes)
-    setValue('prescription', record.prescription)
-    setIsEditDialogOpen(true)
-  }
-
-  const openDetailDialog = (record: MedicalRecord) => {
-    setSelectedRecord(record)
-    setIsDetailDialogOpen(true)
-  }
-
-  const handleDeleteRecord = async (recordId: string) => {
-    try {
-      await doctorApi.deleteMedicalRecord(recordId)
+  const handleCreateFollowUp = async () => {
+    if (!followUpRecordId) return
+    if (!followUpForm.date || !followUpForm.time) {
       toast({
-        title: 'Thành công',
-        description: 'Đã xóa bệnh án'
+        title: 'Thiếu thông tin',
+        description: 'Vui lòng chọn ngày và giờ tái khám.',
+        variant: 'destructive',
       })
-      fetchMedicalRecords()
-    } catch (error) {
+      return
+    }
+
+    setFollowUpSubmitting(true)
+    try {
+      await doctorMedicalRecordService.createFollowUp(followUpRecordId, followUpForm)
+      toast({ title: 'Thành công', description: 'Đã tạo lịch tái khám' })
+      setFollowUpRecordId(null)
+      setFollowUpForm({ date: '', time: '', note: '' })
+    } catch (submitError: any) {
       toast({
         title: 'Lỗi',
-        description: 'Không thể xóa bệnh án',
-        variant: 'destructive'
+        description: submitError?.message || 'Không thể tạo lịch tái khám.',
+        variant: 'destructive',
       })
+    } finally {
+      setFollowUpSubmitting(false)
     }
   }
-
-  const filteredRecords = records.filter(record =>
-    record.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    record.diagnosis.toLowerCase().includes(searchTerm.toLowerCase())
-  )
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Quản lý bệnh án</h1>
-          <p className="text-muted-foreground">Xem và quản lý bệnh án của bệnh nhân</p>
-        </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="h-4 w-4 mr-2" />
-              Tạo bệnh án mới
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
-            <DialogHeader>
-              <DialogTitle>Tạo bệnh án mới</DialogTitle>
-              <DialogDescription>
-                Nhập thông tin bệnh án cho bệnh nhân
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="patientId">Bệnh nhân</Label>
-                  <Select onValueChange={(value) => setValue('patientId', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn bệnh nhân" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {patients.map(patient => (
-                        <SelectItem key={patient.id} value={patient.id}>
-                          {patient.fullName} - {patient.phone}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.patientId && (
-                    <p className="text-sm text-red-500">{errors.patientId.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="diagnosis">Chẩn đoán</Label>
-                <Input
-                  id="diagnosis"
-                  {...register('diagnosis')}
-                  placeholder="Nhập chẩn đoán bệnh"
-                />
-                {errors.diagnosis && (
-                  <p className="text-sm text-red-500">{errors.diagnosis.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="symptoms">Triệu chứng</Label>
-                <Textarea
-                  id="symptoms"
-                  {...register('symptoms')}
-                  placeholder="Mô tả triệu chứng của bệnh nhân"
-                  rows={3}
-                />
-                {errors.symptoms && (
-                  <p className="text-sm text-red-500">{errors.symptoms.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="treatment">Phương pháp điều trị</Label>
-                <Textarea
-                  id="treatment"
-                  {...register('treatment')}
-                  placeholder="Mô tả phương pháp điều trị"
-                  rows={3}
-                />
-                {errors.treatment && (
-                  <p className="text-sm text-red-500">{errors.treatment.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="prescription">Đơn thuốc</Label>
-                <Textarea
-                  id="prescription"
-                  {...register('prescription')}
-                  placeholder="Chi tiết đơn thuốc (tùy chọn)"
-                  rows={3}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="notes">Ghi chú</Label>
-                <Textarea
-                  id="notes"
-                  {...register('notes')}
-                  placeholder="Ghi chú bổ sung (tùy chọn)"
-                  rows={2}
-                />
-              </div>
-
-              <DialogFooter>
-                <Button type="submit">Tạo bệnh án</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+      <div>
+        <h1 className="text-3xl font-bold text-[#111827]">Bệnh án</h1>
+        <p className="text-[#6b7280]">Quản lý hồ sơ bệnh nhân của bạn</p>
       </div>
 
-      <Card>
+      <div className="relative max-w-xl">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
+        <Input
+          placeholder="Tìm kiếm theo tên, SĐT, hoặc email..."
+          value={keywordInput}
+          onChange={(event) => setKeywordInput(event.target.value)}
+          className="h-12 rounded-xl border-[#e5e7eb] pl-10"
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
+          <CardContent className="p-5">
+            <p className="text-sm text-[#6b7280]">Tổng bệnh nhân</p>
+            <p className="mt-2 text-3xl font-bold text-[#111827]">{summary.totalPatients}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
+          <CardContent className="p-5">
+            <p className="text-sm text-[#6b7280]">Bệnh nhân mới</p>
+            <p className="mt-2 text-3xl font-bold text-[#111827]">{summary.newPatients}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
+          <CardContent className="p-5">
+            <p className="text-sm text-[#6b7280]">Bệnh nhân tái khám</p>
+            <p className="mt-2 text-3xl font-bold text-[#111827]">{summary.revisitPatients}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
         <CardHeader>
-          <CardTitle>Danh sách bệnh án</CardTitle>
-          <CardDescription>
-            Tổng cộng {records.length} bệnh án
-          </CardDescription>
+          <CardTitle>Danh sách bệnh nhân</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Search */}
-          <div className="flex items-center space-x-2 mb-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Tìm kiếm theo tên bệnh nhân hoặc chẩn đoán..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-          </div>
+          {loading && <AdminTableSkeleton rows={8} />}
+          {!loading && error && <AdminErrorState message={error} onRetry={() => void loadPageData(keyword)} />}
 
-          {loading ? (
-            <div className="text-center py-4">Đang tải...</div>
-          ) : filteredRecords.length === 0 ? (
-            <div className="text-center py-8">
-              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">Không có bệnh án nào</p>
-            </div>
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Bệnh nhân</TableHead>
-                    <TableHead>Chẩn đoán</TableHead>
-                    <TableHead>Ngày tạo</TableHead>
-                    <TableHead className="text-right">Hành động</TableHead>
+          {!loading && !error && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tên bệnh nhân</TableHead>
+                  <TableHead>Số điện thoại</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Giới tính</TableHead>
+                  <TableHead>Lần tái khám / Số lần khám</TableHead>
+                  <TableHead>Khám gần nhất</TableHead>
+                  <TableHead className="text-right">Hành động</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {patients.map((patient) => (
+                  <TableRow key={patient.id}>
+                    <TableCell className="font-medium">{safeString(patient.fullName) || '-'}</TableCell>
+                    <TableCell>{safeString(patient.phone) || '-'}</TableCell>
+                    <TableCell>{safeString(patient.email) || '-'}</TableCell>
+                    <TableCell>{safeString(patient.gender) || '-'}</TableCell>
+                    <TableCell>
+                      {Number(patient.revisitCount ?? 0)} / {Number(patient.totalVisits ?? 0)}
+                    </TableCell>
+                    <TableCell>{formatDateDdMmYyyy(patient.lastVisitDate)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" onClick={() => void openPatientDetail(patient.id)}>
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRecords.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium">{record.patientName}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Stethoscope className="h-4 w-4 text-muted-foreground" />
-                          <span className="truncate max-w-xs">{record.diagnosis}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span>{new Date(record.createdAt).toLocaleDateString('vi-VN')}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openDetailDialog(record)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEditDialog(record)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                ))}
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <div className="text-sm text-muted-foreground">
-                    Trang {currentPage} của {totalPages}
-                  </div>
-                  <div className="flex space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
-                    >
-                      Trước
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages}
-                    >
-                      Sau
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
+                {patients.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-10 text-center text-[#6b7280]">
+                      Không có bệnh nhân phù hợp.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
 
-      {/* Detail Dialog */}
-      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="sm:max-w-[980px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Chi tiết bệnh án</DialogTitle>
-            <DialogDescription>
-              Thông tin chi tiết về bệnh án
-            </DialogDescription>
+            <DialogTitle>Hồ sơ bệnh án bệnh nhân</DialogTitle>
+            <DialogDescription>Thông tin bệnh nhân và lịch sử khám</DialogDescription>
           </DialogHeader>
-          {selectedRecord && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm font-medium">Bệnh nhân</Label>
-                  <p className="text-sm">{selectedRecord.patientName}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Ngày tạo</Label>
-                  <p className="text-sm">{new Date(selectedRecord.createdAt).toLocaleDateString('vi-VN')}</p>
-                </div>
+
+          {detailLoading ? (
+            <AdminTableSkeleton rows={5} />
+          ) : (
+            <div className="space-y-6">
+              <div className="grid gap-3 rounded-xl border border-[#e5e7eb] bg-slate-50 p-4 md:grid-cols-2">
+                <div><span className="font-semibold">Họ tên:</span> {safeString(patientDetail.patient?.fullName) || '-'}</div>
+                <div><span className="font-semibold">SĐT:</span> {safeString(patientDetail.patient?.phone) || '-'}</div>
+                <div><span className="font-semibold">Email:</span> {safeString(patientDetail.patient?.email) || '-'}</div>
+                <div><span className="font-semibold">Giới tính:</span> {safeString(patientDetail.patient?.gender) || '-'}</div>
+                <div><span className="font-semibold">Ngày sinh:</span> {formatDateDdMmYyyy(patientDetail.patient?.dateOfBirth)}</div>
+                <div><span className="font-semibold">Địa chỉ:</span> {safeString(patientDetail.patient?.address) || '-'}</div>
               </div>
 
-              <div>
-                <Label className="text-sm font-medium">Chẩn đoán</Label>
-                <p className="text-sm mt-1">{selectedRecord.diagnosis}</p>
-              </div>
+              <div className="space-y-4">
+                {patientDetail.records.map((record) => (
+                  <Card key={record.id} className="rounded-xl border border-[#e5e7eb]">
+                    <CardContent className="space-y-3 p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold text-[#111827]">
+                          Ngày khám: {formatDateDdMmYyyy(record.visitDate)}
+                        </div>
+                        <Badge className="rounded-full border bg-sky-50 text-sky-700 border-sky-200">
+                          {normalizeTypeLabel(record.appointmentType)}
+                        </Badge>
+                      </div>
 
-              <div>
-                <Label className="text-sm font-medium">Triệu chứng</Label>
-                <p className="text-sm mt-1">{selectedRecord.symptoms}</p>
-              </div>
+                      <div><span className="font-semibold">Triệu chứng:</span> {safeString(record.symptoms) || '-'}</div>
+                      <div><span className="font-semibold">Chẩn đoán:</span> {safeString(record.diagnosis) || '-'}</div>
+                      <div><span className="font-semibold">Lời dặn bác sĩ:</span> {safeString(record.advice) || '-'}</div>
 
-              <div>
-                <Label className="text-sm font-medium">Phương pháp điều trị</Label>
-                <p className="text-sm mt-1">{selectedRecord.treatment}</p>
-              </div>
+                      <div>
+                        <p className="font-semibold">Thuốc đã kê:</p>
+                        <ul className="ml-5 list-disc text-sm text-[#374151]">
+                          {(record.medicines ?? []).map((medicine, index) => (
+                            <li key={index}>
+                              {safeString(medicine.medicineName) || '-'}
+                              {medicine.quantity ? ` - ${medicine.quantity}` : ''}
+                              {safeString(medicine.dosage) ? ` - ${safeString(medicine.dosage)}` : ''}
+                              {safeString(medicine.note) ? ` (${safeString(medicine.note)})` : ''}
+                            </li>
+                          ))}
+                          {(record.medicines ?? []).length === 0 && <li>-</li>}
+                        </ul>
+                      </div>
 
-              {selectedRecord.prescription && (
-                <div>
-                  <Label className="text-sm font-medium">Đơn thuốc</Label>
-                  <p className="text-sm mt-1">{selectedRecord.prescription}</p>
-                </div>
-              )}
+                      <div>
+                        <p className="font-semibold">Dịch vụ y tế đã sử dụng:</p>
+                        <ul className="ml-5 list-disc text-sm text-[#374151]">
+                          {(record.medicalServices ?? []).map((service, index) => (
+                            <li key={index}>
+                              {safeString(service.serviceName) || '-'}
+                              {safeString(service.note) ? ` (${safeString(service.note)})` : ''}
+                            </li>
+                          ))}
+                          {(record.medicalServices ?? []).length === 0 && <li>-</li>}
+                        </ul>
+                      </div>
 
-              {selectedRecord.notes && (
-                <div>
-                  <Label className="text-sm font-medium">Ghi chú</Label>
-                  <p className="text-sm mt-1">{selectedRecord.notes}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+                      <div className="pt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setFollowUpRecordId(record.id)
+                            setFollowUpForm({ date: '', time: '', note: '' })
+                          }}
+                        >
+                          Tạo lịch tái khám
+                        </Button>
+                      </div>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Chỉnh sửa bệnh án</DialogTitle>
-            <DialogDescription>
-              Cập nhật thông tin bệnh án
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="editPatientId">Bệnh nhân</Label>
-                <Select
-                  value={selectedRecord?.patientId}
-                  onValueChange={(value) => setValue('patientId', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {patients.map(patient => (
-                      <SelectItem key={patient.id} value={patient.id}>
-                        {patient.fullName} - {patient.phone}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.patientId && (
-                  <p className="text-sm text-red-500">{errors.patientId.message}</p>
+                      {followUpRecordId === record.id && (
+                        <div className="space-y-3 rounded-xl border border-[#e5e7eb] bg-slate-50 p-3">
+                          <div className="grid gap-3 md:grid-cols-3">
+                            <div>
+                              <Label>Ngày tái khám</Label>
+                              <Input
+                                type="date"
+                                value={followUpForm.date}
+                                onChange={(event) =>
+                                  setFollowUpForm((prev) => ({ ...prev, date: event.target.value }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <Label>Giờ tái khám</Label>
+                              <Input
+                                type="time"
+                                value={followUpForm.time}
+                                onChange={(event) =>
+                                  setFollowUpForm((prev) => ({ ...prev, time: event.target.value }))
+                                }
+                              />
+                            </div>
+                            <div>
+                              <Label>Ghi chú</Label>
+                              <Input
+                                value={followUpForm.note}
+                                onChange={(event) =>
+                                  setFollowUpForm((prev) => ({ ...prev, note: event.target.value }))
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setFollowUpRecordId(null)}>
+                              Hủy
+                            </Button>
+                            <Button onClick={() => void handleCreateFollowUp()} disabled={followUpSubmitting}>
+                              {followUpSubmitting ? 'Đang tạo...' : 'Xác nhận'}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {patientDetail.records.length === 0 && (
+                  <Card className="rounded-xl border border-[#e5e7eb]">
+                    <CardContent className="py-8 text-center text-[#6b7280]">
+                      Bệnh nhân chưa có bệnh án.
+                    </CardContent>
+                  </Card>
                 )}
               </div>
             </div>
+          )}
 
-            <div className="space-y-2">
-              <Label htmlFor="editDiagnosis">Chẩn đoán</Label>
-              <Input
-                id="editDiagnosis"
-                {...register('diagnosis')}
-              />
-              {errors.diagnosis && (
-                <p className="text-sm text-red-500">{errors.diagnosis.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="editSymptoms">Triệu chứng</Label>
-              <Textarea
-                id="editSymptoms"
-                {...register('symptoms')}
-                rows={3}
-              />
-              {errors.symptoms && (
-                <p className="text-sm text-red-500">{errors.symptoms.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="editTreatment">Phương pháp điều trị</Label>
-              <Textarea
-                id="editTreatment"
-                {...register('treatment')}
-                rows={3}
-              />
-              {errors.treatment && (
-                <p className="text-sm text-red-500">{errors.treatment.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="editPrescription">Đơn thuốc</Label>
-              <Textarea
-                id="editPrescription"
-                {...register('prescription')}
-                rows={3}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="editNotes">Ghi chú</Label>
-              <Textarea
-                id="editNotes"
-                {...register('notes')}
-                rows={2}
-              />
-            </div>
-
-            <DialogFooter>
-              <Button type="submit">Cập nhật</Button>
-            </DialogFooter>
-          </form>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailOpen(false)}>
+              Đóng
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

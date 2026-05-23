@@ -8,6 +8,14 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+export const TOKEN_KEY = 'access_token'
+export const USER_KEY = 'auth_user'
+export const ROLE_KEY = 'user_role'
+export const USERNAME_KEY = 'username'
+export const FORBIDDEN_NOTICE_KEY = 'forbidden_notice'
+
+const VALID_ROLES = ['ROLE_ADMIN', 'ROLE_DOCTOR', 'ROLE_PATIENT'] as const
+
 api.interceptors.request.use((config) => {
   const token = getStoredToken()
   if (token) {
@@ -35,6 +43,20 @@ api.interceptors.response.use(
         error.message = message
       }
 
+      if (status === 401) {
+        clearStoredAuth()
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login'
+        }
+      }
+
+      if (status === 403) {
+        queueForbiddenNotice('Bạn không có quyền truy cập')
+        if (typeof window !== 'undefined') {
+          window.location.href = redirectByRole(getStoredRole())
+        }
+      }
+
       return Promise.reject(error)
     }
     return Promise.reject(error)
@@ -44,14 +66,23 @@ api.interceptors.response.use(
 export function getRoleHomePath(role: string) {
   switch (role) {
     case 'ROLE_ADMIN':
-      return '/'
+      return '/admin/dashboard'
     case 'ROLE_DOCTOR':
       return '/doctor'
     case 'ROLE_PATIENT':
       return '/'
     default:
-      return '/'
+      return '/login'
   }
+}
+
+export function redirectByRole(role?: string | null) {
+  if (isValidRole(role)) {
+    return getRoleHomePath(role)
+  }
+
+  clearStoredAuth()
+  return '/login'
 }
 
 // For backwards compatibility with other services
@@ -77,10 +108,16 @@ export async function fetchJson<T = any>(url: string, options: RequestInit = {})
 
     if (!response.ok) {
       if (response.status === 401) {
-        removeStoredToken()
-        removeStoredUser()
+        clearStoredAuth()
         if (typeof window !== 'undefined') {
           window.location.href = '/login'
+        }
+      }
+
+      if (response.status === 403) {
+        queueForbiddenNotice('Bạn không có quyền truy cập')
+        if (typeof window !== 'undefined') {
+          window.location.href = redirectByRole(getStoredRole())
         }
       }
 
@@ -138,9 +175,6 @@ export async function resetPassword(data: { username: string; otp: string; newPa
   return api.post('/auth/reset-password', data)
 }
 
-export const TOKEN_KEY = 'access_token'
-export const USER_KEY = 'auth_user'
-
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
 }
@@ -153,6 +187,44 @@ export function removeStoredToken() {
   localStorage.removeItem(TOKEN_KEY)
 }
 
+export function isValidRole(role?: string | null): role is (typeof VALID_ROLES)[number] {
+  return Boolean(role && VALID_ROLES.includes(role as (typeof VALID_ROLES)[number]))
+}
+
+export function getStoredRole(): string | null {
+  const role = localStorage.getItem(ROLE_KEY)
+  if (isValidRole(role)) {
+    return role
+  }
+
+  const user = getStoredUser()
+  return isValidRole(user?.role) ? user!.role : null
+}
+
+export function setStoredRole(role: string) {
+  if (!isValidRole(role)) return
+  localStorage.setItem(ROLE_KEY, role)
+}
+
+export function removeStoredRole() {
+  localStorage.removeItem(ROLE_KEY)
+}
+
+export function getStoredUsername(): string | null {
+  const username = localStorage.getItem(USERNAME_KEY)
+  if (username) return username
+  const user = getStoredUser()
+  return user?.username ?? null
+}
+
+export function setStoredUsername(username: string) {
+  localStorage.setItem(USERNAME_KEY, username)
+}
+
+export function removeStoredUsername() {
+  localStorage.removeItem(USERNAME_KEY)
+}
+
 export function getStoredUser(): AuthUser | null {
   const user = localStorage.getItem(USER_KEY)
   return user ? JSON.parse(user) : null
@@ -160,10 +232,30 @@ export function getStoredUser(): AuthUser | null {
 
 export function setStoredUser(user: AuthUser) {
   localStorage.setItem(USER_KEY, JSON.stringify(user))
+  setStoredRole(user.role)
+  setStoredUsername(user.username)
 }
 
 export function removeStoredUser() {
   localStorage.removeItem(USER_KEY)
+  removeStoredRole()
+  removeStoredUsername()
+}
+
+export function clearStoredAuth() {
+  removeStoredToken()
+  removeStoredUser()
+}
+
+export function queueForbiddenNotice(message = 'Bạn không có quyền truy cập') {
+  sessionStorage.setItem(FORBIDDEN_NOTICE_KEY, message)
+}
+
+export function consumeForbiddenNotice() {
+  const value = sessionStorage.getItem(FORBIDDEN_NOTICE_KEY)
+  if (!value) return null
+  sessionStorage.removeItem(FORBIDDEN_NOTICE_KEY)
+  return value
 }
 
 export const FACEBOOK_CALLBACK_URL = (typeof window !== 'undefined' && (import.meta.env.VITE_FACEBOOK_CALLBACK_URL || '')) || '/auth/facebook/callback'

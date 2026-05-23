@@ -1,21 +1,17 @@
-import { useState } from 'react'
 import {
-  LayoutDashboard,
   Calendar,
-  User,
-  LogOut,
-  ChevronRight,
-  FileText,
   Clock,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  User,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -23,46 +19,19 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 
 const doctorMenuItems = [
-  {
-    title: 'Dashboard',
-    href: '/doctor',
-    icon: LayoutDashboard,
-    label: 'Tổng quan',
-  },
-  {
-    title: 'Lịch hẹn',
-    href: '/doctor/appointments',
-    icon: Calendar,
-    label: 'Quản lý lịch hẹn',
-  },
-  {
-    title: 'Bệnh án',
-    href: '/doctor/medical-records',
-    icon: FileText,
-    label: 'Quản lý bệnh án',
-  },
-  {
-    title: 'Lịch làm việc',
-    href: '/doctor/schedule',
-    icon: Clock,
-    label: 'Quản lý lịch làm việc',
-  },
-  {
-    title: 'Hồ sơ',
-    href: '/doctor/profile',
-    icon: User,
-    label: 'Thông tin cá nhân',
-  },
+  { title: 'Dashboard', href: '/doctor', icon: LayoutDashboard, label: 'Tổng quan' },
+  { title: 'Lịch hẹn', href: '/doctor/appointments', icon: Calendar, label: 'Quản lý lịch hẹn' },
+  { title: 'Bệnh án', href: '/doctor/medical-records', icon: FileText, label: 'Quản lý bệnh án' },
+  { title: 'Lịch làm việc', href: '/doctor/schedule', icon: Clock, label: 'Quản lý lịch làm việc' },
+  { title: 'Hồ sơ', href: '/doctor/profile', icon: User, label: 'Thông tin cá nhân' },
 ]
 
 function DoctorSidebar() {
   const location = useLocation()
   const { logout } = useAuth()
   const navigate = useNavigate()
-  const pathname = location.pathname
 
   const handleLogout = () => {
     logout()
@@ -70,23 +39,25 @@ function DoctorSidebar() {
   }
 
   return (
-    <Sidebar>
-      <SidebarFooter className="border-b">
-        <Link to="/doctor" className="flex items-center gap-2 px-2 py-1">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <LayoutDashboard className="h-5 w-5 text-primary-foreground" />
+    <Sidebar className="border-r border-[#e5e7eb] bg-[#f8fafc]">
+      <SidebarFooter className="border-b border-[#e5e7eb] px-4 py-4">
+        <Link to="/doctor" className="flex items-center gap-3 rounded-2xl bg-sky-100/80 p-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0284c7] text-white">
+            <LayoutDashboard className="h-5 w-5" />
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold">MedCare Doctor</span>
-            <span className="text-xs text-muted-foreground">Quản lý lịch hẹn</span>
+          <div>
+            <p className="text-sm font-semibold text-[#111827]">MedCare Doctor</p>
+            <p className="text-xs text-[#6b7280]">Quản lý lịch hẹn</p>
           </div>
         </Link>
       </SidebarFooter>
 
-      <SidebarContent>
+      <SidebarContent className="px-2 py-3">
         <SidebarMenu>
           {doctorMenuItems.map((item) => {
-            const isActive = pathname === item.href
+            const isActive = item.href === '/doctor'
+              ? location.pathname === '/doctor'
+              : location.pathname === item.href
             const Icon = item.icon
 
             return (
@@ -95,8 +66,9 @@ function DoctorSidebar() {
                   asChild
                   isActive={isActive}
                   tooltip={item.label}
+                  className={isActive ? 'bg-sky-100 text-sky-700' : 'hover:bg-slate-100'}
                 >
-                  <Link to={item.href}>
+                  <Link to={item.href} className="flex items-center gap-3 rounded-xl px-3 py-3 font-medium">
                     <Icon className="h-4 w-4" />
                     <span>{item.title}</span>
                   </Link>
@@ -107,17 +79,11 @@ function DoctorSidebar() {
         </SidebarMenu>
       </SidebarContent>
 
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
-                <LogOut className="h-4 w-4" />
-                <span>Đăng xuất</span>
-              </Button>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+      <SidebarFooter className="border-t border-[#e5e7eb] px-4 py-4">
+        <Button variant="outline" className="w-full justify-center" onClick={handleLogout}>
+          <LogOut className="h-4 w-4" />
+          Đăng xuất
+        </Button>
       </SidebarFooter>
     </Sidebar>
   )
@@ -126,16 +92,17 @@ function DoctorSidebar() {
 export function DoctorLayoutComponent({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full">
+      <div className="flex min-h-screen w-full bg-[#f8fafc] text-[#111827]">
         <DoctorSidebar />
-        <main className="flex-1 overflow-auto">
-          <header className="flex h-14 items-center gap-4 border-b bg-background px-6">
-            <SidebarTrigger />
-            <div className="flex-1" />
+
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <header className="sticky top-0 z-20 flex h-14 items-center gap-4 border-b border-[#e5e7eb] bg-white px-6">
+            <SidebarTrigger className="size-8 rounded-md border border-[#e5e7eb] text-[#6b7280] hover:bg-[#f1f5f9]" />
           </header>
-          <div className="p-6">{children}</div>
-        </main>
+          <main className="flex-1 overflow-auto p-6">{children}</main>
+        </div>
       </div>
     </SidebarProvider>
   )
 }
+

@@ -67,6 +67,7 @@ export function HeroSection() {
   const doctorResults = searchResults?.doctors ?? []
   const specialtyResults = searchResults?.specialties ?? []
   const hasResults = doctorResults.length > 0 || specialtyResults.length > 0
+  const isDropdownOpen = debouncedQuery.length > 0
 
   const handleResultClick = (path: string) => {
     navigate(path)
@@ -123,7 +124,7 @@ export function HeroSection() {
         className="absolute -bottom-10 -left-10 w-80 h-80 bg-accent/15 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2"
       />
       
-      <div className="container mx-auto px-4 relative z-10 py-16 md:py-28">
+      <div className="container mx-auto px-4 relative z-10 py-16 md:py-24 lg:py-28">
         <motion.div
           className="grid lg:grid-cols-5 gap-8 lg:gap-12 items-center"
           variants={containerVariants}
@@ -169,7 +170,7 @@ export function HeroSection() {
             <motion.div
               variants={itemVariants}
               whileHover={{ boxShadow: '0 25px 50px rgba(0, 0, 0, 0.12)' }}
-              className="bg-white rounded-2xl p-2.5 shadow-lg border border-border/50 max-w-2xl transition-all"
+              className="relative z-30 bg-white rounded-2xl p-2.5 shadow-lg border border-border/50 max-w-2xl transition-all"
             >
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -188,49 +189,6 @@ export function HeroSection() {
                       }
                     }}
                   />
-
-                  {debouncedQuery.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-2 rounded-3xl border border-border/70 bg-white shadow-xl z-20">
-                      {loadingSearch ? (
-                        <div className="p-4 text-sm text-muted-foreground">Đang tìm kiếm...</div>
-                      ) : searchError ? (
-                        <div className="p-4 text-sm text-destructive">Lỗi: {searchError}</div>
-                      ) : hasResults ? (
-                        <div className="divide-y divide-border/60">
-                          <div className="p-4">
-                            <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">Bác sĩ</div>
-                            {doctorResults.map((doctor) => (
-                              <button
-                                key={doctor.id}
-                                type="button"
-                                onClick={() => handleResultClick(`/doctors/${doctor.id}`)}
-                                className="w-full text-left rounded-2xl px-3 py-2 hover:bg-slate-100 transition-colors"
-                              >
-                                <div className="text-sm font-medium text-foreground">{doctor.fullName}</div>
-                                <div className="text-xs text-muted-foreground">{doctor.specialtyName || 'Chưa cập nhật'}</div>
-                              </button>
-                            ))}
-                          </div>
-                          <div className="p-4">
-                            <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">Chuyên khoa</div>
-                            {specialtyResults.map((specialty) => (
-                              <button
-                                key={specialty.id}
-                                type="button"
-                                onClick={() => handleResultClick(`/specialty/${specialty.id}`)}
-                                className="w-full text-left rounded-2xl px-3 py-2 hover:bg-slate-100 transition-colors"
-                              >
-                                <div className="text-sm font-medium text-foreground">{specialty.name}</div>
-                                <div className="text-xs text-muted-foreground">{specialty.description || 'Chuyên khoa'}</div>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-4 text-sm text-muted-foreground">Không tìm thấy kết quả phù hợp.</div>
-                      )}
-                    </div>
-                  )}
                 </div>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                   <Button size="lg" className="h-14 px-8 text-base font-semibold" onClick={() => onSearch(true)}>
@@ -238,6 +196,49 @@ export function HeroSection() {
                   </Button>
                 </motion.div>
               </div>
+
+              {isDropdownOpen && (
+                <div className="mt-3 rounded-3xl border border-border/70 bg-white shadow-xl z-50">
+                  {loadingSearch ? (
+                    <div className="p-4 text-sm text-muted-foreground">Đang tìm kiếm...</div>
+                  ) : searchError ? (
+                    <div className="p-4 text-sm text-destructive">Lỗi: {searchError}</div>
+                  ) : hasResults ? (
+                    <div className="divide-y divide-border/60">
+                      <div className="p-4">
+                        <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">Bác sĩ</div>
+                        {doctorResults.map((doctor) => (
+                          <button
+                            key={doctor.id}
+                            type="button"
+                            onClick={() => handleResultClick(`/doctors/${doctor.id}`)}
+                            className="w-full text-left rounded-2xl px-3 py-2 hover:bg-slate-100 transition-colors"
+                          >
+                            <div className="text-sm font-medium text-foreground">{doctor.fullName}</div>
+                            <div className="text-xs text-muted-foreground">{doctor.specialtyName || 'Chưa cập nhật'}</div>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="p-4">
+                        <div className="text-xs uppercase tracking-[0.24em] text-muted-foreground mb-3">Chuyên khoa</div>
+                        {specialtyResults.map((specialty) => (
+                          <button
+                            key={specialty.id}
+                            type="button"
+                            onClick={() => handleResultClick(`/specialty/${specialty.id}`)}
+                            className="w-full text-left rounded-2xl px-3 py-2 hover:bg-slate-100 transition-colors"
+                          >
+                            <div className="text-sm font-medium text-foreground">{specialty.name}</div>
+                            <div className="text-xs text-muted-foreground">{specialty.description || 'Chuyên khoa'}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 text-sm text-muted-foreground">Không tìm thấy kết quả phù hợp.</div>
+                  )}
+                </div>
+              )}
             </motion.div>
 
             {/* Quick stats - LARGER */}

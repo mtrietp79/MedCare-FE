@@ -1,12 +1,12 @@
-﻿import { motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
-  Calendar,
+  ClipboardList,
   DollarSign,
+  MessageSquare,
   LayoutDashboard,
   LogOut,
   Pill,
   Stethoscope,
-  UserRound,
   Users,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -22,56 +22,49 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 
 const adminMenuItems = [
   {
     title: 'Dashboard',
-    href: '/admin',
+    href: '/admin/dashboard',
     icon: LayoutDashboard,
-    label: 'Tổng quan',
+    label: 'Tong quan',
   },
   {
-    title: 'Chuyên khoa',
+    title: 'Chuyen khoa',
     href: '/admin/specialties',
     icon: Stethoscope,
-    label: 'Quản lý chuyên khoa',
+    label: 'Quan ly chuyen khoa',
   },
   {
-    title: 'Dịch vụ',
-    href: '/admin/medical-services',
-    icon: Pill,
-    label: 'Quản lý gói dịch vụ',
-  },
-  {
-    title: 'Bác sĩ',
+    title: 'Bac si',
     href: '/admin/doctors',
     icon: Users,
-    label: 'Quản lý bác sĩ',
+    label: 'Quan ly bac si',
   },
   {
-    title: 'Bệnh nhân',
-    href: '/admin/patients',
-    icon: UserRound,
-    label: 'Quản lý bệnh nhân',
-  },
-  {
-    title: 'Lịch khám',
-    href: '/admin/schedule',
-    icon: Calendar,
-    label: 'Quản lý lịch khám',
-  },
-  {
-    title: 'Tài chính',
+    title: 'Tai chinh',
     href: '/admin/finance',
     icon: DollarSign,
-    label: 'Quản lý tài chính',
+    label: 'Quan ly tai chinh',
   },
   {
-    title: 'Thuốc',
+    title: 'Phieu goi',
+    href: '/admin/service-package-bookings',
+    icon: ClipboardList,
+    label: 'Quan ly phieu goi dich vu',
+  },
+  {
+    title: 'Feedback',
+    href: '/admin/website-feedbacks',
+    icon: MessageSquare,
+    label: 'Quan ly feedback website',
+  },
+  {
+    title: 'Thuoc',
     href: '/admin/medicines',
     icon: Pill,
-    label: 'Quản lý thuốc',
+    label: 'Quan ly thuoc',
   },
 ]
 
@@ -86,15 +79,18 @@ function AdminSidebar() {
   }
 
   return (
-    <Sidebar className="border-r border-border/70 bg-background shadow-sm">
-      <SidebarFooter className="border-b border-border/80 px-4 py-4">
-        <Link to="/admin" className="group flex items-center gap-3 rounded-3xl bg-primary/10 p-3 transition hover:bg-primary/15">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+    <Sidebar className="border-r border-[#e5e7eb] bg-[#f8fafc] shadow-sm">
+      <SidebarFooter className="border-b border-[#e5e7eb] px-4 py-4">
+        <Link
+          to="/admin/dashboard"
+          className="group flex items-center gap-3 rounded-2xl bg-sky-100/80 p-3 transition hover:bg-sky-100"
+        >
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0284c7] text-white shadow-sm">
             <LayoutDashboard className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold">MedCare Admin</p>
-            <p className="text-xs text-muted-foreground">Quản lý hệ thống</p>
+            <p className="text-sm font-semibold text-[#111827]">MedCare Admin</p>
+            <p className="text-xs text-[#6b7280]">Quan ly he thong</p>
           </div>
         </Link>
       </SidebarFooter>
@@ -103,7 +99,10 @@ function AdminSidebar() {
         <SidebarMenu>
           {adminMenuItems.map((item) => {
             const Icon = item.icon
-            const isActive = location.pathname === item.href
+            const isDashboard = item.href === '/admin/dashboard'
+            const isActive = isDashboard
+              ? location.pathname === '/admin' || location.pathname === '/admin/dashboard'
+              : location.pathname === item.href
 
             return (
               <SidebarMenuItem key={item.href}>
@@ -111,9 +110,9 @@ function AdminSidebar() {
                   asChild
                   isActive={isActive}
                   tooltip={item.label}
-                  className={isActive ? 'bg-primary/10 text-primary shadow-sm' : 'hover:bg-secondary/80'}
+                  className={isActive ? 'bg-sky-100 text-sky-700 shadow-sm' : 'hover:bg-slate-100'}
                 >
-                  <Link to={item.href} className="flex items-center gap-3 rounded-2xl px-3 py-3 font-medium transition">
+                  <Link to={item.href} className="flex items-center gap-3 rounded-xl px-3 py-3 font-medium transition">
                     <Icon className="h-4 w-4" />
                     <span>{item.title}</span>
                   </Link>
@@ -124,10 +123,10 @@ function AdminSidebar() {
         </SidebarMenu>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border/80 px-4 py-4">
+      <SidebarFooter className="border-t border-[#e5e7eb] px-4 py-4">
         <Button variant="outline" className="w-full justify-center" onClick={handleLogout}>
           <LogOut className="h-4 w-4" />
-          Đăng xuất
+          Dang xuat
         </Button>
       </SidebarFooter>
     </Sidebar>
@@ -139,24 +138,16 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-background text-foreground">
+      <div className="flex min-h-screen w-full bg-[#f8fafc] text-[#111827]">
         <AdminSidebar />
 
         <div className="flex flex-1 flex-col overflow-hidden">
-          <header className="sticky top-0 z-20 border-b border-border/70 bg-card/95 backdrop-blur-xl px-6 py-4 shadow-sm">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm uppercase tracking-[0.24em] text-muted-foreground">Bảng điều khiển</p>
-                <h1 className="text-2xl font-semibold">MedCare Admin Panel</h1>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm">Hỗ trợ</Button>
-                <Button size="sm">Tạo mới</Button>
-              </div>
-            </div>
+          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-[#e5e7eb] bg-white px-6 py-4">
+            <SidebarTrigger className="size-8 rounded-md border border-[#e5e7eb] text-[#6b7280] hover:bg-[#f1f5f9]" />
+            <h1 className="text-2xl font-semibold text-[#111827]">MedCare Admin Panel</h1>
           </header>
 
-          <main className="flex-1 overflow-auto p-6">
+          <main className="flex-1 overflow-auto bg-[#f8fafc] p-6">
             <motion.div
               key={location.pathname}
               initial={{ opacity: 0, y: 16 }}

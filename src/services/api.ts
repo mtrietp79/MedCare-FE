@@ -1,7 +1,23 @@
 ﻿
-import type { Doctor, Specialty, Appointment, Patient, DoctorSchedule, SearchResponse, MedicalService } from '@/types'
+import type {
+  Doctor,
+  Specialty,
+  Appointment,
+  Patient,
+  DoctorSchedule,
+  SearchResponse,
+  MedicalService,
+  ServicePackage,
+  ServicePackageBooking,
+} from '@/types'
 import { mockApi } from './mock-api'
-import { getStoredToken, removeStoredToken, removeStoredUser } from './auth'
+import {
+  clearStoredAuth,
+  getStoredRole,
+  getStoredToken,
+  queueForbiddenNotice,
+  redirectByRole,
+} from './auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api'
 
@@ -100,12 +116,19 @@ async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise
 
     if (!response.ok) {
       if (response.status === 401) {
-        removeStoredToken()
-        removeStoredUser()
+        clearStoredAuth()
         if (typeof window !== 'undefined') {
           window.location.href = '/login'
         }
         throw new Error('Unauthorized. Vui lòng đăng nhập lại.')
+      }
+
+      if (response.status === 403) {
+        queueForbiddenNotice('Bạn không có quyền truy cập')
+        if (typeof window !== 'undefined') {
+          window.location.href = redirectByRole(getStoredRole())
+        }
+        throw new Error('Bạn không có quyền truy cập')
       }
 
       const message =
@@ -206,6 +229,54 @@ export const medicalServicesApi = {
 
   async getById(id: string): Promise<MedicalService> {
     return apiCall<MedicalService>(`/medical-services/${id}`)
+  },
+}
+
+function normalizeServicePackageBooking(raw: Record<string, any>): ServicePackageBooking {
+  return {
+    id: String(raw.id ?? raw.bookingId ?? ''),
+    bookingCode: raw.bookingCode ?? raw.code ?? undefined,
+    packageId: raw.packageId ? String(raw.packageId) : raw.servicePackage?.id ? String(raw.servicePackage.id) : undefined,
+    packageName: raw.packageName ?? raw.servicePackage?.name ?? undefined,
+    servicePackage: raw.servicePackage
+      ? {
+          id: raw.servicePackage.id ? String(raw.servicePackage.id) : undefined,
+          name: raw.servicePackage.name ?? undefined,
+          description: raw.servicePackage.description ?? undefined,
+        }
+      : undefined,
+    bookingDate: raw.bookingDate ?? raw.date ?? undefined,
+    bookingTime: raw.bookingTime ?? raw.time ?? undefined,
+    amount: Number(raw.amount ?? raw.totalAmount ?? 0),
+    paidAmount: Number(raw.paidAmount ?? raw.amountPaid ?? raw.amount ?? 0),
+    status: String(raw.status ?? raw.bookingStatus ?? ''),
+    note: raw.note ?? undefined,
+    paymentId: raw.paymentId ? String(raw.paymentId) : undefined,
+    invoiceCode: raw.invoiceCode ?? raw.invoiceNumber ?? undefined,
+    createdAt: raw.createdAt ?? undefined,
+  }
+}
+
+export const servicePackagesApi = {
+  async getAll(query?: { q?: string }): Promise<ServicePackage[]> {
+    const params = new URLSearchParams()
+    if (query?.q) params.append('q', query.q)
+    const endpoint = `/public/service-packages${params.toString() ? `?${params.toString()}` : ''}`
+    const data = await apiCall<Array<Record<string, any>>>(endpoint)
+    return (Array.isArray(data) ? data : []).map((item) => ({
+      id: String(item.id),
+      name: String(item.name ?? ''),
+      description: item.description ?? null,
+      price: Number(item.price ?? 0),
+      durationMinutes: Number(item.durationMinutes ?? 0),
+      imageUrl: item.imageUrl ?? null,
+    }))
+  },
+
+  async getById(id: string): Promise<ServicePackage | null> {
+    const data = await this.getAll()
+    const found = data.find((item) => String(item.id) === String(id))
+    return found ?? null
   },
 }
 
@@ -321,6 +392,40 @@ export const patientApi = {
       method: 'DELETE',
     })
   },
+
+  async createServicePackageBooking(data: {
+    packageId: number | string
+    bookingDate: string
+    bookingTime: string
+    note?: string
+  }): Promise<{
+    bookingId?: number | string
+    appointmentId?: number | string
+    paymentId?: number | string
+    paymentUrl?: string
+    message?: string
+    id?: string
+  }> {
+    return apiCall('/patient/service-package-bookings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async getServicePackageBookings(): Promise<ServicePackageBooking[]> {
+    const data = await apiCall<Array<Record<string, any>> | { data?: Array<Record<string, any>> }>(
+      '/patient/service-package-bookings'
+    )
+
+    const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+    return list.map((item) => normalizeServicePackageBooking(item))
+  },
+
+  async getServicePackageBookingById(id: string): Promise<ServicePackageBooking | null> {
+    const data = await apiCall<Record<string, any> | null>(`/patient/service-package-bookings/${id}`)
+    if (!data || typeof data !== 'object') return null
+    return normalizeServicePackageBooking(data)
+  },
 }
 
 export const scheduleApi = {
@@ -364,15 +469,54 @@ export const scheduleApi = {
   },
 }
 
-export const feedbackApi = {
-  async getByDoctor(doctorId: string) {
-    return apiCall<any[]>(`/feedbacks/doctor/${doctorId}`)
+export const doctorFeedbackApi = {
+  async canFeedback(appointmentId: string): Promise<{ canFeedback: boolean }> {
+    const data = await apiCall<any>(`/patient/appointments/${appointmentId}/can-feedback`)
+    return { canFeedback: Boolean(data?.canFeedback ?? data?.eligible ?? data === true) }
   },
-  async create(data: { appointmentId?: string; doctorId: string; rating: number; comment: string }) {
-    return apiCall<any>('/feedbacks', {
+
+  async create(data: { appointmentId: string; rating: number; comment: string }) {
+    return apiCall<any>('/patient/doctor-feedbacks', {
       method: 'POST',
       body: JSON.stringify(data),
     })
+  },
+
+  async getByDoctor(doctorId: string) {
+    return apiCall<any[]>(`/doctors/${doctorId}/feedbacks`)
+  },
+
+  async getDoctorRatingSummary(doctorId: string) {
+    return apiCall<any>(`/doctors/${doctorId}/rating-summary`)
+  },
+}
+
+export const websiteFeedbackApi = {
+  async getPublicList() {
+    return apiCall<any[]>('/public/website-feedbacks')
+  },
+
+  async createPublic(data: { fullName: string; email: string; rating: number; comment: string }) {
+    return apiCall<any>('/public/website-feedbacks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  async getAdminList() {
+    return apiCall<any[]>('/admin/website-feedbacks')
+  },
+
+  async approve(id: string) {
+    return apiCall(`/admin/website-feedbacks/${id}/approve`, { method: 'PUT' })
+  },
+
+  async hide(id: string) {
+    return apiCall(`/admin/website-feedbacks/${id}/hide`, { method: 'PUT' })
+  },
+
+  async remove(id: string) {
+    return apiCall(`/admin/website-feedbacks/${id}`, { method: 'DELETE' })
   },
 }
 
@@ -471,10 +615,12 @@ export const api = {
   appointments: appointmentApi,
   patients: patientApi,
   schedules: scheduleApi,
-  feedbacks: feedbackApi,
+  doctorFeedbacks: doctorFeedbackApi,
+  websiteFeedbacks: websiteFeedbackApi,
   payments: paymentApi,
   medicines: medicineApi,
   medicalServices: medicalServicesApi,
+  servicePackages: servicePackagesApi,
   dashboard: dashboardApi,
 }
 

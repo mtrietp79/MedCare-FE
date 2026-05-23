@@ -1,17 +1,22 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  clearStoredAuth,
+  forgotPassword as apiForgotPassword,
   getMe,
+  getStoredRole,
   getStoredToken,
   getStoredUser,
+  getStoredUsername,
+  isValidRole,
+  login as apiLogin,
+  redirectByRole,
+  register as apiRegister,
   removeStoredToken,
   removeStoredUser,
+  resetPassword as apiResetPassword,
   setStoredToken,
   setStoredUser,
-  login as apiLogin,
-  register as apiRegister,
-  forgotPassword as apiForgotPassword,
-  resetPassword as apiResetPassword,
   type AuthResponse,
   type AuthUser,
 } from '@/services/auth'
@@ -40,62 +45,93 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const initialize = async () => {
       const savedToken = getStoredToken()
       const savedUser = getStoredUser()
+      const savedRole = getStoredRole()
+      const savedUsername = getStoredUsername()
 
-      if (!savedToken || !savedUser) {
+      if (!savedToken) {
         setLoading(false)
         return
       }
 
+      if (!savedUser && savedRole && savedUsername) {
+        setStoredUser({
+          username: savedUsername,
+          displayName: savedUsername,
+          role: savedRole,
+          profileCompleted: false,
+        })
+      }
+
       try {
         const authUser = await getMe(savedToken)
+        if (!isValidRole(authUser.role)) {
+          clearStoredAuth()
+          setUser(null)
+          setToken(null)
+          setLoading(false)
+          navigate('/login', { replace: true })
+          return
+        }
+
         setUser(authUser)
         setToken(savedToken)
-      } catch (error) {
-        // Token tồn tại nhưng getMe() fail, vẫn giữ token
-        // Để user có thể tiếp tục dùng app, API error khác sẽ handle sau
-        setUser(savedUser)
-        setToken(savedToken)
+      } catch {
+        const fallbackUser = getStoredUser()
+        if (fallbackUser && isValidRole(fallbackUser.role)) {
+          setUser(fallbackUser)
+          setToken(savedToken)
+        } else {
+          clearStoredAuth()
+          setUser(null)
+          setToken(null)
+        }
       } finally {
         setLoading(false)
       }
     }
 
-    initialize()
+    void initialize()
 
-    // Listen cho thay đổi từ social login callback pages
     const handleAuthSync = () => {
       const newToken = getStoredToken()
       const newUser = getStoredUser()
       if (newToken && newUser) {
         setToken(newToken)
         setUser(newUser)
+      } else {
+        setToken(null)
+        setUser(null)
       }
     }
 
-    // Listen storage changes từ tab khác
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'access_token' || e.key === 'auth_user') {
+      if (e.key === 'access_token' || e.key === 'auth_user' || e.key === 'user_role' || e.key === 'username') {
         handleAuthSync()
       }
     }
 
-    // Listen custom event từ callback pages
     window.addEventListener('auth-sync', handleAuthSync)
     window.addEventListener('storage', handleStorageChange)
     return () => {
       window.removeEventListener('auth-sync', handleAuthSync)
       window.removeEventListener('storage', handleStorageChange)
     }
-  }, [])
+  }, [navigate])
 
   const getResponseToken = (response: AuthResponse) => response.accessToken ?? response.token ?? ''
 
   const handleAuthSuccess = (response: AuthResponse) => {
+    if (!isValidRole(response.role)) {
+      clearStoredAuth()
+      setToken(null)
+      setUser(null)
+      navigate('/login', { replace: true })
+      return
+    }
+
     const tokenValue = getResponseToken(response)
     setStoredToken(tokenValue)
     setToken(tokenValue)
-
-    localStorage.setItem('user_role', response.role)
 
     const userData: AuthUser = {
       username: response.username,
@@ -103,18 +139,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       role: response.role,
       profileCompleted: response.profileCompleted ?? false,
     }
+
     setStoredUser(userData)
     setUser(userData)
-
-    if (response.role === 'ROLE_PATIENT') {
-      navigate('/', { replace: true })
-    } else if (response.role === 'ROLE_ADMIN') {
-      navigate('/', { replace: true })
-    } else if (response.role === 'ROLE_DOCTOR') {
-      navigate('/doctor', { replace: true })
-    } else {
-      navigate('/', { replace: true })
-    }
+    navigate(redirectByRole(response.role), { replace: true })
   }
 
   const login = async (data: { username: string; password: string }) => {
@@ -134,9 +162,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     navigate('/login', { replace: true })
   }
 
-  const forgotPassword = async (payload: { username: string }) => {
-    return apiForgotPassword(payload)
-  }
+  const forgotPassword = async (payload: { username: string }) => apiForgotPassword(payload)
 
   const resetPassword = async (data: { username: string; otp: string; newPassword: string }) => {
     await apiResetPassword(data)

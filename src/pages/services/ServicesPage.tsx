@@ -1,87 +1,76 @@
-﻿import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Search } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Clock3, Package2, Search, WalletCards } from 'lucide-react'
 import { api } from '@/services/api'
+import type { ServicePackage } from '@/types'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import { useAuth } from '@/context/AuthContext'
+import { useToast } from '@/hooks/use-toast'
+import { redirectByRole } from '@/services/auth'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import type { MedicalService } from '@/types'
 
 export function ServicesPage() {
-  const [services, setServices] = useState<MedicalService[]>([])
-  const [specialties, setSpecialties] = useState<Array<{ id: string; name: string }>>([])
-  const [selectedSpecialtyId, setSelectedSpecialtyId] = useState<string>('all')
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const { toast } = useToast()
+
+  const [packages, setPackages] = useState<ServicePackage[]>([])
   const [searchInput, setSearchInput] = useState('')
   const debouncedKeyword = useDebouncedValue(searchInput, 400)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const loadSpecialties = async () => {
-      try {
-        const data = await api.specialties.getAll()
-        setSpecialties(
-          (Array.isArray(data) ? data : [])
-            .map((item) => ({ id: String(item.id), name: item.name }))
-            .filter((item) => item.id && item.name)
-        )
-      } catch {
-        setSpecialties([])
-      }
+  const loadPackages = useCallback(async (keyword = '') => {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await api.servicePackages.getAll({ q: keyword.trim() || undefined })
+      setPackages(Array.isArray(data) ? data : [])
+    } catch {
+      setPackages([])
+      setError('Không thể tải danh sách gói dịch vụ. Vui lòng thử lại sau.')
+    } finally {
+      setLoading(false)
     }
-
-    void loadSpecialties()
   }, [])
 
   useEffect(() => {
-    const loadServices = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-
-        const query: { specialtyId?: string; q?: string } = {}
-        const keyword = debouncedKeyword.trim()
-        if (selectedSpecialtyId !== 'all') query.specialtyId = selectedSpecialtyId
-        if (keyword) query.q = keyword
-
-        const data = await api.medicalServices.getAll(query)
-        setServices(Array.isArray(data) ? data : [])
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Không thể tải danh sách dịch vụ')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    void loadServices()
-  }, [debouncedKeyword, selectedSpecialtyId])
+    void loadPackages(debouncedKeyword)
+  }, [debouncedKeyword, loadPackages])
 
   const formatCurrency = (amount?: number) =>
-    new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount ?? 0)
+    `${new Intl.NumberFormat('vi-VN').format(Number(amount || 0))} đ`
 
-  const selectedSpecialtyName = useMemo(
-    () => specialties.find((item) => item.id === selectedSpecialtyId)?.name || 'Tất cả',
-    [selectedSpecialtyId, specialties]
-  )
+  const handleBookNow = (pkg: ServicePackage) => {
+    if (!user) {
+      navigate('/login')
+      return
+    }
+
+    if (user.role === 'ROLE_PATIENT') {
+      navigate(`/booking/service-package/${pkg.id}`)
+      return
+    }
+
+    toast({
+      title: 'Không thể đặt lịch',
+      description: 'Chức năng này chỉ dành cho tài khoản bệnh nhân.',
+      variant: 'destructive',
+    })
+    navigate(redirectByRole(user.role), { replace: true })
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-muted/20 to-background py-10">
       <div className="container mx-auto px-4">
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-foreground">Dịch vụ khám bệnh</h1>
+            <h1 className="text-4xl font-bold text-foreground">Gói dịch vụ đặt khám</h1>
             <p className="text-muted-foreground mt-2 max-w-2xl">
-              Tìm và đặt lịch nhanh theo gói dịch vụ. Hệ thống sẽ xử lý bác sĩ phù hợp theo cấu hình của từng gói.
+              Chọn gói phù hợp để đặt lịch nhanh. Thời gian và chi phí được hiển thị rõ ràng.
             </p>
           </div>
           <Button asChild variant="outline">
@@ -89,8 +78,8 @@ export function ServicesPage() {
           </Button>
         </div>
 
-        <div className="mb-8 grid gap-3 md:grid-cols-[1fr_260px]">
-          <div className="relative">
+        <div className="mb-8">
+          <div className="relative max-w-xl">
             <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
             <Input
               value={searchInput}
@@ -99,81 +88,66 @@ export function ServicesPage() {
               className="pl-9"
             />
           </div>
-          <Select value={selectedSpecialtyId} onValueChange={setSelectedSpecialtyId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Tất cả chuyên khoa" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tất cả chuyên khoa</SelectItem>
-              {specialties.map((specialty) => (
-                <SelectItem key={specialty.id} value={specialty.id}>
-                  {specialty.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {loading ? (
           <div className="rounded-3xl border border-border/70 bg-white p-10 text-center text-muted-foreground">
-            Đang tải danh sách dịch vụ...
+            Đang tải danh sách gói dịch vụ...
           </div>
         ) : error ? (
-          <div className="rounded-3xl border border-destructive/70 bg-destructive/10 p-10 text-center text-destructive">
-            Lỗi: {error}
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+            <p>{error}</p>
+            <Button type="button" variant="outline" className="mt-3" onClick={() => void loadPackages(debouncedKeyword)}>
+              Thử lại
+            </Button>
           </div>
-        ) : services.length === 0 ? (
+        ) : packages.length === 0 ? (
           <div className="rounded-3xl border border-border/70 bg-white p-10 text-center text-muted-foreground">
-            Không tìm thấy dịch vụ phù hợp với bộ lọc hiện tại ({selectedSpecialtyName}).
+            Chưa có gói dịch vụ nào
           </div>
         ) : (
           <div className="grid gap-6 lg:grid-cols-3">
-            {services.map((service) => (
-              <Card key={service.id} className="overflow-hidden">
-                {service.imageUrl ? (
-                  <img
-                    src={service.imageUrl}
-                    alt={service.name}
-                    className="h-52 w-full object-cover"
-                  />
+            {packages.map((pkg) => (
+              <Card key={pkg.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                {pkg.imageUrl ? (
+                  <img src={pkg.imageUrl} alt={pkg.name} className="h-52 w-full object-cover" />
                 ) : (
-                  <div className="h-52 w-full bg-slate-100 flex items-center justify-center text-muted-foreground">Không có ảnh</div>
+                  <div className="h-52 w-full bg-gradient-to-br from-cyan-50 via-sky-50 to-teal-50 flex items-center justify-center">
+                    <div className="rounded-2xl bg-white/80 p-4 shadow-sm">
+                      <Package2 className="h-9 w-9 text-cyan-700" />
+                    </div>
+                  </div>
                 )}
+
                 <CardContent className="space-y-4 p-6">
                   <div>
-                    <p className="text-sm text-muted-foreground">{service.specialty?.name || 'Chưa có chuyên khoa'}</p>
-                    <CardTitle className="text-xl">{service.name}</CardTitle>
+                    <CardTitle className="text-xl">{pkg.name}</CardTitle>
+                    <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">
+                      {pkg.description || 'Chưa có mô tả cho gói dịch vụ này.'}
+                    </p>
                   </div>
 
-                  <CardDescription className="line-clamp-3">
-                    {service.description || 'Không có mô tả.'}
-                  </CardDescription>
-
-                  <div className="rounded-xl border border-border/60 bg-muted/10 p-3 text-sm">
-                    <p className="font-medium text-foreground mb-1">Bác sĩ đảm nhận</p>
-                    {service.assignedDoctor ? (
-                      <p className="text-muted-foreground">
-                        {service.assignedDoctor.fullName || `Bác sĩ #${service.assignedDoctor.id}`}
-                      </p>
-                    ) : (
-                      <p className="text-muted-foreground">
-                        Hệ thống sẽ tự phân bác sĩ phù hợp khi đặt lịch.
-                      </p>
-                    )}
+                  <div className="rounded-xl border border-border/60 bg-muted/10 p-3 text-sm space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="inline-flex items-center gap-2 text-muted-foreground">
+                        <WalletCards className="h-4 w-4" />
+                        Giá
+                      </span>
+                      <span className="font-semibold text-primary">{formatCurrency(pkg.price)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="inline-flex items-center gap-2 text-muted-foreground">
+                        <Clock3 className="h-4 w-4" />
+                        Thời lượng
+                      </span>
+                      <span className="font-medium text-foreground">
+                        {pkg.durationMinutes ? `${pkg.durationMinutes} phút` : 'Đang cập nhật'}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-4 pt-2">
-                    <span className="text-lg font-semibold text-primary">{formatCurrency(service.price)}</span>
-                    <Badge>{service.active ? 'Đang hoạt động' : 'Không hoạt động'}</Badge>
-                  </div>
-
-                  <Button asChild className="w-full">
-                    <Link
-                      to={`/booking?serviceId=${service.id}`}
-                      state={{ medicalService: service }}
-                    >
-                      Đặt lịch
-                    </Link>
+                  <Button className="w-full bg-[#0d9488] hover:bg-[#0f766e]" onClick={() => handleBookNow(pkg)}>
+                    Đặt lịch
                   </Button>
                 </CardContent>
               </Card>
@@ -184,5 +158,3 @@ export function ServicesPage() {
     </div>
   )
 }
-
-

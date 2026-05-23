@@ -105,8 +105,8 @@ export function SpecialtySection() {
 
         {/* Specialty Grid */}
         {!loading && Array.isArray(specialties) && specialties.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-            {specialties.map((specialty) => {
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+            {specialties.slice(0, 8).map((specialty) => {
               const IconComponent =
                 specialty.icon && iconMap[specialty.icon]
                   ? iconMap[specialty.icon]

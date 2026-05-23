@@ -1,6 +1,7 @@
 import React from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
+import { redirectByRole } from '@/services/auth'
 
 export const AdminGuard = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth()
@@ -21,7 +22,7 @@ export const AdminGuard = ({ children }: { children: React.ReactNode }) => {
       return <Navigate to="/login" state={{ from: location }} replace />
     }
 
-    return <Navigate to="/403" replace />
+    return <Navigate to={redirectByRole(user.role)} replace />
   }
 
   return <>{children}</>

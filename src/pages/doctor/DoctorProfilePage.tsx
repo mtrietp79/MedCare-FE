@@ -1,361 +1,353 @@
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { useEffect, useMemo, useState } from 'react'
+import { Star, Trash2, Upload } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
-import { User, Mail, Phone, MapPin, Calendar, Award, Save, Edit } from 'lucide-react'
-import { doctorApi } from '@/services/doctorService'
+import { AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import { doctorProfileService, type DoctorProfileResponse } from '@/services/doctorProfileService'
+import { safeNumber, safeString } from '@/lib/admin-normalizers'
 import { useToast } from '@/hooks/use-toast'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
 
-const profileSchema = z.object({
-  fullName: z.string().min(2, 'Họ tên phải có ít nhất 2 ký tự'),
-  email: z.string().email('Email không hợp lệ'),
-  phone: z.string().min(10, 'Số điện thoại phải có ít nhất 10 ký tự'),
-  address: z.string().min(5, 'Địa chỉ phải có ít nhất 5 ký tự'),
-  specialty: z.string().min(1, 'Vui lòng chọn chuyên khoa'),
-  experience: z.string().min(1, 'Vui lòng nhập kinh nghiệm'),
-  bio: z.string().max(500, 'Tiểu sử không được vượt quá 500 ký tự')
-})
-
-type ProfileFormData = z.infer<typeof profileSchema>
-
-interface DoctorProfile {
-  id: string
+interface ProfileForm {
   fullName: string
   email: string
   phone: string
+  specialtyName: string
   address: string
-  specialty?: string | { id?: number | string; name?: string; description?: string; createdAt?: string }
-  specialtyName?: string
-  specialization?: string
-  experience?: string
-  experienceYears?: number
-  bio?: string
-  avatar?: string
-  licenseNumber: string
-  department: string
-  joinDate: string
-  rating: number
-  totalPatients: number
+  experienceYears: string
+  bio: string
 }
 
-function getSpecialtyLabel(profile: DoctorProfile) {
-  return (
-    profile.specialtyName ??
-    profile.specialization ??
-    (typeof profile.specialty === 'string' ? profile.specialty : profile.specialty?.name) ??
-    'Chưa cập nhật'
-  )
+function formatDateDdMmYyyy(value?: string | null): string {
+  const source = safeString(value)
+  if (!source) return '-'
+
+  const ymd = source.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (ymd) return `${ymd[3]}-${ymd[2]}-${ymd[1]}`
+
+  const date = new Date(source)
+  if (Number.isNaN(date.getTime())) return '-'
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const year = date.getFullYear()
+  return `${day}-${month}-${year}`
 }
 
-function getExperienceValue(profile: DoctorProfile) {
-  if (profile.experienceYears != null) {
-    return String(profile.experienceYears)
-  }
-  return profile.experience ?? ''
+function getSpecialtyName(profile: DoctorProfileResponse): string {
+  return safeString(profile.specialtyName)
+    || (typeof profile.specialty === 'string' ? safeString(profile.specialty) : safeString(profile.specialty?.name))
+    || '-'
+}
+
+function getAvatarUrl(profile: DoctorProfileResponse): string {
+  return safeString(profile.avatarUrl) || safeString(profile.imageUrl) || safeString(profile.photoUrl)
 }
 
 export function DoctorProfilePage() {
-  const [profile, setProfile] = useState<DoctorProfile | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
   const { toast } = useToast()
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    setValue
-  } = useForm<ProfileFormData>({
-    resolver: zodResolver(profileSchema)
+  const [profile, setProfile] = useState<DoctorProfileResponse | null>(null)
+  const [form, setForm] = useState<ProfileForm>({
+    fullName: '',
+    email: '',
+    phone: '',
+    specialtyName: '',
+    address: '',
+    experienceYears: '',
+    bio: '',
   })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [avatarDeleting, setAvatarDeleting] = useState(false)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState('')
 
-  useEffect(() => {
-    fetchProfile()
-  }, [])
+  const loadProfile = async () => {
+    setLoading(true)
+    setError('')
 
-  const fetchProfile = async () => {
     try {
-      setLoading(true)
-      const data = await doctorApi.getProfile()
+      const data = await doctorProfileService.getProfile()
       setProfile(data)
-      reset({
-        fullName: data.fullName,
-        email: data.email,
-        phone: data.phone,
-        address: data.address,
-        specialty: getSpecialtyLabel(data),
-        experience: getExperienceValue(data),
-        bio: data.bio ?? ''
+      setForm({
+        fullName: safeString(data.fullName),
+        email: safeString(data.email),
+        phone: safeString(data.phone),
+        specialtyName: getSpecialtyName(data),
+        address: safeString(data.address),
+        experienceYears: String(safeNumber(data.experienceYears ?? data.experience, 0)),
+        bio: safeString(data.bio),
       })
-    } catch (error) {
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể tải thông tin hồ sơ',
-        variant: 'destructive'
-      })
+      setAvatarPreview('')
+      setAvatarFile(null)
+    } catch (fetchError: any) {
+      setError(fetchError?.message || 'Không thể tải hồ sơ bác sĩ.')
     } finally {
       setLoading(false)
     }
   }
 
-  const onSubmit = async (data: ProfileFormData) => {
+  useEffect(() => {
+    void loadProfile()
+  }, [])
+
+  const avatarSource = useMemo(() => {
+    if (avatarPreview) return avatarPreview
+    if (profile) return getAvatarUrl(profile)
+    return ''
+  }, [avatarPreview, profile])
+
+  const hasServerAvatar = useMemo(() => Boolean(profile && getAvatarUrl(profile)), [profile])
+
+  const handleSelectAvatar = (file: File | null) => {
+    if (!file) return
+    setAvatarFile(file)
+    setAvatarPreview(URL.createObjectURL(file))
+  }
+
+  const handleCancel = () => {
+    if (!profile) return
+    setForm({
+      fullName: safeString(profile.fullName),
+      email: safeString(profile.email),
+      phone: safeString(profile.phone),
+      specialtyName: getSpecialtyName(profile),
+      address: safeString(profile.address),
+      experienceYears: String(safeNumber(profile.experienceYears ?? profile.experience, 0)),
+      bio: safeString(profile.bio),
+    })
+    setAvatarFile(null)
+    setAvatarPreview('')
+  }
+
+  const handleDeleteAvatar = async () => {
+    if (!hasServerAvatar || avatarDeleting) return
+
+    const shouldDelete = window.confirm('Bạn có chắc muốn xóa ảnh đại diện?')
+    if (!shouldDelete) return
+
+    setAvatarDeleting(true)
     try {
-      setSaving(true)
-      await doctorApi.updateProfile({ ...data, experienceYears: Number(data.experience) })
-      toast({
-        title: 'Thành công',
-        description: 'Đã cập nhật hồ sơ cá nhân'
-      })
-      setIsEditing(false)
-      fetchProfile()
-    } catch (error) {
+      await doctorProfileService.deleteAvatar()
+      setAvatarFile(null)
+      setAvatarPreview('')
+      setProfile((prev) => (prev ? { ...prev, avatarUrl: null, imageUrl: null, photoUrl: null } : prev))
+      toast({ title: 'Thành công', description: 'Đã xóa ảnh đại diện' })
+    } catch (deleteError: any) {
       toast({
         title: 'Lỗi',
-        description: 'Không thể cập nhật hồ sơ',
-        variant: 'destructive'
+        description: deleteError?.message || 'Không thể xóa ảnh đại diện.',
+        variant: 'destructive',
       })
     } finally {
+      setAvatarDeleting(false)
+    }
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await doctorProfileService.updateProfile({
+        fullName: form.fullName.trim(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        experienceYears: Number(form.experienceYears) || 0,
+        bio: form.bio.trim(),
+      })
+
+      if (avatarFile) {
+        setAvatarUploading(true)
+        const uploadResponse = await doctorProfileService.uploadAvatar(avatarFile)
+        const nextAvatarUrl = safeString(uploadResponse?.avatarUrl ?? uploadResponse?.imageUrl ?? uploadResponse?.photoUrl)
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                avatarUrl: nextAvatarUrl || prev.avatarUrl || null,
+                imageUrl: nextAvatarUrl || prev.imageUrl || null,
+                photoUrl: nextAvatarUrl || prev.photoUrl || null,
+              }
+            : prev
+        )
+        setAvatarFile(null)
+        setAvatarPreview('')
+      }
+
+      toast({ title: 'Thành công', description: 'Đã cập nhật hồ sơ bác sĩ.' })
+      await loadProfile()
+    } catch (saveError: any) {
+      toast({
+        title: 'Lỗi',
+        description: saveError?.message || 'Không thể cập nhật hồ sơ.',
+        variant: 'destructive',
+      })
+    } finally {
+      setAvatarUploading(false)
       setSaving(false)
     }
   }
 
-  const handleCancel = () => {
-    if (profile) {
-      reset({
-        fullName: profile.fullName,
-        email: profile.email,
-        phone: profile.phone,
-        address: profile.address,
-        specialty: getSpecialtyLabel(profile),
-        experience: getExperienceValue(profile),
-        bio: profile.bio ?? ''
-      })
-    }
-    setIsEditing(false)
-  }
-
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="h-8 bg-gray-200 rounded w-1/4 animate-pulse"></div>
-        <div className="grid gap-6 md:grid-cols-3">
-          <div className="md:col-span-1">
-            <div className="h-64 bg-gray-200 rounded animate-pulse"></div>
-          </div>
-          <div className="md:col-span-2">
-            <div className="h-64 bg-gray-200 rounded animate-pulse"></div>
-          </div>
-        </div>
+      <div className="space-y-4">
+        <AdminTableSkeleton rows={6} />
       </div>
     )
+  }
+
+  if (error) {
+    return <AdminErrorState message={error} onRetry={() => void loadProfile()} />
   }
 
   if (!profile) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Hồ sơ cá nhân</h1>
-          <p className="text-muted-foreground">Quản lý thông tin cá nhân của bạn</p>
-        </div>
-        <Card>
-          <CardContent className="p-6 text-center">
-            <p className="text-red-500 mb-4">Không thể tải thông tin hồ sơ</p>
-            <Button onClick={fetchProfile}>Thử lại</Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
+    return <AdminErrorState message="Không có dữ liệu hồ sơ bác sĩ." onRetry={() => void loadProfile()} />
   }
+
+  const specialtyName = getSpecialtyName(profile)
+  const rating = safeNumber(profile.rating, 0)
+  const busyAvatar = avatarUploading || avatarDeleting
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Hồ sơ cá nhân</h1>
-          <p className="text-muted-foreground">Quản lý thông tin cá nhân của bạn</p>
-        </div>
-        {!isEditing && (
-          <Button onClick={() => setIsEditing(true)}>
-            <Edit className="h-4 w-4 mr-2" />
-            Chỉnh sửa
-          </Button>
-        )}
+      <div>
+        <h1 className="text-3xl font-bold text-[#111827]">Hồ sơ bác sĩ</h1>
+        <p className="text-[#6b7280]">Quản lý thông tin cá nhân của bạn</p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Profile Overview */}
-        <Card className="md:col-span-1">
-          <CardHeader className="text-center">
-            <Avatar className="w-24 h-24 mx-auto mb-4">
-              <AvatarImage src={profile.avatar} alt={profile.fullName} />
-              <AvatarFallback className="text-lg">
-                {profile.fullName.split(' ').map(n => n[0]).join('')}
-              </AvatarFallback>
-            </Avatar>
-            <CardTitle>{profile.fullName}</CardTitle>
-            <CardDescription>{getSpecialtyLabel(profile)}</CardDescription>
-            <div className="flex justify-center space-x-2 mt-2">
-              <Badge variant="secondary">{profile.department}</Badge>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
+          <CardHeader className="px-6 pb-4 pt-6">
+            <div className="flex w-full flex-col items-center justify-center text-center">
+              <Avatar className="mx-auto h-28 w-28">
+                <AvatarImage src={avatarSource} alt={safeString(profile.fullName)} className="object-cover" />
+                <AvatarFallback className="text-3xl">
+                  {safeString(profile.fullName).split(' ').map((item) => item[0]).join('').slice(0, 2) || 'BS'}
+                </AvatarFallback>
+              </Avatar>
+
+              <div className="mt-4">
+                <CardTitle>{safeString(profile.fullName) || '-'}</CardTitle>
+                <p className="mt-1 text-sm text-[#6b7280]">
+                  Làm việc tại: Khoa {specialtyName !== '-' ? specialtyName : ''} MedCare
+                </p>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[#e5e7eb] px-3 py-2 text-sm hover:bg-slate-50 ${busyAvatar ? 'pointer-events-none opacity-60' : ''}`}>
+                  <Upload className="h-4 w-4" />
+                  Chọn avatar
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={busyAvatar}
+                    onChange={(event) => handleSelectAvatar(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-50"
+                  disabled={!hasServerAvatar || busyAvatar}
+                  onClick={() => void handleDeleteAvatar()}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {avatarDeleting ? 'Đang xóa...' : 'Xóa ảnh'}
+                </Button>
+              </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center space-x-2">
-              <Award className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Số giấy phép: {profile.licenseNumber}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Tham gia: {new Date(profile.joinDate).toLocaleDateString('vi-VN')}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">{profile.rating.toFixed(1)}</div>
-                <div className="text-xs text-muted-foreground">Đánh giá</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">{profile.totalPatients}</div>
-                <div className="text-xs text-muted-foreground">Bệnh nhân</div>
-              </div>
+
+          <CardContent className="space-y-3 text-sm">
+            <div><span className="font-semibold">Email:</span> {safeString(profile.email) || '-'}</div>
+            <div><span className="font-semibold">Số điện thoại:</span> {safeString(profile.phone) || '-'}</div>
+            <div><span className="font-semibold">Tham gia:</span> {formatDateDdMmYyyy(profile.createdAt)}</div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">Điểm đánh giá:</span>
+              <Star className="h-4 w-4 text-amber-500" />
+              <span>{rating === 0 ? '0' : rating.toFixed(1)}</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Profile Details */}
-        <Card className="md:col-span-2">
+        <Card className="rounded-2xl border border-[#e5e7eb] bg-white shadow-sm lg:col-span-2">
           <CardHeader>
             <CardTitle>Thông tin chi tiết</CardTitle>
-            <CardDescription>Cập nhật thông tin cá nhân của bạn</CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Họ và tên</Label>
-                  <Input
-                    id="fullName"
-                    {...register('fullName')}
-                    disabled={!isEditing}
-                  />
-                  {errors.fullName && (
-                    <p className="text-sm text-red-500">{errors.fullName.message}</p>
-                  )}
-                </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    {...register('email')}
-                    disabled={!isEditing}
-                  />
-                  {errors.email && (
-                    <p className="text-sm text-red-500">{errors.email.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Số điện thoại</Label>
-                  <Input
-                    id="phone"
-                    {...register('phone')}
-                    disabled={!isEditing}
-                  />
-                  {errors.phone && (
-                    <p className="text-sm text-red-500">{errors.phone.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="specialty">Chuyên khoa</Label>
-                  <Select
-                    value={getSpecialtyLabel(profile)}
-                    onValueChange={(value) => setValue('specialty', value)}
-                    disabled={!isEditing}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Nội khoa">Nội khoa</SelectItem>
-                      <SelectItem value="Nhi khoa">Nhi khoa</SelectItem>
-                      <SelectItem value="Sản phụ khoa">Sản phụ khoa</SelectItem>
-                      <SelectItem value="Da liễu">Da liễu</SelectItem>
-                      <SelectItem value="Răng hàm mặt">Răng hàm mặt</SelectItem>
-                      <SelectItem value="Mắt">Mắt</SelectItem>
-                      <SelectItem value="Tai mũi họng">Tai mũi họng</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {errors.specialty && (
-                    <p className="text-sm text-red-500">{errors.specialty.message}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="address">Địa chỉ</Label>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label>Họ và tên</Label>
                 <Input
-                  id="address"
-                  {...register('address')}
-                  disabled={!isEditing}
+                  value={form.fullName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))}
                 />
-                {errors.address && (
-                  <p className="text-sm text-red-500">{errors.address.message}</p>
-                )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="experience">Kinh nghiệm</Label>
+              <div>
+                <Label>Email</Label>
+                <Input value={form.email} disabled readOnly />
+              </div>
+
+              <div>
+                <Label>Số điện thoại</Label>
                 <Input
-                  id="experience"
-                  placeholder="Ví dụ: 5 năm kinh nghiệm"
-                  {...register('experience')}
-                  disabled={!isEditing}
+                  value={form.phone}
+                  onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
                 />
-                {errors.experience && (
-                  <p className="text-sm text-red-500">{errors.experience.message}</p>
-                )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bio">Tiểu sử</Label>
-                <Textarea
-                  id="bio"
-                  rows={4}
-                  placeholder="Mô tả về bản thân và chuyên môn..."
-                  {...register('bio')}
-                  disabled={!isEditing}
-                />
-                {errors.bio && (
-                  <p className="text-sm text-red-500">{errors.bio.message}</p>
-                )}
+              <div>
+                <Label>Chuyên khoa</Label>
+                <Input value={form.specialtyName} disabled readOnly />
               </div>
+            </div>
 
-              {isEditing && (
-                <div className="flex space-x-2 pt-4">
-                  <Button type="submit" disabled={saving}>
-                    <Save className="h-4 w-4 mr-2" />
-                    {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleCancel}>
-                    Hủy
-                  </Button>
-                </div>
-              )}
-            </form>
+            <div>
+              <Label>Địa chỉ</Label>
+              <Input
+                value={form.address}
+                onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))}
+              />
+            </div>
+
+            <div>
+              <Label>Kinh nghiệm</Label>
+              <Input
+                type="number"
+                min={0}
+                value={form.experienceYears}
+                onChange={(event) => setForm((prev) => ({ ...prev, experienceYears: event.target.value }))}
+              />
+            </div>
+
+            <div>
+              <Label>Tiểu sử</Label>
+              <Textarea
+                rows={5}
+                value={form.bio}
+                onChange={(event) => setForm((prev) => ({ ...prev, bio: event.target.value }))}
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button onClick={() => void handleSave()} disabled={saving || busyAvatar}>
+                {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </Button>
+              <Button variant="outline" onClick={handleCancel} disabled={saving || busyAvatar}>
+                Hủy
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
     </div>
   )
 }
+

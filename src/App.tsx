@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
 import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
+import { toast } from 'sonner'
 
 import { MainLayout } from '@/layouts/MainLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
@@ -13,6 +15,7 @@ import { RequireAuth } from '@/routes/RequireAuth'
 import { PatientGuard } from '@/routes/PatientGuard'
 import { DoctorGuard } from '@/routes/DoctorGuard'
 import { AdminGuard } from '@/routes/AdminGuard'
+import { PublicPatientRoute } from '@/routes/PublicPatientRoute'
 
 import { HomePage } from '@/pages/home/HomePage'
 import { SpecialtyPage } from '@/pages/home/SpecialtyPage'
@@ -25,6 +28,8 @@ import { DoctorsPage } from '@/pages/doctors/DoctorsPage'
 import { DoctorDetailPage } from '@/pages/doctors/DoctorDetailPage'
 
 import { BookingPage } from '@/pages/booking/BookingPage'
+import { ServicePackageBookingPage } from '@/pages/booking/ServicePackageBookingPage'
+import { ServicePackagePaymentResultPage } from '@/pages/booking/ServicePackagePaymentResultPage'
 
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
@@ -37,20 +42,34 @@ import { PatientProfilePage } from '@/pages/patient/PatientProfilePage'
 import { PatientAppointmentsPage } from '@/pages/patient/PatientAppointmentsPage'
 import { PatientAppointmentDetailPage } from '@/pages/patient/PatientAppointmentDetailPage'
 
-import { AdminDashboard } from '@/pages/admin/AdminDashboard'
+import { DashboardPage } from '@/pages/admin/DashboardPage'
 import { AdminDoctorsPage } from '@/pages/admin/AdminDoctorsPage'
 import { AdminPatientsPage } from '@/pages/admin/AdminPatientsPage'
 import { AdminSpecialtiesPage } from '@/pages/admin/AdminSpecialtiesPage'
 import { AdminFinancePage } from '@/pages/admin/AdminFinancePage'
 import { AdminMedicinesPage } from '@/pages/admin/AdminMedicinesPage'
+import { AdminServicePackageBookingsPage } from '@/pages/admin/AdminServicePackageBookingsPage'
 import { AdminSchedulePage } from '@/pages/admin/AdminSchedulePage'
 import { AdminMedicalServicesPage } from '@/pages/admin/AdminMedicalServicesPage'
+import { AdminWebsiteFeedbacksPage } from '@/pages/admin/AdminWebsiteFeedbacksPage'
 
 import { DoctorDashboardPage } from '@/pages/doctor/DoctorDashboardPage'
 import { DoctorAppointmentsPage } from '@/pages/doctor/DoctorAppointmentsPage'
 import { DoctorProfilePage } from '@/pages/doctor/DoctorProfilePage'
 import { DoctorMedicalRecordsPage } from '@/pages/doctor/DoctorMedicalRecordsPage'
 import { DoctorSchedulePage } from '@/pages/doctor/DoctorSchedulePage'
+import { consumeForbiddenNotice, redirectByRole } from '@/services/auth'
+
+function ForbiddenNoticeListener() {
+  useEffect(() => {
+    const message = consumeForbiddenNotice()
+    if (message) {
+      toast.error(message)
+    }
+  }, [])
+
+  return null
+}
 
 function ProfileRedirect() {
   const { user } = useAuth()
@@ -63,7 +82,7 @@ function ProfileRedirect() {
     return <Navigate to="/patient/profile" replace />
   }
 
-  return <Navigate to="/403" replace />
+  return <Navigate to={redirectByRole(user?.role)} replace />
 }
 
 function AppointmentsRedirect() {
@@ -73,7 +92,7 @@ function AppointmentsRedirect() {
     return <Navigate to="/patient/appointments" replace />
   }
 
-  return <Navigate to="/403" replace />
+  return <Navigate to={redirectByRole(user?.role)} replace />
 }
 
 function App() {
@@ -81,15 +100,25 @@ function App() {
     <ThemeProvider defaultTheme="light">
       <Router>
         <AuthProvider>
+          <ForbiddenNoticeListener />
           <Routes>
-            <Route element={<MainLayout />}>
+            <Route
+              element={
+                <PublicPatientRoute>
+                  <MainLayout />
+                </PublicPatientRoute>
+              }
+            >
               <Route path="/" element={<HomePage />} />
+              <Route path="/home" element={<HomePage />} />
               <Route path="/doctors" element={<DoctorsPage />} />
               <Route path="/services" element={<ServicesPage />} />
+              <Route path="/service-packages" element={<ServicesPage />} />
               <Route path="/doctors/:id" element={<DoctorDetailPage />} />
               <Route path="/specialty" element={<SpecialtyPage />} />
               <Route path="/specialty/:id" element={<SpecialtyDetailPage />} />
               <Route path="/booking" element={<BookingPage />} />
+              <Route path="/booking/service-package/payment-result" element={<ServicePackagePaymentResultPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/about" element={<AboutPage />} />
             </Route>
@@ -135,6 +164,18 @@ function App() {
             </Route>
 
             <Route
+              element={
+                <RequireAuth>
+                  <PatientGuard>
+                    <MainLayout />
+                  </PatientGuard>
+                </RequireAuth>
+              }
+            >
+              <Route path="/booking/service-package/:id" element={<ServicePackageBookingPage />} />
+            </Route>
+
+            <Route
               path="/admin"
               element={
                 <RequireAuth>
@@ -144,12 +185,15 @@ function App() {
                 </RequireAuth>
               }
             >
-              <Route index element={<AdminDashboard />} />
+              <Route index element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="dashboard" element={<DashboardPage />} />
               <Route path="doctors" element={<AdminDoctorsPage />} />
               <Route path="patients" element={<AdminPatientsPage />} />
               <Route path="specialties" element={<AdminSpecialtiesPage />} />
               <Route path="medical-services" element={<AdminMedicalServicesPage />} />
               <Route path="finance" element={<AdminFinancePage />} />
+              <Route path="service-package-bookings" element={<AdminServicePackageBookingsPage />} />
+              <Route path="website-feedbacks" element={<AdminWebsiteFeedbacksPage />} />
               <Route path="schedule" element={<AdminSchedulePage />} />
               <Route path="medicines" element={<AdminMedicinesPage />} />
             </Route>

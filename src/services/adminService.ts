@@ -79,6 +79,56 @@ interface UpdateSpecialtyPayload {
   description: string | null
 }
 
+export interface AdminMedicineSummary {
+  lowStockCount: number
+  expiredCount: number
+}
+
+export interface AdminMedicine {
+  id: string
+  name: string
+  category?: string | null
+  manufacturer?: string | null
+  quantity?: number
+  unit?: string | null
+  price?: number
+  dosage?: string | null
+  expiryDate?: string | null
+  expirationDate?: string | null
+  description?: string | null
+  status?: string | null
+  expired?: boolean
+}
+
+export interface AdminMedicinePayload {
+  name: string
+  category: string | null
+  manufacturer: string | null
+  quantity: number
+  unit: string | null
+  price: number
+  dosage: string | null
+  expiryDate: string | null
+  expirationDate?: string | null
+  description: string | null
+}
+
+export interface AdminServicePackageBooking {
+  id: string
+  bookingCode?: string
+  patientName?: string
+  patientPhone?: string
+  packageName?: string
+  bookingDate?: string
+  bookingTime?: string
+  amount?: number
+  paidAmount?: number
+  status?: string
+  paymentStatus?: string
+  note?: string
+  createdAt?: string
+}
+
 export const adminApi = {
   // Dashboard APIs
   getSummary: (): Promise<AdminDashboardSummary> => {
@@ -309,25 +359,32 @@ export const adminApi = {
   },
 
   // Medicine Management APIs
-  getMedicines: () => {
+  getMedicines: (): Promise<AdminMedicine[]> => {
     const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/medicines`, {
+    return fetchJson<AdminMedicine[]>(`${API_BASE_URL}/admin/medicines`, {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
 
-  createMedicine: (data: any) => {
+  getMedicinesSummary: (): Promise<AdminMedicineSummary> => {
     const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/medicines`, {
+    return fetchJson<AdminMedicineSummary>(`${API_BASE_URL}/admin/medicines/summary`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+
+  createMedicine: (data: AdminMedicinePayload) => {
+    const token = getStoredToken();
+    return fetchJson(`${API_BASE_URL}/admin/medicines`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(data)
     });
   },
 
-  updateMedicine: (id: string, data: any) => {
+  updateMedicine: (id: string, data: AdminMedicinePayload) => {
     const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/medicines/${id}`, {
+    return fetchJson(`${API_BASE_URL}/admin/medicines/${id}`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(data)
@@ -336,9 +393,31 @@ export const adminApi = {
 
   deleteMedicine: (id: string) => {
     const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/medicines/${id}`, {
+    return fetchJson(`${API_BASE_URL}/admin/medicines/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+
+  // Service Package Booking Management APIs
+  getServicePackageBookings: (query?: { status?: string; keyword?: string }): Promise<AdminServicePackageBooking[]> => {
+    const token = getStoredToken();
+    const params = new URLSearchParams();
+    if (query?.status) params.append('status', query.status);
+    if (query?.keyword) params.append('keyword', query.keyword);
+    const endpoint = `${API_BASE_URL}/admin/service-package-bookings${params.toString() ? `?${params.toString()}` : ''}`;
+
+    return fetchJson<AdminServicePackageBooking[]>(endpoint, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+
+  updateServicePackageBookingStatus: (id: string, status: string) => {
+    const token = getStoredToken();
+    return fetchJson(`${API_BASE_URL}/admin/service-package-bookings/${id}/status`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status })
     });
   },
 

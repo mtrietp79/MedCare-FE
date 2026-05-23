@@ -1,8 +1,6 @@
 import { useState } from 'react'
-import { AlertCircle, Calendar, X } from 'lucide-react'
+import { AlertCircle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   AlertDialog,
@@ -38,7 +36,7 @@ export function CancelAppointmentDialog({
       setError(null)
       
       // Gọi API để hủy lịch khám
-      await api.appointments.delete(appointment.id.toString())
+      await api.appointments.cancel(appointment.id.toString())
       
       setIsOpen(false)
       setReason('')

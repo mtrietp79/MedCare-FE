@@ -14,6 +14,11 @@ export const ROLE_KEY = 'user_role'
 export const USERNAME_KEY = 'username'
 export const FORBIDDEN_NOTICE_KEY = 'forbidden_notice'
 
+interface FetchJsonError extends Error {
+  status?: number
+  data?: unknown
+}
+
 const VALID_ROLES = ['ROLE_ADMIN', 'ROLE_DOCTOR', 'ROLE_PATIENT'] as const
 
 api.interceptors.request.use((config) => {
@@ -121,11 +126,15 @@ export async function fetchJson<T = any>(url: string, options: RequestInit = {})
         }
       }
 
-      throw new Error(
+      const message =
         data && typeof data === 'object' && 'message' in data
           ? (data as { message: string }).message
           : `API Error: ${response.status} ${response.statusText}`
-      )
+
+      const requestError = new Error(message) as FetchJsonError
+      requestError.status = response.status
+      requestError.data = data
+      throw requestError
     }
 
     return data as T

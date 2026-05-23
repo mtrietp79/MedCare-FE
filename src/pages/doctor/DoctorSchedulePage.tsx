@@ -275,7 +275,7 @@ export function DoctorSchedulePage() {
                 {dayAppointments.map((appointment) => (
                   <TableRow key={appointment.id}>
                     <TableCell>{safeString(appointment.patientName) || '-'}</TableCell>
-                    <TableCell>{safeString(appointment.time) || '--:--'}</TableCell>
+                    <TableCell>{safeString(appointment.timeLabel) || safeString(appointment.time) || '--:--'}</TableCell>
                     <TableCell>{normalizeType(safeString(appointment.type))}</TableCell>
                     <TableCell>
                       <Badge className="rounded-full border bg-slate-50 text-slate-700 border-slate-200">

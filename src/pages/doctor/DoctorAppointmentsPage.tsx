@@ -135,7 +135,7 @@ function getDateLabel(appointment: DoctorAppointment): string {
 }
 
 function getTimeLabel(appointment: DoctorAppointment): string {
-  return safeString(appointment.time) || '--:--'
+  return safeString(appointment.appointmentTimeLabel) || safeString(appointment.time) || '--:--'
 }
 
 export function DoctorAppointmentsPage() {

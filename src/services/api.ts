@@ -42,6 +42,28 @@ export interface AppointmentSlot {
   disabledReason?: string | null
 }
 
+export interface PatientMedicalRecord {
+  id: string
+  recordCode?: string
+  doctorName?: string
+  diagnosis?: string
+  symptoms?: string
+  advice?: string
+  createdAt?: string
+  appointmentDate?: string
+}
+
+export interface PatientInvoice {
+  id: string
+  invoiceCode?: string
+  medicalRecordId?: string
+  totalAmount: number
+  status?: string
+  canPayOnline?: boolean
+  createdAt?: string
+  paidAt?: string
+}
+
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 const DMY_DATE_REGEX = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
 
@@ -84,6 +106,79 @@ function normalizeDateToIsoDate(input: string): string {
   const month = String(parsed.getMonth() + 1).padStart(2, '0')
   const day = String(parsed.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function toBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') return value.trim().toLowerCase() === 'true'
+  if (typeof value === 'number') return value === 1
+  return false
+}
+
+async function apiCallRawText(endpoint: string, options: FetchOptions = {}): Promise<string> {
+  const url = `${API_BASE_URL}${endpoint}`
+  const token = getStoredToken()
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  })
+
+  const rawText = (await response.text()).trim()
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearStoredAuth()
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
+    }
+
+    if (response.status === 403) {
+      queueForbiddenNotice('Bạn không có quyền truy cập')
+      if (typeof window !== 'undefined') {
+        window.location.href = redirectByRole(getStoredRole())
+      }
+    }
+
+    let parsed: unknown = null
+    try {
+      parsed = rawText ? JSON.parse(rawText) : null
+    } catch {
+      parsed = rawText
+    }
+
+    const message =
+      parsed && typeof parsed === 'object' && 'message' in parsed
+        ? String((parsed as { message?: string }).message || '')
+        : rawText || `API Error: ${response.status} ${response.statusText}`
+    const apiError = new Error(message || `API Error: ${response.status} ${response.statusText}`) as ApiRequestError
+    apiError.status = response.status
+    apiError.data = parsed
+    throw apiError
+  }
+
+  if (!rawText) {
+    throw new Error('Không nhận được URL thanh toán từ hệ thống')
+  }
+
+  if (rawText.startsWith('{') || rawText.startsWith('[') || rawText.startsWith('"')) {
+    try {
+      const parsed = JSON.parse(rawText)
+      if (typeof parsed === 'string') return parsed
+      if (parsed && typeof parsed === 'object') {
+        const urlCandidate = (parsed as any).url ?? (parsed as any).paymentUrl ?? (parsed as any).data
+        if (typeof urlCandidate === 'string' && urlCandidate.trim()) return urlCandidate.trim()
+      }
+    } catch {
+      // Keep raw text as-is
+    }
+  }
+
+  return rawText
 }
 
 async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
@@ -326,6 +421,12 @@ export const appointmentApi = {
     })
   },
 
+  async cancel(id: string): Promise<Appointment> {
+    return apiCall<Appointment>(`/appointments/${id}/cancel`, {
+      method: 'PATCH',
+    })
+  },
+
   async updateStatus(id: string, status: Appointment['status']): Promise<Appointment> {
     return apiCall<Appointment>(`/appointments/${id}`, {
       method: 'PATCH',
@@ -425,6 +526,86 @@ export const patientApi = {
     const data = await apiCall<Record<string, any> | null>(`/patient/service-package-bookings/${id}`)
     if (!data || typeof data !== 'object') return null
     return normalizeServicePackageBooking(data)
+  },
+
+  async getMyMedicalRecords(): Promise<PatientMedicalRecord[]> {
+    const data = await apiCall<any>('/medical-records/my')
+    const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+    return list.map((item: any) => ({
+      id: String(item?.id ?? ''),
+      recordCode: item?.recordCode ?? item?.code ?? undefined,
+      doctorName: item?.doctorName ?? item?.doctor?.fullName ?? undefined,
+      diagnosis: item?.diagnosis ?? undefined,
+      symptoms: item?.symptoms ?? undefined,
+      advice: item?.advice ?? undefined,
+      createdAt: item?.createdAt ?? undefined,
+      appointmentDate: item?.appointmentDate ?? item?.date ?? undefined,
+    }))
+  },
+
+  async getMyMedicalRecordById(id: string): Promise<PatientMedicalRecord | null> {
+    const item = await apiCall<any>(`/medical-records/my/${id}`)
+    if (!item || typeof item !== 'object') return null
+    return {
+      id: String(item?.id ?? ''),
+      recordCode: item?.recordCode ?? item?.code ?? undefined,
+      doctorName: item?.doctorName ?? item?.doctor?.fullName ?? undefined,
+      diagnosis: item?.diagnosis ?? undefined,
+      symptoms: item?.symptoms ?? undefined,
+      advice: item?.advice ?? undefined,
+      createdAt: item?.createdAt ?? undefined,
+      appointmentDate: item?.appointmentDate ?? item?.date ?? undefined,
+    }
+  },
+
+  async getMyInvoices(query?: { status?: string; keyword?: string }): Promise<PatientInvoice[]> {
+    const params = new URLSearchParams()
+    if (query?.status) params.append('status', query.status)
+    if (query?.keyword) params.append('keyword', query.keyword)
+    const endpoint = `/invoices/my${params.toString() ? `?${params.toString()}` : ''}`
+
+    const data = await apiCall<any>(endpoint)
+    const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+    return list.map((item: any) => ({
+      id: String(item?.id ?? ''),
+      invoiceCode: item?.invoiceCode ?? item?.code ?? undefined,
+      medicalRecordId: item?.medicalRecordId ? String(item.medicalRecordId) : undefined,
+      totalAmount: Number(item?.totalAmount ?? item?.amount ?? 0),
+      status: String(item?.status ?? ''),
+      canPayOnline: toBoolean(item?.canPayOnline),
+      createdAt: item?.createdAt ?? undefined,
+      paidAt: item?.paidAt ?? undefined,
+    }))
+  },
+
+  async getMyInvoiceById(id: string): Promise<PatientInvoice | null> {
+    const item = await apiCall<any>(`/invoices/my/${id}`)
+    if (!item || typeof item !== 'object') return null
+    return {
+      id: String(item?.id ?? ''),
+      invoiceCode: item?.invoiceCode ?? item?.code ?? undefined,
+      medicalRecordId: item?.medicalRecordId ? String(item.medicalRecordId) : undefined,
+      totalAmount: Number(item?.totalAmount ?? item?.amount ?? 0),
+      status: String(item?.status ?? ''),
+      canPayOnline: toBoolean(item?.canPayOnline),
+      createdAt: item?.createdAt ?? undefined,
+      paidAt: item?.paidAt ?? undefined,
+    }
+  },
+
+  async getMyInvoiceByRecordId(recordId: string): Promise<PatientInvoice | null> {
+    const item = await apiCall<any>(`/invoices/my/record/${recordId}`)
+    if (!item || typeof item !== 'object') return null
+    return {
+      id: String(item?.id ?? ''),
+      invoiceCode: item?.invoiceCode ?? item?.code ?? undefined,
+      medicalRecordId: item?.medicalRecordId ? String(item.medicalRecordId) : undefined,
+      totalAmount: Number(item?.totalAmount ?? item?.amount ?? 0),
+      status: String(item?.status ?? ''),
+      canPayOnline: toBoolean(item?.canPayOnline),
+      createdAt: item?.createdAt ?? undefined,
+      paidAt: item?.paidAt ?? undefined,
+    }
   },
 }
 
@@ -541,11 +722,14 @@ export const paymentApi = {
     return apiCall(`/payments/${appointmentId}/status`)
   },
 
-  async payAtClinic(appointmentId: string): Promise<Appointment> {
+  async createAppointmentPaymentUrl(appointmentId: string): Promise<string> {
     const params = new URLSearchParams({ appointmentId })
-    return apiCall<Appointment>(`/payment/pay-at-clinic?${params.toString()}`, {
-      method: 'PATCH',
-    })
+    return apiCallRawText(`/payment/create-url?${params.toString()}`)
+  },
+
+  async createInvoicePaymentUrl(invoiceId: string): Promise<string> {
+    const params = new URLSearchParams({ invoiceId })
+    return apiCallRawText(`/payment/create-invoice-url?${params.toString()}`)
   },
 }
 

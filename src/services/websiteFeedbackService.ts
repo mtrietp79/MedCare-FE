@@ -62,11 +62,49 @@ function normalizeWebsiteFeedback(item: any): WebsiteFeedback {
   }
 }
 
+interface HttpError extends Error {
+  status?: number
+}
+
+async function tryMethods(url: string, methods: Array<'PUT' | 'PATCH' | 'POST' | 'DELETE'>) {
+  let lastError: unknown = null
+
+  for (const method of methods) {
+    try {
+      return await fetchJson(url, { method })
+    } catch (error) {
+      const status = (error as HttpError)?.status
+      if (status === 401 || status === 403) throw error
+      lastError = error
+    }
+  }
+
+  throw lastError ?? new Error('Khong the thuc hien thao tac feedback.')
+}
+
+async function tryDeletePaths(paths: string[]) {
+  let lastError: unknown = null
+
+  for (const path of paths) {
+    try {
+      return await tryMethods(path, ['DELETE', 'POST'])
+    } catch (error) {
+      const status = (error as HttpError)?.status
+      if (status === 401 || status === 403) throw error
+      lastError = error
+    }
+  }
+
+  throw lastError ?? new Error('Khong the xoa feedback.')
+}
+
 export const websiteFeedbackService = {
   getPublicFeedbacks: async (): Promise<WebsiteFeedback[]> => {
     const data = await fetchJson<any>(`${API_BASE_URL}/public/website-feedbacks`)
     const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
-    return list.map(normalizeWebsiteFeedback)
+    return list
+      .map(normalizeWebsiteFeedback)
+      .filter((item: WebsiteFeedback) => item.status === 'APPROVED' && !item.hidden)
   },
 
   createPublicFeedback: async (payload: CreateWebsiteFeedbackPayload) => {
@@ -83,26 +121,18 @@ export const websiteFeedbackService = {
   },
 
   approve: async (id: string) => {
-    return fetchJson(`${API_BASE_URL}/admin/website-feedbacks/${id}/approve`, {
-      method: 'PUT',
-    })
-  },
-
-  unhide: async (id: string) => {
-    return fetchJson(`${API_BASE_URL}/admin/website-feedbacks/${id}/unhide`, {
-      method: 'PUT',
-    })
+    return tryMethods(`${API_BASE_URL}/admin/website-feedbacks/${id}/approve`, ['PUT', 'PATCH', 'POST'])
   },
 
   hide: async (id: string) => {
-    return fetchJson(`${API_BASE_URL}/admin/website-feedbacks/${id}/hide`, {
-      method: 'PUT',
-    })
+    return tryMethods(`${API_BASE_URL}/admin/website-feedbacks/${id}/hide`, ['PUT', 'PATCH', 'POST'])
   },
 
   remove: async (id: string) => {
-    return fetchJson(`${API_BASE_URL}/admin/website-feedbacks/${id}`, {
-      method: 'DELETE',
-    })
+    return tryDeletePaths([
+      `${API_BASE_URL}/admin/website-feedbacks/${id}`,
+      `${API_BASE_URL}/admin/website-feedbacks/${id}/delete`,
+      `${API_BASE_URL}/admin/website-feedbacks/${id}/remove`,
+    ])
   },
 }

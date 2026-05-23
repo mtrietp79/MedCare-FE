@@ -11,6 +11,7 @@ export interface DayScheduleItem {
   id: string
   patientName?: string
   time?: string
+  timeLabel?: string
   type?: string
   status?: string
 }
@@ -38,4 +39,3 @@ export const doctorScheduleService = {
     return normalizeListResponse<DayScheduleItem>(data)
   },
 }
-

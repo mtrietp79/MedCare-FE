@@ -6,6 +6,7 @@ export interface DoctorAppointment {
   patient?: { id?: string; fullName?: string }
   date?: string
   time?: string
+  appointmentTimeLabel?: string
   appointmentDate?: string
   specialty?: string | { name?: string }
   medicalService?: { id?: string; name?: string } | null
@@ -85,4 +86,3 @@ export const doctorAppointmentService = {
     return normalizeListResponse<DoctorMedicalService>(data)
   },
 }
-

@@ -1,25 +1,26 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { ArrowLeft, CreditCard } from 'lucide-react'
+import { ArrowLeft, CreditCard, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { CancelAppointmentDialog } from '@/components/booking/cancel-appointment'
-import { RescheduleAppointmentDialog } from '@/components/booking/reschedule-appointment'
-import { api, type ApiRequestError } from '@/services/api'
+import { api } from '@/services/api'
 import type { Appointment } from '@/types'
 
 function getPaymentStatusLabel(status?: string) {
   switch ((status || 'UNPAID').toUpperCase()) {
-    case 'PAY_AT_CLINIC':
-      return 'Thanh toán tại phòng khám'
     case 'PAID_ONLINE':
-      return 'Đã thanh toán VNPay'
+      return 'Da thanh toan VNPay'
     case 'PAID':
-      return 'Đã thanh toán'
+      return 'Da thanh toan'
     case 'UNPAID':
     default:
-      return 'Chưa thanh toán'
+      return 'Chua thanh toan'
   }
+}
+
+function getAppointmentTimeLabel(appointment: Appointment) {
+  return appointment.appointmentTimeLabel || appointment.appointmentDate || '-'
 }
 
 export function PatientAppointmentDetailPage() {
@@ -28,7 +29,7 @@ export function PatientAppointmentDetailPage() {
   const [appointment, setAppointment] = useState<Appointment | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [paymentLoading, setPaymentLoading] = useState<null | 'clinic' | 'vnpay'>(null)
+  const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentError, setPaymentError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export function PatientAppointmentDetailPage() {
         const data = await api.appointments.getById(id)
         setAppointment(data)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Không thể tải thông tin lịch khám')
+        setError(err instanceof Error ? err.message : 'Khong the tai thong tin lich kham')
       } finally {
         setLoading(false)
       }
@@ -52,54 +53,32 @@ export function PatientAppointmentDetailPage() {
   const handleCancelSuccess = () => {
     navigate('/patient/appointments', {
       replace: true,
-      state: { message: 'Lịch khám đã được hủy thành công' },
+      state: { message: 'Lich kham da duoc huy thanh cong' },
     })
   }
 
-  const handleRescheduleSuccess = (newAppointment: Appointment) => {
-    setAppointment(newAppointment)
-  }
-
-  const startVNPayPayment = () => {
+  const startVNPayPayment = async () => {
     if (!appointment) return
 
     try {
       setPaymentError(null)
-      setPaymentLoading('vnpay')
-      window.location.href = `http://localhost:8080/api/payment/create-url?amount=${appointment.consultationFee || 0}&appointmentId=${appointment.id}`
+      setPaymentLoading(true)
+      const redirectUrl = await api.payments.createAppointmentPaymentUrl(String(appointment.id))
+      window.location.href = redirectUrl
     } catch (paymentStartError) {
-      setPaymentLoading(null)
-      setPaymentError(paymentStartError instanceof Error ? paymentStartError.message : 'Không thể khởi tạo thanh toán VNPay')
-    }
-  }
-
-  const payAtClinic = async () => {
-    if (!appointment) return
-
-    try {
-      setPaymentError(null)
-      setPaymentLoading('clinic')
-      const updatedAppointment = await api.payments.payAtClinic(appointment.id)
-      setAppointment(updatedAppointment)
-    } catch (requestError: unknown) {
-      const apiError = requestError as ApiRequestError
-      const messageFromResponse =
-        apiError?.data &&
-        typeof apiError.data === 'object' &&
-        'message' in apiError.data
-          ? String((apiError.data as { message?: string }).message || '')
-          : ''
-
-      setPaymentError(messageFromResponse || apiError?.message || 'Không thể cập nhật phương thức thanh toán')
-    } finally {
-      setPaymentLoading(null)
+      setPaymentError(
+        paymentStartError instanceof Error
+          ? paymentStartError.message
+          : 'Khong the khoi tao thanh toan VNPay'
+      )
+      setPaymentLoading(false)
     }
   }
 
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
-        <p className="text-muted-foreground">Đang tải chi tiết lịch khám...</p>
+        <p className="text-muted-foreground">Dang tai chi tiet lich kham...</p>
       </div>
     )
   }
@@ -107,7 +86,7 @@ export function PatientAppointmentDetailPage() {
   if (error) {
     return (
       <div className="container mx-auto px-4 py-16 text-center text-destructive">
-        <p>Lỗi: {error}</p>
+        <p>Loi: {error}</p>
       </div>
     )
   }
@@ -119,98 +98,98 @@ export function PatientAppointmentDetailPage() {
   const normalizedPaymentStatus = String(appointment.paymentStatus || 'UNPAID').toUpperCase()
   const normalizedAppointmentStatus = String(appointment.status || '').toUpperCase()
   const isCancelled = normalizedAppointmentStatus === 'CANCELLED'
-  const isPaymentFinalized = ['PAY_AT_CLINIC', 'PAID_ONLINE', 'PAID'].includes(normalizedPaymentStatus)
-  const canPayNow = !isCancelled && normalizedPaymentStatus === 'UNPAID'
+  const isCompleted = normalizedAppointmentStatus === 'COMPLETED'
+  const isPaymentFinalized = ['PAID_ONLINE', 'PAID'].includes(normalizedPaymentStatus)
+  const canPayNow = !isCancelled && !isPaymentFinalized
+  const canCancel = !isCancelled && !isCompleted
 
   return (
-    <div className="container mx-auto px-4 py-10 space-y-6">
+    <div className="container mx-auto space-y-6 px-4 py-10">
       <Link to="/patient/appointments" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
-        <ArrowLeft className="w-4 h-4" /> Quay lại lịch khám
+        <ArrowLeft className="h-4 w-4" /> Quay lai lich kham
       </Link>
 
       <Card>
         <CardContent className="space-y-6 p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Mã đặt lịch</p>
+              <p className="text-sm text-muted-foreground">Ma dat lich</p>
               <h1 className="text-2xl font-semibold">{appointment.appointmentCode || `#${appointment.id}`}</h1>
             </div>
             <div className="flex flex-col gap-2 text-right">
-              <span className="text-sm text-muted-foreground">Trạng thái</span>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">{appointment.status || 'PENDING'}</span>
+              <span className="text-sm text-muted-foreground">Trang thai</span>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
+                {appointment.status || 'PENDING'}
+              </span>
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Loại khám</p>
-              <p className="mt-2 font-medium">{appointment.medicalService?.name ?? 'Khám bệnh'}</p>
-              <p className="text-sm text-muted-foreground mt-1">{typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name || ''}</p>
+              <p className="text-sm text-muted-foreground">Loai kham</p>
+              <p className="mt-2 font-medium">{appointment.medicalService?.name ?? 'Kham benh'}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name || ''}
+              </p>
             </div>
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Thời gian khám</p>
-              <p className="mt-2 font-medium">{appointment.appointmentDate}</p>
-              <p className="text-sm text-muted-foreground mt-1">{appointment.patient?.fullName || 'Bệnh nhân'}</p>
+              <p className="text-sm text-muted-foreground">Thoi gian kham</p>
+              <p className="mt-2 font-medium">{getAppointmentTimeLabel(appointment)}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{appointment.patient?.fullName || 'Benh nhan'}</p>
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Bác sĩ phụ trách</p>
+              <p className="text-sm text-muted-foreground">Bac si phu trach</p>
               <p className="mt-2 font-medium">
-                {appointment.doctor?.fullName || appointment.doctorName || 'Đang chờ hệ thống gán'}
+                {appointment.doctor?.fullName || appointment.doctorName || 'Dang cho he thong gan'}
               </p>
             </div>
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Phí khám</p>
+              <p className="text-sm text-muted-foreground">Phi kham</p>
               <p className="mt-2 text-lg font-semibold text-primary">
                 {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(appointment.consultationFee || 0)}
               </p>
             </div>
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Thanh toán</p>
+              <p className="text-sm text-muted-foreground">Thanh toan</p>
               <p className="mt-2 font-medium">{getPaymentStatusLabel(appointment.paymentStatus)}</p>
             </div>
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Triệu chứng</p>
-              <p className="mt-2 text-sm text-muted-foreground">{appointment.symptoms || 'Không có'}</p>
+              <p className="text-sm text-muted-foreground">Trieu chung</p>
+              <p className="mt-2 text-sm text-muted-foreground">{appointment.symptoms || 'Khong co'}</p>
             </div>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <RescheduleAppointmentDialog
-              appointment={appointment}
-              onSuccess={handleRescheduleSuccess}
-            />
-            <CancelAppointmentDialog
-              appointment={appointment}
-              onSuccess={handleCancelSuccess}
-            />
+            <Button asChild variant="outline">
+              <Link to="/patient/medical-records" className="gap-2">
+                <FileText className="h-4 w-4" />
+                Xem ho so benh an
+              </Link>
+            </Button>
+
+            {canCancel ? (
+              <CancelAppointmentDialog
+                appointment={appointment}
+                onSuccess={handleCancelSuccess}
+              />
+            ) : null}
 
             {canPayNow ? (
-              <>
-                <Button
-                  onClick={() => void payAtClinic()}
-                  variant="outline"
-                  disabled={paymentLoading !== null}
-                >
-                  {paymentLoading === 'clinic' ? 'Đang xử lý...' : 'Thanh toán tại phòng khám'}
-                </Button>
-                <Button
-                  onClick={startVNPayPayment}
-                  variant="secondary"
-                  className="gap-2"
-                  disabled={paymentLoading !== null}
-                >
-                  <CreditCard className="w-4 h-4" />
-                  {paymentLoading === 'vnpay' ? 'Đang chuyển hướng...' : 'Thanh toán VNPay'}
-                </Button>
-              </>
+              <Button
+                onClick={() => void startVNPayPayment()}
+                variant="secondary"
+                className="gap-2"
+                disabled={paymentLoading}
+              >
+                <CreditCard className="h-4 w-4" />
+                {paymentLoading ? 'Dang chuyen huong...' : 'Thanh toan VNPay'}
+              </Button>
             ) : (
-              <Button variant="secondary" disabled={isPaymentFinalized || isCancelled}>
-                {isCancelled
-                  ? 'Lịch khám đã hủy, không thể thanh toán'
-                  : `Trạng thái thanh toán: ${getPaymentStatusLabel(appointment.paymentStatus)}`}
+              <Button variant="secondary" disabled>
+                Trang thai thanh toan: {getPaymentStatusLabel(appointment.paymentStatus)}
               </Button>
             )}
           </div>

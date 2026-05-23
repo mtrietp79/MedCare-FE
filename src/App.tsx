@@ -41,6 +41,8 @@ import { PatientDashboardPage } from '@/pages/patient/PatientDashboardPage'
 import { PatientProfilePage } from '@/pages/patient/PatientProfilePage'
 import { PatientAppointmentsPage } from '@/pages/patient/PatientAppointmentsPage'
 import { PatientAppointmentDetailPage } from '@/pages/patient/PatientAppointmentDetailPage'
+import { PatientMedicalRecordsPage } from '@/pages/patient/PatientMedicalRecordsPage'
+import { PatientMedicalRecordDetailPage } from '@/pages/patient/PatientMedicalRecordDetailPage'
 
 import { DashboardPage } from '@/pages/admin/DashboardPage'
 import { AdminDoctorsPage } from '@/pages/admin/AdminDoctorsPage'
@@ -161,6 +163,8 @@ function App() {
               <Route path="/patient/profile" element={<PatientProfilePage />} />
               <Route path="/patient/appointments" element={<PatientAppointmentsPage />} />
               <Route path="/patient/appointments/:id" element={<PatientAppointmentDetailPage />} />
+              <Route path="/patient/medical-records" element={<PatientMedicalRecordsPage />} />
+              <Route path="/patient/medical-records/:id" element={<PatientMedicalRecordDetailPage />} />
             </Route>
 
             <Route

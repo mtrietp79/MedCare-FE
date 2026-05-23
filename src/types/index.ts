@@ -152,6 +152,7 @@ export interface Appointment {
   }
   date?: string
   time?: string
+  appointmentTimeLabel?: string
   appointmentDate?: string
   status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'pending' | 'confirmed' | 'completed' | 'cancelled'
   paymentStatus?: string

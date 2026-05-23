@@ -129,6 +129,50 @@ export interface AdminServicePackageBooking {
   createdAt?: string
 }
 
+export interface AdminScheduleEntry {
+  id: string
+  appointmentCode?: string
+  patientName?: string
+  doctorName?: string
+  specialtyName?: string
+  date?: string
+  time?: string
+  status?: string
+  statusCode?: string
+}
+
+type AdminInvoice = {
+  id: string
+  patientName: string
+  medicalRecordId: string
+  totalAmount: number
+  status: 'pending' | 'paid' | 'cancelled'
+  createdAt: string
+  paidAt?: string
+}
+
+export interface AdminInvoiceSummary {
+  totalRevenue?: number
+  monthlyRevenue?: number
+  pendingAmount?: number
+  paidInvoices?: number
+  pendingInvoices?: number
+}
+
+async function tryFetchFirstSuccess<T>(urls: string[], options?: RequestInit): Promise<T> {
+  let lastError: unknown = null
+
+  for (const url of urls) {
+    try {
+      return await fetchJson<T>(url, options)
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError ?? new Error('Không thể tải dữ liệu.')
+}
+
 export const adminApi = {
   // Dashboard APIs
   getSummary: (): Promise<AdminDashboardSummary> => {
@@ -421,6 +465,20 @@ export const adminApi = {
     });
   },
 
+  getAdminSchedule: async (): Promise<AdminScheduleEntry[]> => {
+    const token = getStoredToken();
+    const data = await tryFetchFirstSuccess<any>(
+      [
+        `${API_BASE_URL}/admin/schedule`,
+        `${API_BASE_URL}/admin/appointments`,
+        `${API_BASE_URL}/appointments`,
+      ],
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+  },
+
   // Medical Records APIs
   getMedicalRecords: () => {
     const token = getStoredToken();
@@ -445,23 +503,35 @@ export const adminApi = {
   },
 
   // Invoice Management APIs
-  getInvoices: (): Promise<Array<{ id: string; patientName: string; medicalRecordId: string; totalAmount: number; status: 'pending' | 'paid' | 'cancelled'; createdAt: string; paidAt?: string }>> => {
+  getInvoices: async (): Promise<AdminInvoice[]> => {
     const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/invoices`, {
+    const data = await fetchJson<any>(`${API_BASE_URL}/admin/invoices`, {
       headers: { Authorization: `Bearer ${token}` }
     });
+    return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+  },
+
+  getInvoicesSummary: (): Promise<AdminInvoiceSummary> => {
+    const token = getStoredToken();
+    return tryFetchFirstSuccess<AdminInvoiceSummary>(
+      [
+        `${API_BASE_URL}/admin/invoices/summary`,
+        `${API_BASE_URL}/admin/finance/summary`,
+      ],
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
   },
 
   getInvoiceByRecord: (recordId: string) => {
     const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/invoices/record/${recordId}`, {
+    return fetchJson(`${API_BASE_URL}/admin/invoices/record/${recordId}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
 
   payInvoice: (id: string, data?: any) => {
     const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/invoices/${id}/pay`, {
+    return fetchJson(`${API_BASE_URL}/admin/invoices/${id}/pay`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(data || {})
@@ -471,14 +541,14 @@ export const adminApi = {
   // Feedback Management APIs
   getFeedbacks: () => {
     const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/feedbacks`, {
+    return fetchJson(`${API_BASE_URL}/admin/feedbacks`, {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
 
   deleteFeedback: (id: string) => {
     const token = getStoredToken();
-    return fetchJson(`${API_BASE_URL}/feedbacks/${id}`, {
+    return fetchJson(`${API_BASE_URL}/admin/feedbacks/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });

@@ -23,10 +23,12 @@ export interface RecentAppointmentResponse {
   id: string
   patientName?: string
   doctorName?: string
+  specialtyName?: string
   specialty?: string
   date?: string
   time?: string
   status?: string
+  statusCode?: string
 }
 
 const dashboardClient = axios.create({
@@ -79,7 +81,7 @@ export const dashboardService = {
   },
 
   async getRecentAppointments(): Promise<RecentAppointmentResponse[]> {
-    const { data } = await dashboardClient.get<RecentAppointmentResponse[]>('/admin/dashboard/recent-appointments')
-    return Array.isArray(data) ? data : []
+    const { data } = await dashboardClient.get<any>('/admin/dashboard/recent-appointments')
+    return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
   },
 }

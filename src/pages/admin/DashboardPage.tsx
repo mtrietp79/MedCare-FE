@@ -22,6 +22,7 @@ import {
   type MonthlyPatientsResponse,
   type RecentAppointmentResponse,
 } from '@/services/dashboardService'
+import { useToast } from '@/hooks/use-toast'
 import { safeString } from '@/lib/admin-normalizers'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -43,72 +44,24 @@ interface RecentAppointmentItem {
   id: string
   patientName: string
   doctorName: string
-  specialty: string
+  specialtyName: string
   date: string
   time: string
   status: string
+  statusCode: string
 }
 
 const fallbackSummary: DashboardSummary = {
-  totalAppointments: 1245,
-  activePatients: 892,
-  workingDoctors: 48,
-  monthlyRevenue: 450000000,
+  totalAppointments: 0,
+  activePatients: 0,
+  workingDoctors: 0,
+  monthlyRevenue: 0,
 }
 
-const fallbackMonthlyPatients: MonthlyPatientPoint[] = [
-  { month: 'Tháng 1', patients: 120 },
-  { month: 'Tháng 2', patients: 135 },
-  { month: 'Tháng 3', patients: 148 },
-  { month: 'Tháng 4', patients: 162 },
-  { month: 'Tháng 5', patients: 171 },
-  { month: 'Tháng 6', patients: 186 },
-  { month: 'Tháng 7', patients: 199 },
-  { month: 'Tháng 8', patients: 215 },
-  { month: 'Tháng 9', patients: 228 },
-  { month: 'Tháng 10', patients: 241 },
-  { month: 'Tháng 11', patients: 258 },
-  { month: 'Tháng 12', patients: 273 },
-]
-
-const fallbackRecentAppointments: RecentAppointmentItem[] = [
-  {
-    id: '1',
-    patientName: 'Nguyễn Văn An',
-    doctorName: 'BS. Trần Minh Khang',
-    specialty: 'Nội tổng quát',
-    date: '2026-05-22',
-    time: '08:30',
-    status: 'Đã xác nhận',
-  },
-  {
-    id: '2',
-    patientName: 'Lê Thị Mai',
-    doctorName: 'BS. Phạm Quốc Dũng',
-    specialty: 'Nhi khoa',
-    date: '2026-05-22',
-    time: '09:00',
-    status: 'Đang chờ',
-  },
-  {
-    id: '3',
-    patientName: 'Hoàng Gia Bảo',
-    doctorName: 'BS. Đỗ Thu Hà',
-    specialty: 'Tim mạch',
-    date: '2026-05-22',
-    time: '10:15',
-    status: 'Hoàn thành',
-  },
-  {
-    id: '4',
-    patientName: 'Phạm Nhật Linh',
-    doctorName: 'BS. Nguyễn Tú Anh',
-    specialty: 'Da liễu',
-    date: '2026-05-21',
-    time: '15:00',
-    status: 'Đã hủy',
-  },
-]
+const fallbackMonthlyPatients: MonthlyPatientPoint[] = Array.from({ length: 12 }, (_, index) => ({
+  month: `Thang ${index + 1}`,
+  patients: 0,
+}))
 
 function normalizeText(value: string): string {
   return safeString(value)
@@ -118,24 +71,19 @@ function normalizeText(value: string): string {
 }
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat('en-US').format(value)
+  return new Intl.NumberFormat('vi-VN').format(value)
 }
 
-function formatMoneyToMillion(value: number): string {
+function formatMoney(value: number): string {
   return `${Math.round(value / 1_000_000)}M đ`
 }
 
 function normalizeSummary(raw: DashboardSummaryResponse): DashboardSummary {
-  const totalAppointments = Number(raw?.totalAppointments ?? 0) || 0
-  const activePatients = Number(raw?.activePatients ?? raw?.totalPatients ?? 0) || 0
-  const workingDoctors = Number(raw?.workingDoctors ?? raw?.totalDoctors ?? 0) || 0
-  const monthlyRevenue = Number(raw?.monthlyRevenue ?? raw?.totalRevenue ?? 0) || 0
-
   return {
-    totalAppointments,
-    activePatients,
-    workingDoctors,
-    monthlyRevenue,
+    totalAppointments: Number(raw?.totalAppointments ?? 0) || 0,
+    activePatients: Number(raw?.activePatients ?? raw?.totalPatients ?? 0) || 0,
+    workingDoctors: Number(raw?.workingDoctors ?? raw?.totalDoctors ?? 0) || 0,
+    monthlyRevenue: Number(raw?.monthlyRevenue ?? raw?.totalRevenue ?? 0) || 0,
   }
 }
 
@@ -153,61 +101,67 @@ function normalizeMonthlyPatients(raw: MonthlyPatientsResponse[]): MonthlyPatien
     monthMap.set(month, patients)
   }
 
-  if (monthMap.size === 0) {
-    return fallbackMonthlyPatients
-  }
-
   return Array.from({ length: 12 }, (_, index) => {
     const month = index + 1
     return {
-      month: `Tháng ${month}`,
+      month: `Thang ${month}`,
       patients: monthMap.get(month) ?? 0,
     }
   })
 }
 
 function normalizeAppointments(raw: RecentAppointmentResponse[]): RecentAppointmentItem[] {
-  if (!Array.isArray(raw) || raw.length === 0) {
-    return fallbackRecentAppointments
-  }
+  if (!Array.isArray(raw)) return []
 
   return raw.map((item, index) => ({
     id: safeString(item.id) || String(index + 1),
     patientName: safeString(item.patientName) || '-',
     doctorName: safeString(item.doctorName) || '-',
-    specialty: safeString(item.specialty) || '-',
+    specialtyName: safeString(item.specialtyName ?? item.specialty) || '-',
     date: safeString(item.date) || '-',
     time: safeString(item.time) || '-',
-    status: safeString(item.status) || 'Đang chờ',
+    status: safeString(item.status) || safeString(item.statusCode) || '-',
+    statusCode: safeString(item.statusCode) || '',
   }))
 }
 
-function statusBadgeClass(status: string): string {
-  const normalized = normalizeText(status)
+function statusBadgeClass(status: string, statusCode: string): string {
+  const code = normalizeText(statusCode)
+  const text = normalizeText(status)
 
-  if (normalized.includes('hoan thanh') || normalized.includes('completed')) {
+  if (code.includes('complete') || text.includes('da kham')) {
     return 'bg-emerald-50 text-emerald-700 border-emerald-200'
   }
 
-  if (normalized.includes('dang cho') || normalized.includes('pending')) {
+  if (code.includes('pending') || text.includes('cho kham') || text.includes('chua kham')) {
     return 'bg-amber-50 text-amber-700 border-amber-200'
   }
 
-  if (normalized.includes('da xac nhan') || normalized.includes('confirmed')) {
-    return 'bg-sky-50 text-sky-700 border-sky-200'
+  if (code.includes('cancel') || text.includes('huy lich') || text.includes('da huy')) {
+    return 'bg-red-50 text-red-700 border-red-200'
   }
 
-  if (normalized.includes('da huy') || normalized.includes('cancelled')) {
-    return 'bg-red-50 text-red-700 border-red-200'
+  if (text.includes('xac nhan') || code.includes('confirm')) {
+    return 'bg-sky-50 text-sky-700 border-sky-200'
   }
 
   return 'bg-slate-100 text-slate-700 border-slate-200'
 }
 
+function formatDateTime(date: string, time: string): string {
+  const dateValue = safeString(date)
+  const timeValue = safeString(time)
+  if (dateValue && dateValue !== '-' && timeValue && timeValue !== '-') return `${dateValue} ${timeValue}`
+  if (dateValue && dateValue !== '-') return dateValue
+  if (timeValue && timeValue !== '-') return timeValue
+  return '-'
+}
+
 export function DashboardPage() {
+  const { toast } = useToast()
   const [summary, setSummary] = useState<DashboardSummary>(fallbackSummary)
   const [monthlyPatients, setMonthlyPatients] = useState<MonthlyPatientPoint[]>(fallbackMonthlyPatients)
-  const [recentAppointments, setRecentAppointments] = useState<RecentAppointmentItem[]>(fallbackRecentAppointments)
+  const [recentAppointments, setRecentAppointments] = useState<RecentAppointmentItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -218,18 +172,21 @@ export function DashboardPage() {
     try {
       const [summaryResponse, monthlyPatientsResponse, recentAppointmentsResponse] = await Promise.all([
         dashboardService.getSummary(),
-        dashboardService.getMonthlyPatients(2026),
+        dashboardService.getMonthlyPatients(new Date().getFullYear()),
         dashboardService.getRecentAppointments(),
       ])
 
-      const normalizedSummary = normalizeSummary(summaryResponse)
-      const hasSummaryData = Object.values(normalizedSummary).some((value) => value > 0)
-
-      setSummary(hasSummaryData ? normalizedSummary : fallbackSummary)
+      setSummary(normalizeSummary(summaryResponse))
       setMonthlyPatients(normalizeMonthlyPatients(monthlyPatientsResponse))
       setRecentAppointments(normalizeAppointments(recentAppointmentsResponse))
     } catch (dashboardError: any) {
-      setError(dashboardError?.message || 'Không thể tải dữ liệu dashboard.')
+      const message = dashboardError?.message || 'Khong the tai du lieu dashboard.'
+      setError(message)
+      toast({
+        title: 'Loi',
+        description: message,
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }
@@ -242,27 +199,27 @@ export function DashboardPage() {
   const stats = useMemo(
     () => [
       {
-        label: 'Tổng lịch hẹn',
+        label: 'Tong lich hen',
         value: formatNumber(summary.totalAppointments),
-        growth: '+12% So với tuần trước',
+        growth: 'Cap nhat theo du lieu thuc te',
         icon: CalendarDays,
       },
       {
-        label: 'Bệnh nhân hoạt động',
+        label: 'Benh nhan hoat dong',
         value: formatNumber(summary.activePatients),
-        growth: '+5% So với tuần trước',
+        growth: 'Cap nhat theo du lieu thuc te',
         icon: Users,
       },
       {
-        label: 'Bác sĩ đang làm việc',
+        label: 'Bac si dang lam viec',
         value: formatNumber(summary.workingDoctors),
-        growth: '+2 So với tuần trước',
+        growth: 'Cap nhat theo du lieu thuc te',
         icon: Stethoscope,
       },
       {
-        label: 'Doanh thu tháng này',
-        value: formatMoneyToMillion(summary.monthlyRevenue),
-        growth: '+8.2% So với tuần trước',
+        label: 'Doanh thu thang nay',
+        value: formatMoney(summary.monthlyRevenue),
+        growth: 'Cap nhat theo du lieu thuc te',
         icon: TrendingUp,
       },
     ],
@@ -272,7 +229,7 @@ export function DashboardPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-[#111827]">Tổng quan</h2>
+        <h2 className="text-2xl font-bold text-[#111827]">Tong quan</h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <Card key={index} className="h-36 animate-pulse rounded-xl border border-[#e5e7eb] bg-white" />
@@ -293,7 +250,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-[#111827]">Tổng quan</h2>
+      <h2 className="text-2xl font-bold text-[#111827]">Tong quan</h2>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((item) => {
@@ -323,7 +280,7 @@ export function DashboardPage() {
       <section>
         <Card className="rounded-xl border border-[#e5e7eb] bg-white shadow-[0_4px_16px_rgba(15,23,42,0.05)]">
           <CardHeader className="pb-0">
-            <CardTitle className="text-xl font-semibold text-[#111827]">Số lượng bệnh nhân theo tháng</CardTitle>
+            <CardTitle className="text-xl font-semibold text-[#111827]">So luong benh nhan theo thang</CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
             <div className="h-[400px] w-full">
@@ -339,7 +296,7 @@ export function DashboardPage() {
                   <XAxis dataKey="month" stroke="#6b7280" tickLine={false} axisLine={false} />
                   <YAxis stroke="#6b7280" tickLine={false} axisLine={false} />
                   <Tooltip
-                    formatter={(value) => [formatNumber(Number(value)), 'Số bệnh nhân']}
+                    formatter={(value) => [formatNumber(Number(value)), 'So benh nhan']}
                     contentStyle={{ borderRadius: 10, borderColor: '#e5e7eb' }}
                   />
                   <Bar dataKey="patients" fill="url(#patientBar)" radius={[6, 6, 0, 0]} maxBarSize={40} />
@@ -353,41 +310,48 @@ export function DashboardPage() {
       <section>
         <Card className="rounded-xl border border-[#e5e7eb] bg-white shadow-[0_4px_16px_rgba(15,23,42,0.05)]">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-xl font-semibold text-[#111827]">Lịch hẹn gần đây</CardTitle>
+            <CardTitle className="text-xl font-semibold text-[#111827]">Lich hen gan day</CardTitle>
             <Link to="/admin/schedule" className="text-sm font-semibold text-[#0284c7] hover:underline">
-              Xem tất cả
+              Xem tat ca
             </Link>
           </CardHeader>
           <CardContent>
             <Table className="w-full">
               <TableHeader>
                 <TableRow className="border-b border-[#e5e7eb]">
-                  <TableHead className="px-4 py-3 text-[#6b7280]">Bệnh nhân</TableHead>
-                  <TableHead className="px-4 py-3 text-[#6b7280]">Bác sĩ</TableHead>
-                  <TableHead className="px-4 py-3 text-[#6b7280]">Chuyên khoa</TableHead>
-                  <TableHead className="px-4 py-3 text-[#6b7280]">Thời gian</TableHead>
-                  <TableHead className="px-4 py-3 text-[#6b7280]">Trạng thái</TableHead>
+                  <TableHead className="px-4 py-3 text-[#6b7280]">Benh nhan</TableHead>
+                  <TableHead className="px-4 py-3 text-[#6b7280]">Bac si</TableHead>
+                  <TableHead className="px-4 py-3 text-[#6b7280]">Chuyen khoa</TableHead>
+                  <TableHead className="px-4 py-3 text-[#6b7280]">Thoi gian</TableHead>
+                  <TableHead className="px-4 py-3 text-[#6b7280]">Trang thai</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {recentAppointments.map((appointment) => (
                   <TableRow key={appointment.id} className="border-b border-[#f1f5f9]">
-                    <TableCell className="px-4 py-4 font-semibold text-[#111827]">{appointment.patientName}</TableCell>
-                    <TableCell className="px-4 py-4 text-[#111827]">{appointment.doctorName}</TableCell>
-                    <TableCell className="px-4 py-4 text-[#111827]">{appointment.specialty}</TableCell>
+                    <TableCell className="px-4 py-4 font-semibold text-[#111827]">{appointment.patientName || '-'}</TableCell>
+                    <TableCell className="px-4 py-4 text-[#111827]">{appointment.doctorName || '-'}</TableCell>
+                    <TableCell className="px-4 py-4 text-[#111827]">{appointment.specialtyName || '-'}</TableCell>
                     <TableCell className="px-4 py-4">
                       <div className="flex items-center gap-2 text-[#111827]">
                         <Calendar className="h-4 w-4 text-[#6b7280]" />
-                        <span>{appointment.date} {appointment.time}</span>
+                        <span>{formatDateTime(appointment.date, appointment.time)}</span>
                       </div>
                     </TableCell>
                     <TableCell className="px-4 py-4">
-                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClass(appointment.status)}`}>
-                        {appointment.status}
+                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClass(appointment.status, appointment.statusCode)}`}>
+                        {appointment.status || '-'}
                       </span>
                     </TableCell>
                   </TableRow>
                 ))}
+                {recentAppointments.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="px-4 py-8 text-center text-[#6b7280]">
+                      Chua co lich hen gan day.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>

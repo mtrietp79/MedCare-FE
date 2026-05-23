@@ -158,6 +158,7 @@ export function normalizePatient(raw: any): NormalizedPatient {
 export interface NormalizedInvoice {
   id: string
   patientName: string
+  doctorName: string
   medicalRecordId: string
   totalAmount: number
   status: 'pending' | 'paid' | 'cancelled'
@@ -169,9 +170,10 @@ export function normalizeInvoice(raw: any): NormalizedInvoice {
   const status = safeLower(raw?.status)
   return {
     id: safeString(raw?.id),
-    patientName: safeString(raw?.patientName),
-    medicalRecordId: safeString(raw?.medicalRecordId),
-    totalAmount: safeNumber(raw?.totalAmount),
+    patientName: safeString(raw?.patientName ?? raw?.patientFullName),
+    doctorName: safeString(raw?.doctorName ?? raw?.doctorFullName),
+    medicalRecordId: safeString(raw?.recordId ?? raw?.medicalRecordId),
+    totalAmount: safeNumber(raw?.totalAmount ?? raw?.amount),
     status: status === 'paid' || status === 'cancelled' ? status : 'pending',
     createdAt: safeString(raw?.createdAt),
     paidAt: safeString(raw?.paidAt),

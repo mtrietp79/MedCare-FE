@@ -1,62 +1,104 @@
-﻿import { useEffect, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { RefreshCw, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ScheduleList } from '@/components/schedule/schedule-list'
-import { scheduleApi, doctorApi } from '@/services/api'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { adminApi, type AdminScheduleEntry } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
-import type { DoctorSchedule, Doctor } from '@/types'
-import { AdminErrorState } from '@/components/admin/AdminPageStates'
+import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+
+interface HttpError extends Error {
+  status?: number
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  const status = (error as HttpError)?.status
+  return typeof status === 'number' ? status : undefined
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  return 'Khong the tai danh sach lich kham.'
+}
+
+function normalizeText(value?: string) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function statusBadgeClass(status?: string, statusCode?: string) {
+  const code = normalizeText(statusCode)
+  const text = normalizeText(status)
+
+  if (code.includes('cancel') || text.includes('huy lich') || text.includes('da huy')) {
+    return 'bg-red-50 text-red-700 border-red-200'
+  }
+
+  if (code.includes('complete') || text.includes('da kham')) {
+    return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  }
+
+  if (code.includes('pending') || text.includes('cho kham') || text.includes('chua kham')) {
+    return 'bg-amber-50 text-amber-700 border-amber-200'
+  }
+
+  return 'bg-slate-100 text-slate-700 border-slate-200'
+}
+
+function statusLabel(status?: string, statusCode?: string) {
+  const text = String(status || '').trim()
+  if (text) return text
+
+  const code = normalizeText(statusCode)
+  if (code.includes('cancel')) return 'Da huy'
+  if (code.includes('complete')) return 'Da kham'
+  if (code.includes('pending')) return 'Cho kham'
+  return '-'
+}
+
+function dateTimeLabel(date?: string, time?: string) {
+  const dateText = String(date || '').trim()
+  const timeText = String(time || '').trim()
+  if (dateText && timeText) return `${dateText} ${timeText}`
+  if (dateText) return dateText
+  if (timeText) return timeText
+  return '-'
+}
 
 export function AdminSchedulePage() {
   const { toast } = useToast()
-
-  const [schedules, setSchedules] = useState<DoctorSchedule[]>([])
-  const [doctors, setDoctors] = useState<Doctor[]>([])
+  const [schedules, setSchedules] = useState<AdminScheduleEntry[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [filter, setFilter] = useState({ date: '', doctorId: '' })
-
-  useEffect(() => {
-    void loadDoctors()
-  }, [])
-
-  useEffect(() => {
-    void loadSchedules()
-  }, [filter])
-
-  const loadDoctors = async () => {
-    try {
-      const data = await doctorApi.getAll()
-      setDoctors(data)
-      setError('')
-    } catch (loadError) {
-      console.error('loadDoctors error', loadError)
-      setError('Không thể tải danh sách bác sĩ.')
-    }
-  }
+  const [keyword, setKeyword] = useState('')
 
   const loadSchedules = async () => {
     try {
       setIsLoading(true)
       setError('')
-      const data = await scheduleApi.getAll({
-        doctorId: filter.doctorId || undefined,
-        date: filter.date || undefined,
-      })
+      const data = await adminApi.getAdminSchedule()
+      setSchedules(Array.isArray(data) ? data : [])
+    } catch (loadError: unknown) {
+      const status = getErrorStatus(loadError)
+      const message = getErrorMessage(loadError)
 
-      const sorted = [...data].sort((a, b) => {
-        const dateComp = a.date.localeCompare(b.date)
-        if (dateComp !== 0) return dateComp
-        return a.startTime.localeCompare(b.startTime)
-      })
+      if (status === 401) {
+        setError('Phien dang nhap da het han. Vui long dang nhap lai.')
+      } else if (status === 403) {
+        setError('Khong co quyen truy cap du lieu lich kham.')
+      } else if (status === 500) {
+        setError('He thong tam thoi bi loi. Vui long thu lai sau.')
+      } else {
+        setError(message)
+      }
 
-      setSchedules(sorted)
-    } catch (loadError) {
-      console.error('loadSchedules error', loadError)
-      const message = loadError instanceof Error ? loadError.message : 'Không thể tải danh sách lịch khám.'
-      setError(message)
       toast({
-        title: 'Lỗi',
+        title: 'Loi',
         description: message,
         variant: 'destructive',
       })
@@ -65,55 +107,100 @@ export function AdminSchedulePage() {
     }
   }
 
+  useEffect(() => {
+    void loadSchedules()
+  }, [])
+
+  const filteredSchedules = useMemo(() => {
+    const text = normalizeText(keyword)
+    if (!text) return schedules
+
+    return schedules.filter((item) => {
+      const haystack = [
+        item.appointmentCode,
+        item.patientName,
+        item.doctorName,
+        item.specialtyName,
+        item.date,
+        item.time,
+        item.status,
+        item.statusCode,
+      ]
+        .map((value) => normalizeText(value))
+        .join(' ')
+
+      return haystack.includes(text)
+    })
+  }, [keyword, schedules])
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Lịch khám tham khảo</h1>
+          <h1 className="text-3xl font-bold">Lich dat kham</h1>
           <p className="mt-1 text-muted-foreground">
-            Trang này chỉ dùng để tham khảo lịch khám. Giao diện không hỗ trợ thêm/sửa/xóa lịch làm việc.
+            Toan bo lich hen dat kham trong he thong.
           </p>
         </div>
+        <Button variant="outline" onClick={() => void loadSchedules()} className="gap-2" disabled={isLoading}>
+          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          Lam moi
+        </Button>
       </div>
 
-      <div className="rounded-lg border bg-white p-4 flex flex-wrap gap-4">
-        <div className="min-w-[220px] flex-1">
-          <label className="mb-1 block text-sm font-medium">Bác sĩ</label>
-          <select
-            value={filter.doctorId}
-            onChange={(e) => setFilter((prev) => ({ ...prev, doctorId: e.target.value }))}
-            className="w-full rounded-md border px-3 py-2 text-sm"
-          >
-            <option value="">Tất cả bác sĩ</option>
-            {doctors.map((doctor) => (
-              <option key={doctor.id} value={doctor.id}>
-                {doctor.fullName || doctor.name || doctor.id}
-              </option>
-            ))}
-          </select>
-        </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Danh sach lich hen</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="relative max-w-md">
+            <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="Tim theo benh nhan, bac si, chuyen khoa..."
+              className="pl-9"
+            />
+          </div>
 
-        <div className="min-w-[220px] flex-1">
-          <label className="mb-1 block text-sm font-medium">Ngày</label>
-          <input
-            type="date"
-            value={filter.date}
-            onChange={(e) => setFilter((prev) => ({ ...prev, date: e.target.value }))}
-            className="w-full rounded-md border px-3 py-2 text-sm"
-          />
-        </div>
+          {isLoading && <AdminTableSkeleton rows={8} />}
+          {!isLoading && error && <AdminErrorState message={error} onRetry={() => void loadSchedules()} />}
+          {!isLoading && !error && filteredSchedules.length === 0 && (
+            <AdminEmptyState title="Khong co lich hen phu hop." />
+          )}
 
-        <div className="flex items-end">
-          <Button variant="outline" size="sm" onClick={() => void loadSchedules()} className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Làm mới
-          </Button>
-        </div>
-      </div>
-
-      {error && <AdminErrorState message={error} onRetry={() => void loadSchedules()} />}
-
-      <ScheduleList schedules={schedules} isLoading={isLoading} />
+          {!isLoading && !error && filteredSchedules.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Ma lich</TableHead>
+                  <TableHead>Benh nhan</TableHead>
+                  <TableHead>Bac si</TableHead>
+                  <TableHead>Chuyen khoa</TableHead>
+                  <TableHead>Ngay gio</TableHead>
+                  <TableHead>Trang thai</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredSchedules.map((item) => (
+                  <TableRow key={item.id || `${item.appointmentCode}-${item.date}-${item.time}`}>
+                    <TableCell>{item.appointmentCode || item.id || '-'}</TableCell>
+                    <TableCell>{item.patientName || '-'}</TableCell>
+                    <TableCell>{item.doctorName || '-'}</TableCell>
+                    <TableCell>{item.specialtyName || '-'}</TableCell>
+                    <TableCell>{dateTimeLabel(item.date, item.time)}</TableCell>
+                    <TableCell>
+                      <Badge className={`border ${statusBadgeClass(item.status, item.statusCode)}`}>
+                        {statusLabel(item.status, item.statusCode)}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

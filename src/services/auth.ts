@@ -13,6 +13,14 @@ export const USER_KEY = 'auth_user'
 export const ROLE_KEY = 'user_role'
 export const USERNAME_KEY = 'username'
 export const FORBIDDEN_NOTICE_KEY = 'forbidden_notice'
+export const AUTH_SOFT_LOGOUT_EVENT = 'auth:soft-logout'
+
+type ProtectedStatusCode = 401 | 403
+
+interface SoftLogoutOptions {
+  status?: ProtectedStatusCode
+  reason?: string
+}
 
 interface FetchJsonError extends Error {
   status?: number
@@ -20,6 +28,67 @@ interface FetchJsonError extends Error {
 }
 
 const VALID_ROLES = ['ROLE_ADMIN', 'ROLE_DOCTOR', 'ROLE_PATIENT'] as const
+let isLoggingOut = false
+
+function emitAuthSync() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new Event('auth-sync'))
+}
+
+function normalizeEndpointPath(rawUrl?: string): string {
+  if (!rawUrl) return ''
+  const source = rawUrl.toLowerCase()
+  const baseIndex = source.indexOf('/api/')
+  if (baseIndex >= 0) {
+    return source.slice(baseIndex + 4)
+  }
+
+  if (source.startsWith('http://') || source.startsWith('https://')) {
+    try {
+      return new URL(source).pathname.toLowerCase()
+    } catch {
+      return source
+    }
+  }
+
+  return source
+}
+
+function isPublicAuthEndpoint(rawUrl?: string): boolean {
+  const endpointPath = normalizeEndpointPath(rawUrl)
+  if (!endpointPath) return false
+
+  return (
+    endpointPath.startsWith('/auth/login') ||
+    endpointPath.startsWith('/auth/register') ||
+    endpointPath.startsWith('/auth/forgot-password') ||
+    endpointPath.startsWith('/auth/reset-password') ||
+    endpointPath.startsWith('/auth/oauth/')
+  )
+}
+
+export function softLogout(options: SoftLogoutOptions = {}) {
+  clearStoredAuth()
+  emitAuthSync()
+
+  if (typeof window === 'undefined') return
+  if (isLoggingOut) return
+
+  isLoggingOut = true
+  window.dispatchEvent(new CustomEvent<SoftLogoutOptions>(AUTH_SOFT_LOGOUT_EVENT, { detail: options }))
+}
+
+export function handleProtectedApiAuthFailure(status?: number | null, requestUrl?: string): boolean {
+  if (status !== 401 && status !== 403) return false
+  if (isPublicAuthEndpoint(requestUrl)) return false
+
+  softLogout({ status, reason: 'protected-api' })
+  return true
+}
+
+export function redirectToLoginPreservingPath() {
+  softLogout({ status: 401, reason: 'redirect-to-login' })
+}
 
 api.interceptors.request.use((config) => {
   const token = getStoredToken()
@@ -47,20 +116,7 @@ api.interceptors.response.use(
       if (error.response) {
         error.message = message
       }
-
-      if (status === 401) {
-        clearStoredAuth()
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login'
-        }
-      }
-
-      if (status === 403) {
-        queueForbiddenNotice('Bạn không có quyền truy cập')
-        if (typeof window !== 'undefined') {
-          window.location.href = redirectByRole(getStoredRole())
-        }
-      }
+      handleProtectedApiAuthFailure(status, error.config?.url)
 
       return Promise.reject(error)
     }
@@ -110,21 +166,8 @@ export async function fetchJson<T = any>(url: string, options: RequestInit = {})
     } catch {
       data = rawText
     }
-
     if (!response.ok) {
-      if (response.status === 401) {
-        clearStoredAuth()
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login'
-        }
-      }
-
-      if (response.status === 403) {
-        queueForbiddenNotice('Bạn không có quyền truy cập')
-        if (typeof window !== 'undefined') {
-          window.location.href = redirectByRole(getStoredRole())
-        }
-      }
+      handleProtectedApiAuthFailure(response.status, url)
 
       const message =
         data && typeof data === 'object' && 'message' in data
@@ -189,6 +232,7 @@ export function getStoredToken(): string | null {
 }
 
 export function setStoredToken(token: string) {
+  isLoggingOut = false
   localStorage.setItem(TOKEN_KEY, token)
 }
 
@@ -279,4 +323,6 @@ export async function loginGoogleByCode(code: string, redirectUri?: string) {
   const { data } = await api.post('/auth/oauth/google/exchange', { code, redirectUri })
   return data
 }
+
+
 

@@ -21,6 +21,35 @@ const getPaymentStatusLabel = (status?: string) => {
   }
 }
 
+function formatAppointmentDateTime(appointment?: Appointment | null): string {
+  if (!appointment) return 'Chua co lich kham'
+
+  const rawDateSource = String(appointment.appointmentDate || appointment.date || '').trim()
+  const rawTimeSource = String(appointment.appointmentTime || appointment.time || '').trim()
+
+  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/)
+  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
+  const embeddedTime = (datePrefixMatch?.[2] || '').trim()
+
+  const labelTimeCandidate =
+    String(appointment.appointmentTimeLabel || '')
+      .trim()
+      .match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM|SA|CH))?$/i)?.[0] || ''
+  const timeMatch = (rawTimeSource || embeddedTime || labelTimeCandidate).match(/^(\d{1,2}):(\d{2})/i)
+  const timeLabel = timeMatch
+    ? `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
+    : ''
+
+  const dateObject = dateSource ? new Date(dateSource) : null
+  const dateLabel =
+    dateObject && !Number.isNaN(dateObject.getTime()) ? dateObject.toLocaleDateString('vi-VN') : dateSource || ''
+
+  if (!dateLabel && !timeLabel) return 'Chua co lich kham'
+  if (!dateLabel) return timeLabel
+  if (!timeLabel) return dateLabel
+  return `${dateLabel} ${timeLabel}`
+}
+
 export function PatientDashboardPage() {
   const [patient, setPatient] = useState<Patient | null>(null)
   const [appointments, setAppointments] = useState<Appointment[]>([])
@@ -113,7 +142,7 @@ export function PatientDashboardPage() {
               <p className="font-medium">Lịch khám gần nhất</p>
             </div>
             <p className="text-sm text-muted-foreground">
-              {appointments.length > 0 ? appointments[0].appointmentDate : 'Chưa có lịch khám'}
+              {appointments.length > 0 ? formatAppointmentDateTime(appointments[0]) : 'Chưa có lịch khám'}
             </p>
           </CardContent>
         </Card>
@@ -154,7 +183,7 @@ export function PatientDashboardPage() {
                       <p className="text-sm text-muted-foreground">{appointment.appointmentCode || `#${appointment.id}`}</p>
                       <p className="font-semibold">{appointment.doctor?.fullName || appointment.doctorName || 'Bác sĩ chưa xác định'}</p>
                     </div>
-                    <p className="text-sm text-muted-foreground">{appointment.appointmentDate}</p>
+                    <p className="text-sm text-muted-foreground">{formatAppointmentDateTime(appointment)}</p>
                   </div>
                   <div className="flex items-center justify-between text-sm text-muted-foreground">
                     <span>{typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name || 'Chuyên khoa'}</span>

@@ -20,7 +20,7 @@ function getErrorStatus(error: unknown): number | undefined {
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
-  return 'Khong the tai danh sach lich kham.'
+  return 'Không thể tải danh sách lịch khám.'
 }
 
 function normalizeText(value?: string) {
@@ -55,9 +55,9 @@ function statusLabel(status?: string, statusCode?: string) {
   if (text) return text
 
   const code = normalizeText(statusCode)
-  if (code.includes('cancel')) return 'Da huy'
-  if (code.includes('complete')) return 'Da kham'
-  if (code.includes('pending')) return 'Cho kham'
+  if (code.includes('cancel')) return 'Đã hủy'
+  if (code.includes('complete')) return 'Đã khám'
+  if (code.includes('pending')) return 'Chờ khám'
   return '-'
 }
 
@@ -88,17 +88,17 @@ export function AdminSchedulePage() {
       const message = getErrorMessage(loadError)
 
       if (status === 401) {
-        setError('Phien dang nhap da het han. Vui long dang nhap lai.')
+        setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
       } else if (status === 403) {
-        setError('Khong co quyen truy cap du lieu lich kham.')
+        setError('Không có quyền truy cập dữ liệu lịch khám.')
       } else if (status === 500) {
-        setError('He thong tam thoi bi loi. Vui long thu lai sau.')
+        setError('Hệ thống tạm thời bị lỗi. Vui lòng thử lại sau.')
       } else {
         setError(message)
       }
 
       toast({
-        title: 'Loi',
+        title: 'Lỗi',
         description: message,
         variant: 'destructive',
       })
@@ -137,20 +137,20 @@ export function AdminSchedulePage() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Lich dat kham</h1>
+          <h1 className="text-3xl font-bold">Lịch đặt khám</h1>
           <p className="mt-1 text-muted-foreground">
-            Toan bo lich hen dat kham trong he thong.
+            Toàn bộ lịch hẹn đặt khám trong hệ thống.
           </p>
         </div>
         <Button variant="outline" onClick={() => void loadSchedules()} className="gap-2" disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Lam moi
+          Làm mới
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Danh sach lich hen</CardTitle>
+          <CardTitle>Danh sách lịch hẹn</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative max-w-md">
@@ -158,7 +158,7 @@ export function AdminSchedulePage() {
             <Input
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
-              placeholder="Tim theo benh nhan, bac si, chuyen khoa..."
+              placeholder="Tìm theo bệnh nhân, bác sĩ, chuyên khoa..."
               className="pl-9"
             />
           </div>
@@ -166,19 +166,19 @@ export function AdminSchedulePage() {
           {isLoading && <AdminTableSkeleton rows={8} />}
           {!isLoading && error && <AdminErrorState message={error} onRetry={() => void loadSchedules()} />}
           {!isLoading && !error && filteredSchedules.length === 0 && (
-            <AdminEmptyState title="Khong co lich hen phu hop." />
+            <AdminEmptyState title="Không có lịch hẹn phù hợp." />
           )}
 
           {!isLoading && !error && filteredSchedules.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ma lich</TableHead>
-                  <TableHead>Benh nhan</TableHead>
-                  <TableHead>Bac si</TableHead>
-                  <TableHead>Chuyen khoa</TableHead>
-                  <TableHead>Ngay gio</TableHead>
-                  <TableHead>Trang thai</TableHead>
+                  <TableHead>Mã lịch</TableHead>
+                  <TableHead>Bệnh nhân</TableHead>
+                  <TableHead>Bác sĩ</TableHead>
+                  <TableHead>Chuyên khoa</TableHead>
+                  <TableHead>Ngày giờ</TableHead>
+                  <TableHead>Trạng thái</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

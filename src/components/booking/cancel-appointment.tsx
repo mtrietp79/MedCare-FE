@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { AlertCircle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -18,6 +18,17 @@ interface CancelAppointmentProps {
   appointment: Appointment
   onSuccess?: () => void
   onCancel?: () => void
+}
+
+function getAppointmentDateLabel(appointment: Appointment): string {
+  const rawDateSource = String(appointment.appointmentDate || appointment.date || '').trim()
+  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})/)
+  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
+  if (!dateSource) return '—'
+
+  const dateObject = new Date(dateSource)
+  if (Number.isNaN(dateObject.getTime())) return dateSource
+  return dateObject.toLocaleDateString('vi-VN')
 }
 
 export function CancelAppointmentDialog({
@@ -88,9 +99,7 @@ export function CancelAppointmentDialog({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Ngày khám:</span>
                   <span className="font-medium text-foreground">
-                    {appointment.appointmentDate
-                      ? new Date(appointment.appointmentDate).toLocaleDateString('vi-VN')
-                      : '—'}
+                    {getAppointmentDateLabel(appointment)}
                   </span>
                 </div>
               </div>
@@ -139,3 +148,5 @@ export function CancelAppointmentDialog({
     </>
   )
 }
+
+

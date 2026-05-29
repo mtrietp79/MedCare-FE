@@ -59,7 +59,7 @@ const fallbackSummary: DashboardSummary = {
 }
 
 const fallbackMonthlyPatients: MonthlyPatientPoint[] = Array.from({ length: 12 }, (_, index) => ({
-  month: `Thang ${index + 1}`,
+  month: `Tháng ${index + 1}`,
   patients: 0,
 }))
 
@@ -104,7 +104,7 @@ function normalizeMonthlyPatients(raw: MonthlyPatientsResponse[]): MonthlyPatien
   return Array.from({ length: 12 }, (_, index) => {
     const month = index + 1
     return {
-      month: `Thang ${month}`,
+      month: `Tháng ${month}`,
       patients: monthMap.get(month) ?? 0,
     }
   })
@@ -180,10 +180,10 @@ export function DashboardPage() {
       setMonthlyPatients(normalizeMonthlyPatients(monthlyPatientsResponse))
       setRecentAppointments(normalizeAppointments(recentAppointmentsResponse))
     } catch (dashboardError: any) {
-      const message = dashboardError?.message || 'Khong the tai du lieu dashboard.'
+      const message = dashboardError?.message || 'Không thể tải dữ liệu dashboard.'
       setError(message)
       toast({
-        title: 'Loi',
+        title: 'Lỗi',
         description: message,
         variant: 'destructive',
       })
@@ -199,27 +199,27 @@ export function DashboardPage() {
   const stats = useMemo(
     () => [
       {
-        label: 'Tong lich hen',
+        label: 'Tổng lịch hẹn',
         value: formatNumber(summary.totalAppointments),
-        growth: 'Cap nhat theo du lieu thuc te',
+        growth: 'Cập nhật theo dữ liệu thực tế',
         icon: CalendarDays,
       },
       {
-        label: 'Benh nhan hoat dong',
+        label: 'Bệnh nhân hoạt động',
         value: formatNumber(summary.activePatients),
-        growth: 'Cap nhat theo du lieu thuc te',
+        growth: 'Cập nhật theo dữ liệu thực tế',
         icon: Users,
       },
       {
-        label: 'Bac si dang lam viec',
+        label: 'Bác sĩ đang làm việc',
         value: formatNumber(summary.workingDoctors),
-        growth: 'Cap nhat theo du lieu thuc te',
+        growth: 'Cập nhật theo dữ liệu thực tế',
         icon: Stethoscope,
       },
       {
-        label: 'Doanh thu thang nay',
+        label: 'Doanh thu tháng này',
         value: formatMoney(summary.monthlyRevenue),
-        growth: 'Cap nhat theo du lieu thuc te',
+        growth: 'Cập nhật theo dữ liệu thực tế',
         icon: TrendingUp,
       },
     ],
@@ -229,7 +229,7 @@ export function DashboardPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-[#111827]">Tong quan</h2>
+        <h2 className="text-2xl font-bold text-[#111827]">Tổng quan</h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <Card key={index} className="h-36 animate-pulse rounded-xl border border-[#e5e7eb] bg-white" />
@@ -250,7 +250,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-[#111827]">Tong quan</h2>
+      <h2 className="text-2xl font-bold text-[#111827]">Tổng quan</h2>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {stats.map((item) => {
@@ -280,7 +280,7 @@ export function DashboardPage() {
       <section>
         <Card className="rounded-xl border border-[#e5e7eb] bg-white shadow-[0_4px_16px_rgba(15,23,42,0.05)]">
           <CardHeader className="pb-0">
-            <CardTitle className="text-xl font-semibold text-[#111827]">So luong benh nhan theo thang</CardTitle>
+            <CardTitle className="text-xl font-semibold text-[#111827]">Số lượng bệnh nhân theo tháng</CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
             <div className="h-[400px] w-full">
@@ -296,7 +296,7 @@ export function DashboardPage() {
                   <XAxis dataKey="month" stroke="#6b7280" tickLine={false} axisLine={false} />
                   <YAxis stroke="#6b7280" tickLine={false} axisLine={false} />
                   <Tooltip
-                    formatter={(value) => [formatNumber(Number(value)), 'So benh nhan']}
+                    formatter={(value) => [formatNumber(Number(value)), 'Số bệnh nhân']}
                     contentStyle={{ borderRadius: 10, borderColor: '#e5e7eb' }}
                   />
                   <Bar dataKey="patients" fill="url(#patientBar)" radius={[6, 6, 0, 0]} maxBarSize={40} />
@@ -310,20 +310,20 @@ export function DashboardPage() {
       <section>
         <Card className="rounded-xl border border-[#e5e7eb] bg-white shadow-[0_4px_16px_rgba(15,23,42,0.05)]">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-xl font-semibold text-[#111827]">Lich hen gan day</CardTitle>
+            <CardTitle className="text-xl font-semibold text-[#111827]">Lịch hẹn gần đây</CardTitle>
             <Link to="/admin/schedule" className="text-sm font-semibold text-[#0284c7] hover:underline">
-              Xem tat ca
+              Xem tất cả
             </Link>
           </CardHeader>
           <CardContent>
             <Table className="w-full">
               <TableHeader>
                 <TableRow className="border-b border-[#e5e7eb]">
-                  <TableHead className="px-4 py-3 text-[#6b7280]">Benh nhan</TableHead>
-                  <TableHead className="px-4 py-3 text-[#6b7280]">Bac si</TableHead>
-                  <TableHead className="px-4 py-3 text-[#6b7280]">Chuyen khoa</TableHead>
-                  <TableHead className="px-4 py-3 text-[#6b7280]">Thoi gian</TableHead>
-                  <TableHead className="px-4 py-3 text-[#6b7280]">Trang thai</TableHead>
+                  <TableHead className="px-4 py-3 text-[#6b7280]">Bệnh nhân</TableHead>
+                  <TableHead className="px-4 py-3 text-[#6b7280]">Bác sĩ</TableHead>
+                  <TableHead className="px-4 py-3 text-[#6b7280]">Chuyên khoa</TableHead>
+                  <TableHead className="px-4 py-3 text-[#6b7280]">Thời gian</TableHead>
+                  <TableHead className="px-4 py-3 text-[#6b7280]">Trạng thái</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -348,7 +348,7 @@ export function DashboardPage() {
                 {recentAppointments.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="px-4 py-8 text-center text-[#6b7280]">
-                      Chua co lich hen gan day.
+                      Chưa có lịch hẹn gần đây.
                     </TableCell>
                   </TableRow>
                 )}

@@ -1,5 +1,5 @@
-import { useNavigate, Link } from 'react-router-dom'
-import { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import { Eye, EyeOff, Mail, Lock, Heart, Loader2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useForm } from 'react-hook-form'
@@ -25,11 +25,31 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>
 
 export function LoginPage() {
-  const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
+
+  const redirectTo = useMemo(() => {
+    const searchParams = new URLSearchParams(location.search)
+    const redirectFromQuery = searchParams.get('redirect')
+    if (redirectFromQuery && redirectFromQuery.startsWith('/')) {
+      return redirectFromQuery
+    }
+
+    const fromState = (location.state as { from?: { pathname?: string; search?: string; hash?: string } } | null)?.from
+    if (!fromState?.pathname) {
+      return undefined
+    }
+
+    const nextPath = `${fromState.pathname}${fromState.search || ''}${fromState.hash || ''}`
+    if (!nextPath.startsWith('/') || nextPath === '/login') {
+      return undefined
+    }
+
+    return nextPath
+  }, [location.search, location.state])
 
   const {
     register,
@@ -49,7 +69,7 @@ export function LoginPage() {
     setIsLoading(true)
 
     try {
-      await login({ username: data.username.trim(), password: data.password })
+      await login({ username: data.username.trim(), password: data.password }, redirectTo)
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||

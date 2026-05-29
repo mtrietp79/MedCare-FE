@@ -1,59 +1,201 @@
-import { useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { ArrowLeft, CreditCard, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/skeleton'
 import { CancelAppointmentDialog } from '@/components/booking/cancel-appointment'
-import { api } from '@/services/api'
+import { PatientMedicalRecordDetails } from '@/components/patient/PatientMedicalRecordDetails'
+import { api, type PatientMedicalRecord } from '@/services/api'
 import type { Appointment } from '@/types'
+import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
+
+type AppointmentStatusKey = 'pending' | 'completed' | 'cancelled'
+
+const STATUS_CLASS_BY_KEY: Record<AppointmentStatusKey, string> = {
+  pending: 'bg-amber-50 text-amber-700 border-amber-200',
+  completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  cancelled: 'bg-red-50 text-red-700 border-red-200',
+}
 
 function getPaymentStatusLabel(status?: string) {
   switch ((status || 'UNPAID').toUpperCase()) {
     case 'PAID_ONLINE':
-      return 'Da thanh toan VNPay'
+      return 'Đã thanh toán VNPay'
     case 'PAID':
-      return 'Da thanh toan'
+      return 'Đã thanh toán'
     case 'UNPAID':
     default:
-      return 'Chua thanh toan'
+      return 'Chưa thanh toán'
   }
 }
 
 function getAppointmentTimeLabel(appointment: Appointment) {
-  return appointment.appointmentTimeLabel || appointment.appointmentDate || '-'
+  const rawDateSource = String(appointment.appointmentDate || appointment.date || '').trim()
+  const rawTimeSource = String(appointment.appointmentTime || appointment.time || '').trim()
+
+  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/)
+  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
+  const embeddedTime = (datePrefixMatch?.[2] || '').trim()
+
+  const labelTimeCandidate =
+    String(appointment.appointmentTimeLabel || '')
+      .trim()
+      .match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM|SA|CH))?$/i)?.[0] || ''
+  const timeMatch = (rawTimeSource || embeddedTime || labelTimeCandidate).match(/^(\d{1,2}):(\d{2})/i)
+  const timeLabel = timeMatch
+    ? `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
+    : ''
+
+  const dateObject = dateSource ? new Date(dateSource) : null
+  const dateLabel =
+    dateObject && !Number.isNaN(dateObject.getTime()) ? dateObject.toLocaleDateString('vi-VN') : dateSource || ''
+
+  if (!dateLabel && !timeLabel) return '-'
+  if (!dateLabel) return timeLabel
+  if (!timeLabel) return dateLabel
+  return `${dateLabel} ${timeLabel}`
+}
+
+function getAppointmentTypeLabel(appointment: Appointment): string {
+  const rawType = String(appointment.appointmentType || appointment.type || '').trim()
+  const normalizedType = rawType.toLowerCase()
+  if (normalizedType.includes('tai') || normalizedType.includes('follow') || normalizedType.includes('revisit')) {
+    return 'Tái khám'
+  }
+  return rawType || 'Khám bệnh'
+}
+
+function getFallbackStatusKey(rawStatus?: string): AppointmentStatusKey {
+  const normalized = String(rawStatus || '').trim().toUpperCase()
+  if (normalized === 'CANCELLED') return 'cancelled'
+  if (normalized === 'COMPLETED') return 'completed'
+  return 'pending'
+}
+
+function getStatusLabelByKey(statusKey: AppointmentStatusKey) {
+  if (statusKey === 'cancelled') return 'Đã hủy'
+  if (statusKey === 'completed') return 'Đã khám'
+  return 'Chờ khám'
+}
+
+function mapStatusColorToClass(statusColor?: string): string | null {
+  const normalized = String(statusColor || '').trim().toLowerCase()
+  if (!normalized) return null
+
+  if (
+    normalized.includes('red') ||
+    normalized.includes('danger') ||
+    normalized.includes('error') ||
+    normalized.includes('cancel')
+  ) {
+    return STATUS_CLASS_BY_KEY.cancelled
+  }
+
+  if (
+    normalized.includes('green') ||
+    normalized.includes('success') ||
+    normalized.includes('complete') ||
+    normalized.includes('done')
+  ) {
+    return STATUS_CLASS_BY_KEY.completed
+  }
+
+  if (
+    normalized.includes('yellow') ||
+    normalized.includes('amber') ||
+    normalized.includes('warning') ||
+    normalized.includes('pending')
+  ) {
+    return STATUS_CLASS_BY_KEY.pending
+  }
+
+  return null
+}
+
+function getAppointmentStatusView(appointment: Appointment): {
+  key: AppointmentStatusKey
+  label: string
+  className: string
+} {
+  const fallbackKey = getFallbackStatusKey(appointment.status)
+  const label = String(appointment.statusDisplay || '').trim() || getStatusLabelByKey(fallbackKey)
+  const className = mapStatusColorToClass(appointment.statusColor) || STATUS_CLASS_BY_KEY[fallbackKey]
+  return {
+    key: fallbackKey,
+    label,
+    className,
+  }
+}
+
+function getErrorStatusCode(error: any): number | null {
+  const status = Number(error?.status ?? error?.response?.status)
+  return Number.isFinite(status) ? status : null
+}
+
+function getErrorMessage(error: any, fallbackMessage: string): string {
+  const backendMessage = String(error?.response?.data?.message || '').trim()
+  if (backendMessage) return backendMessage
+
+  const directMessage = String(error?.message || '').trim()
+  if (directMessage) return directMessage
+
+  return fallbackMessage
+}
+
+function isFollowUpAppointment(appointment: Appointment): boolean {
+  const typeSource = String(appointment.appointmentType || appointment.type || '').trim().toLowerCase()
+  return (
+    Boolean(appointment.parentAppointmentId) ||
+    typeSource.includes('tai') ||
+    typeSource.includes('follow') ||
+    typeSource.includes('revisit')
+  )
 }
 
 export function PatientAppointmentDetailPage() {
-  const { id } = useParams()
+  const { appointmentId } = useParams()
   const navigate = useNavigate()
   const [appointment, setAppointment] = useState<Appointment | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [recordDialogOpen, setRecordDialogOpen] = useState(false)
+  const [recordLoading, setRecordLoading] = useState(false)
+  const [recordError, setRecordError] = useState<string | null>(null)
+  const [record, setRecord] = useState<PatientMedicalRecord | null>(null)
+
+  const loadAppointment = useCallback(async () => {
+    if (!appointmentId) return
+
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await api.appointments.getById(appointmentId)
+      setAppointment(data)
+    } catch (fetchError) {
+      setError(fetchError instanceof Error ? fetchError.message : 'Không thể tải thông tin lịch khám.')
+    } finally {
+      setLoading(false)
+    }
+  }, [appointmentId])
 
   useEffect(() => {
-    if (!id) return
-
-    const fetchAppointment = async () => {
-      try {
-        setLoading(true)
-        const data = await api.appointments.getById(id)
-        setAppointment(data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Khong the tai thong tin lich kham')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    void fetchAppointment()
-  }, [id])
+    void loadAppointment()
+  }, [loadAppointment])
 
   const handleCancelSuccess = () => {
     navigate('/patient/appointments', {
       replace: true,
-      state: { message: 'Lich kham da duoc huy thanh cong' },
+      state: { message: 'Lịch khám đã được hủy thành công.' },
     })
   }
 
@@ -69,24 +211,77 @@ export function PatientAppointmentDetailPage() {
       setPaymentError(
         paymentStartError instanceof Error
           ? paymentStartError.message
-          : 'Khong the khoi tao thanh toan VNPay'
+          : 'Không thể khởi tạo thanh toán VNPay.'
       )
       setPaymentLoading(false)
+    }
+  }
+
+  const loadRecordByAppointment = useCallback(async () => {
+    if (!appointment?.id) return
+
+    try {
+      setRecordLoading(true)
+      setRecordError(null)
+      const data = await api.patients.getMyMedicalRecordByAppointmentId(String(appointment.id))
+      setRecord(data)
+    } catch (fetchError) {
+      const status = getErrorStatusCode(fetchError)
+      if (status === 404) {
+        setRecordError('Lịch khám này chưa có bệnh án.')
+      } else {
+        setRecordError(getErrorMessage(fetchError, 'Không thể tải hồ sơ bệnh án.'))
+      }
+      setRecord(null)
+    } finally {
+      setRecordLoading(false)
+    }
+  }, [appointment?.id])
+
+  useEffect(() => {
+    if (!appointmentId) return
+
+    return onQueryInvalidation((payload) => {
+      const sameAppointment = !payload.appointmentId || payload.appointmentId === String(appointmentId)
+
+      if (payload.keys.includes(QUERY_KEYS.doctorAppointmentList) && sameAppointment) {
+        void loadAppointment()
+      }
+
+      if (payload.keys.includes(QUERY_KEYS.patientMedicalRecordByAppointment) && sameAppointment) {
+        void loadRecordByAppointment()
+      }
+    })
+  }, [appointmentId, loadAppointment, loadRecordByAppointment])
+
+  const openMedicalRecordDialog = () => {
+    setRecordDialogOpen(true)
+    void loadRecordByAppointment()
+  }
+
+  const onRecordDialogOpenChange = (open: boolean) => {
+    setRecordDialogOpen(open)
+    if (!open) {
+      setRecordError(null)
+      setRecordLoading(false)
     }
   }
 
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-16 text-center">
-        <p className="text-muted-foreground">Dang tai chi tiet lich kham...</p>
+        <p className="text-muted-foreground">Đang tải chi tiết lịch khám...</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-16 text-center text-destructive">
-        <p>Loi: {error}</p>
+      <div className="container mx-auto space-y-3 px-4 py-16 text-center text-destructive">
+        <p>Lỗi: {error}</p>
+        <Button variant="outline" onClick={() => void loadAppointment()}>
+          Thử lại
+        </Button>
       </div>
     )
   }
@@ -96,78 +291,79 @@ export function PatientAppointmentDetailPage() {
   }
 
   const normalizedPaymentStatus = String(appointment.paymentStatus || 'UNPAID').toUpperCase()
-  const normalizedAppointmentStatus = String(appointment.status || '').toUpperCase()
-  const isCancelled = normalizedAppointmentStatus === 'CANCELLED'
-  const isCompleted = normalizedAppointmentStatus === 'COMPLETED'
+  const statusView = getAppointmentStatusView(appointment)
+  const isCancelled = statusView.key === 'cancelled'
+  const isCompleted = statusView.key === 'completed'
   const isPaymentFinalized = ['PAID_ONLINE', 'PAID'].includes(normalizedPaymentStatus)
-  const canPayNow = !isCancelled && !isPaymentFinalized
+  const followUpAppointment = isFollowUpAppointment(appointment)
+  const canPayNow = !isCancelled && !isPaymentFinalized && !followUpAppointment
   const canCancel = !isCancelled && !isCompleted
 
   return (
     <div className="container mx-auto space-y-6 px-4 py-10">
       <Link to="/patient/appointments" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
-        <ArrowLeft className="h-4 w-4" /> Quay lai lich kham
+        <ArrowLeft className="h-4 w-4" /> Quay lại lịch khám
       </Link>
 
       <Card>
         <CardContent className="space-y-6 p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Ma dat lich</p>
+              <p className="text-sm text-muted-foreground">Mã đặt lịch</p>
               <h1 className="text-2xl font-semibold">{appointment.appointmentCode || `#${appointment.id}`}</h1>
             </div>
             <div className="flex flex-col gap-2 text-right">
-              <span className="text-sm text-muted-foreground">Trang thai</span>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                {appointment.status || 'PENDING'}
+              <span className="text-sm text-muted-foreground">Trạng thái</span>
+              <span className={`inline-flex rounded-full border px-3 py-1 text-sm font-medium ${statusView.className}`}>
+                {statusView.label}
               </span>
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Loai kham</p>
-              <p className="mt-2 font-medium">{appointment.medicalService?.name ?? 'Kham benh'}</p>
+              <p className="text-sm text-muted-foreground">Loại khám</p>
+              <p className="mt-2 font-medium">{getAppointmentTypeLabel(appointment)}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name || ''}
+                {appointment.medicalService?.name ||
+                  (typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name) ||
+                  ''}
               </p>
             </div>
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Thoi gian kham</p>
+              <p className="text-sm text-muted-foreground">Thời gian khám</p>
               <p className="mt-2 font-medium">{getAppointmentTimeLabel(appointment)}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{appointment.patient?.fullName || 'Benh nhan'}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{appointment.patient?.fullName || 'Bệnh nhân'}</p>
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Bac si phu trach</p>
+              <p className="text-sm text-muted-foreground">Bác sĩ phụ trách</p>
               <p className="mt-2 font-medium">
-                {appointment.doctor?.fullName || appointment.doctorName || 'Dang cho he thong gan'}
+                {appointment.doctor?.fullName || appointment.doctorName || 'Đang chờ hệ thống gán'}
               </p>
             </div>
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Phi kham</p>
+              <p className="text-sm text-muted-foreground">Phí khám</p>
               <p className="mt-2 text-lg font-semibold text-primary">
                 {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(appointment.consultationFee || 0)}
               </p>
             </div>
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Thanh toan</p>
+              <p className="text-sm text-muted-foreground">Thanh toán</p>
               <p className="mt-2 font-medium">{getPaymentStatusLabel(appointment.paymentStatus)}</p>
             </div>
             <div className="rounded-3xl border p-5">
-              <p className="text-sm text-muted-foreground">Trieu chung</p>
-              <p className="mt-2 text-sm text-muted-foreground">{appointment.symptoms || 'Khong co'}</p>
+              <p className="text-sm text-muted-foreground">Triệu chứng</p>
+              <p className="mt-2 text-sm text-muted-foreground">{appointment.symptoms || 'Không có'}</p>
             </div>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <Button asChild variant="outline">
-              <Link to="/patient/medical-records" className="gap-2">
-                <FileText className="h-4 w-4" />
-                Xem ho so benh an
-              </Link>
+            <Button variant="outline" className="gap-2" onClick={openMedicalRecordDialog}>
+              <FileText className="h-4 w-4" />
+              Xem hồ sơ bệnh án
             </Button>
 
             {canCancel ? (
@@ -185,11 +381,13 @@ export function PatientAppointmentDetailPage() {
                 disabled={paymentLoading}
               >
                 <CreditCard className="h-4 w-4" />
-                {paymentLoading ? 'Dang chuyen huong...' : 'Thanh toan VNPay'}
+                {paymentLoading ? 'Đang chuyển hướng...' : 'Thanh toán VNPay'}
               </Button>
             ) : (
               <Button variant="secondary" disabled>
-                Trang thai thanh toan: {getPaymentStatusLabel(appointment.paymentStatus)}
+                {followUpAppointment
+                  ? 'Lịch tái khám chỉ thanh toán qua hóa đơn sau khám'
+                  : `Trạng thái thanh toán: ${getPaymentStatusLabel(appointment.paymentStatus)}`}
               </Button>
             )}
           </div>
@@ -201,6 +399,39 @@ export function PatientAppointmentDetailPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      <Dialog open={recordDialogOpen} onOpenChange={onRecordDialogOpenChange}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[980px]">
+          <DialogHeader>
+            <DialogTitle>Hồ sơ bệnh án</DialogTitle>
+            <DialogDescription>Dữ liệu hồ sơ bệnh án của lịch khám hiện tại</DialogDescription>
+          </DialogHeader>
+
+          {recordLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-32 rounded-xl" />
+              <Skeleton className="h-36 rounded-xl" />
+              <Skeleton className="h-36 rounded-xl" />
+            </div>
+          ) : recordError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <p>Lỗi: {recordError}</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void loadRecordByAppointment()}>
+                Thử lại
+              </Button>
+            </div>
+          ) : record ? (
+            <PatientMedicalRecordDetails record={record} />
+          ) : (
+            <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">
+              Lịch khám này chưa có bệnh án.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
+
+
+

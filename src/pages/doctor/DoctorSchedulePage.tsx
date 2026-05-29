@@ -34,9 +34,9 @@ function toYmd(date: Date): string {
 }
 
 function formatDdMmYyyy(value: string): string {
-  const match = safeString(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!match) return value
-  return `${match[3]}/${match[2]}/${match[1]}`
+  const ymd = safeString(value).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!ymd) return value
+  return `${ymd[3]}/${ymd[2]}/${ymd[1]}`
 }
 
 function getStartOfWeekMonday(date: Date): Date {
@@ -61,8 +61,9 @@ function normalizeStatus(status: string): string {
   return 'Chờ khám'
 }
 
-function getCellClass(count: number): string {
-  if (count === 0) return 'bg-slate-50 text-slate-600'
+function getCellClass(count?: number): string {
+  if (typeof count !== 'number') return 'border-dashed bg-slate-50 text-slate-500'
+  if (count === 0) return 'bg-slate-50 text-slate-700'
   if (count <= 3) return 'bg-sky-100 text-sky-700'
   return 'bg-amber-100 text-amber-800'
 }
@@ -71,20 +72,51 @@ function extractWeekEntries(raw: WeekScheduleEntry[] | any): WeekScheduleEntry[]
   if (Array.isArray(raw)) return raw
   if (Array.isArray(raw?.days)) return raw.days
   if (Array.isArray(raw?.items)) return raw.items
+  if (Array.isArray(raw?.data)) return raw.data
   return []
 }
 
-function getEntryDate(entry: WeekScheduleEntry): string {
-  return safeString(entry.date)
+function parseCount(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return null
+  if (parsed < 0) return 0
+  return parsed
 }
 
-function getEntryPeriod(entry: WeekScheduleEntry): Period {
+function parseDateKey(value: string): string | null {
+  const raw = safeString(value)
+  if (!raw) return null
+
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (iso) return raw
+
+  const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (dmy) {
+    const day = Number(dmy[1])
+    const month = Number(dmy[2])
+    const year = Number(dmy[3])
+    const date = new Date(year, month - 1, day)
+    if (
+      date.getFullYear() === year &&
+      date.getMonth() + 1 === month &&
+      date.getDate() === day
+    ) {
+      return toYmd(date)
+    }
+    return null
+  }
+
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) return null
+  return toYmd(parsed)
+}
+
+function getLegacyPeriod(entry: WeekScheduleEntry): Period | null {
   const raw = safeString(entry.period).toLowerCase()
-  return raw === 'afternoon' ? 'afternoon' : 'morning'
-}
-
-function getEntryCount(entry: WeekScheduleEntry): number {
-  return Number(entry.patientCount ?? entry.count ?? 0)
+  if (raw === 'morning') return 'morning'
+  if (raw === 'afternoon') return 'afternoon'
+  return null
 }
 
 export function DoctorSchedulePage() {
@@ -94,15 +126,17 @@ export function DoctorSchedulePage() {
   const [error, setError] = useState('')
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
   const [selectedCell, setSelectedCell] = useState<ScheduleCellData | null>(null)
   const [dayAppointments, setDayAppointments] = useState<DayScheduleItem[]>([])
 
   const weekDates = useMemo(
-    () => Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(weekStart)
-      date.setDate(weekStart.getDate() + index)
-      return date
-    }),
+    () =>
+      Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(weekStart)
+        date.setDate(weekStart.getDate() + index)
+        return date
+      }),
     [weekStart]
   )
 
@@ -122,15 +156,27 @@ export function DoctorSchedulePage() {
       const nextMap: Record<string, number> = {}
 
       for (const entry of entries) {
-        const date = getEntryDate(entry)
-        const period = getEntryPeriod(entry)
-        if (!date) continue
-        nextMap[`${date}-${period}`] = getEntryCount(entry)
+        const dateKey = parseDateKey(safeString(entry.date))
+        if (!dateKey) continue
+
+        const hasBlockCounts = entry.morningCount !== undefined || entry.afternoonCount !== undefined
+        if (hasBlockCounts) {
+          const morningCount = parseCount(entry.morningCount)
+          const afternoonCount = parseCount(entry.afternoonCount)
+          if (morningCount !== null) nextMap[`${dateKey}-morning`] = morningCount
+          if (afternoonCount !== null) nextMap[`${dateKey}-afternoon`] = afternoonCount
+          continue
+        }
+
+        const legacyPeriod = getLegacyPeriod(entry)
+        const legacyCount = parseCount(entry.patientCount ?? entry.count)
+        if (!legacyPeriod || legacyCount === null) continue
+        nextMap[`${dateKey}-${legacyPeriod}`] = legacyCount
       }
 
       setScheduleMap(nextMap)
     } catch (fetchError: any) {
-      setError(fetchError?.message || 'Không thể tải lịch làm việc tuần.')
+      setError(fetchError?.message || 'Không thể tải lịch làm việc theo tuần.')
     } finally {
       setLoading(false)
     }
@@ -140,34 +186,48 @@ export function DoctorSchedulePage() {
     void fetchWeekSchedule()
   }, [weekStart])
 
-  const openCellDetail = async (date: string, period: Period, count: number) => {
-    if (count <= 0) return
-
-    setDetailOpen(true)
+  const loadDaySchedule = async (date: string, period: Period) => {
     setDetailLoading(true)
-    setSelectedCell({ date, period, count })
+    setDetailError('')
 
     try {
       const data = await doctorScheduleService.getDaySchedule(date, period)
       setDayAppointments(Array.isArray(data) ? data : [])
-    } catch {
+    } catch (fetchError: any) {
       setDayAppointments([])
+      setDetailError(fetchError?.message || 'Không thể tải danh sách lịch hẹn của buổi này.')
     } finally {
       setDetailLoading(false)
     }
   }
 
+  const openCellDetail = async (date: string, period: Period, count: number | undefined) => {
+    if (typeof count !== 'number' || count <= 0) return
+
+    setDetailOpen(true)
+    setSelectedCell({ date, period, count })
+    await loadDaySchedule(date, period)
+  }
+
+  const retryLoadDaySchedule = async () => {
+    if (!selectedCell) return
+    await loadDaySchedule(selectedCell.date, selectedCell.period)
+  }
+
   const renderCell = (date: Date, period: Period) => {
     const dateKey = toYmd(date)
-    const count = scheduleMap[`${dateKey}-${period}`] ?? 0
+    const count = scheduleMap[`${dateKey}-${period}`]
+    const hasValue = typeof count === 'number'
+    const canOpenDetail = hasValue && count > 0
 
     return (
       <button
         type="button"
         onClick={() => void openCellDetail(dateKey, period, count)}
-        className={`w-full rounded-xl border border-[#e5e7eb] px-3 py-4 text-sm font-semibold transition ${getCellClass(count)} ${count > 0 ? 'hover:opacity-90' : ''}`}
+        disabled={!canOpenDetail}
+        className={`w-full rounded-xl border border-[#e5e7eb] px-3 py-4 text-sm font-semibold transition ${getCellClass(count)} ${canOpenDetail ? 'hover:opacity-90' : ''}`}
       >
-        {count} bệnh nhân
+        {hasValue ? `${count} bệnh nhân` : '--'}
       </button>
     )
   }
@@ -177,23 +237,37 @@ export function DoctorSchedulePage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-[#111827]">Lịch làm việc bác sĩ</h1>
-          <p className="text-[#6b7280]">Theo dõi số lượng bệnh nhân đặt khám theo từng buổi trong tuần</p>
+          <p className="text-[#6b7280]">
+            Theo dõi số lượng bệnh nhân đã đặt theo từng buổi trong tuần.
+          </p>
         </div>
 
         <div className="flex items-center gap-2 rounded-xl border border-[#e5e7eb] bg-white px-3 py-2 shadow-sm">
-          <Button variant="ghost" size="icon" onClick={() => setWeekStart((prev) => {
-            const next = new Date(prev)
-            next.setDate(prev.getDate() - 7)
-            return next
-          })}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() =>
+              setWeekStart((prev) => {
+                const next = new Date(prev)
+                next.setDate(prev.getDate() - 7)
+                return next
+              })
+            }
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-sm font-semibold text-[#111827]">{weekRangeLabel}</span>
-          <Button variant="ghost" size="icon" onClick={() => setWeekStart((prev) => {
-            const next = new Date(prev)
-            next.setDate(prev.getDate() + 7)
-            return next
-          })}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() =>
+              setWeekStart((prev) => {
+                const next = new Date(prev)
+                next.setDate(prev.getDate() + 7)
+                return next
+              })
+            }
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
           <Button
@@ -255,12 +329,21 @@ export function DoctorSchedulePage() {
           <DialogHeader>
             <DialogTitle>Danh sách lịch hẹn theo buổi</DialogTitle>
             <DialogDescription>
-              {selectedCell ? `${formatDdMmYyyy(selectedCell.date)} - ${selectedCell.period === 'morning' ? 'Buổi sáng' : 'Buổi chiều'}` : ''}
+              {selectedCell
+                ? `${formatDdMmYyyy(selectedCell.date)} - ${selectedCell.period === 'morning' ? 'Buổi sáng' : 'Buổi chiều'}`
+                : ''}
             </DialogDescription>
           </DialogHeader>
 
           {detailLoading ? (
             <AdminTableSkeleton rows={5} />
+          ) : detailError ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <p>Lỗi: {detailError}</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void retryLoadDaySchedule()}>
+                Thử lại
+              </Button>
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -275,10 +358,15 @@ export function DoctorSchedulePage() {
                 {dayAppointments.map((appointment) => (
                   <TableRow key={appointment.id}>
                     <TableCell>{safeString(appointment.patientName) || '-'}</TableCell>
-                    <TableCell>{safeString(appointment.timeLabel) || safeString(appointment.time) || '--:--'}</TableCell>
-                    <TableCell>{normalizeType(safeString(appointment.type))}</TableCell>
                     <TableCell>
-                      <Badge className="rounded-full border bg-slate-50 text-slate-700 border-slate-200">
+                      {safeString(appointment.timeLabel) ||
+                        safeString(appointment.appointmentTime) ||
+                        safeString(appointment.time) ||
+                        '--:--'}
+                    </TableCell>
+                    <TableCell>{normalizeType(safeString(appointment.appointmentType) || safeString(appointment.type))}</TableCell>
+                    <TableCell>
+                      <Badge className="rounded-full border border-slate-200 bg-slate-50 text-slate-700">
                         {normalizeStatus(safeString(appointment.status))}
                       </Badge>
                     </TableCell>
@@ -286,7 +374,7 @@ export function DoctorSchedulePage() {
                 ))}
                 {dayAppointments.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-[#6b7280] py-8">
+                    <TableCell colSpan={4} className="py-8 text-center text-[#6b7280]">
                       Không có lịch hẹn trong buổi này.
                     </TableCell>
                   </TableRow>

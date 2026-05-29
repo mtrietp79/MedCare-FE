@@ -1,19 +1,16 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  AUTH_SOFT_LOGOUT_EVENT,
   clearStoredAuth,
   forgotPassword as apiForgotPassword,
   getMe,
-  getStoredRole,
   getStoredToken,
   getStoredUser,
-  getStoredUsername,
   isValidRole,
   login as apiLogin,
   redirectByRole,
   register as apiRegister,
-  removeStoredToken,
-  removeStoredUser,
   resetPassword as apiResetPassword,
   setStoredToken,
   setStoredUser,
@@ -25,7 +22,7 @@ interface AuthContextValue {
   user: AuthUser | null
   token: string | null
   loading: boolean
-  login: (data: { username: string; password: string }) => Promise<void>
+  login: (data: { username: string; password: string }, redirectTo?: string) => Promise<void>
   register: (data: { username: string; password: string }) => Promise<void>
   logout: () => void
   forgotPassword: (payload: { username: string }) => Promise<any>
@@ -35,72 +32,33 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+function normalizeAuthUser(user: AuthUser): AuthUser {
+  return {
+    username: user.username,
+    displayName: user.displayName ?? user.username,
+    role: user.role,
+    profileCompleted: Boolean(user.profileCompleted),
+  }
+}
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate()
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [token, setToken] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<AuthUser | null>(() => getStoredUser())
+  const [token, setToken] = useState<string | null>(() => getStoredToken())
+  const [loading, setLoading] = useState(() => Boolean(getStoredToken()))
+  const validatedTokenRef = useRef<string | null>(null)
 
   useEffect(() => {
-    const initialize = async () => {
-      const savedToken = getStoredToken()
-      const savedUser = getStoredUser()
-      const savedRole = getStoredRole()
-      const savedUsername = getStoredUsername()
-
-      if (!savedToken) {
-        setLoading(false)
-        return
-      }
-
-      if (!savedUser && savedRole && savedUsername) {
-        setStoredUser({
-          username: savedUsername,
-          displayName: savedUsername,
-          role: savedRole,
-          profileCompleted: false,
-        })
-      }
-
-      try {
-        const authUser = await getMe(savedToken)
-        if (!isValidRole(authUser.role)) {
-          clearStoredAuth()
-          setUser(null)
-          setToken(null)
-          setLoading(false)
-          navigate('/login', { replace: true })
-          return
-        }
-
-        setUser(authUser)
-        setToken(savedToken)
-      } catch {
-        const fallbackUser = getStoredUser()
-        if (fallbackUser && isValidRole(fallbackUser.role)) {
-          setUser(fallbackUser)
-          setToken(savedToken)
-        } else {
-          clearStoredAuth()
-          setUser(null)
-          setToken(null)
-        }
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    void initialize()
-
     const handleAuthSync = () => {
-      const newToken = getStoredToken()
-      const newUser = getStoredUser()
-      if (newToken && newUser) {
-        setToken(newToken)
-        setUser(newUser)
-      } else {
-        setToken(null)
-        setUser(null)
+      const nextToken = getStoredToken()
+      const nextUser = getStoredUser()
+
+      setToken(nextToken)
+      setUser(nextUser)
+
+      if (!nextToken) {
+        validatedTokenRef.current = null
+        setLoading(false)
       }
     }
 
@@ -110,19 +68,97 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     }
 
+    const handleSoftLogout = () => {
+      validatedTokenRef.current = null
+      setToken(null)
+      setUser(null)
+      setLoading(false)
+      navigate('/login', { replace: true })
+    }
+
     window.addEventListener('auth-sync', handleAuthSync)
     window.addEventListener('storage', handleStorageChange)
+    window.addEventListener(AUTH_SOFT_LOGOUT_EVENT, handleSoftLogout as EventListener)
+
     return () => {
       window.removeEventListener('auth-sync', handleAuthSync)
       window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener(AUTH_SOFT_LOGOUT_EVENT, handleSoftLogout as EventListener)
     }
   }, [navigate])
 
+  useEffect(() => {
+    if (!token) {
+      validatedTokenRef.current = null
+      setLoading(false)
+      return
+    }
+
+    if (validatedTokenRef.current === token) {
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
+    validatedTokenRef.current = token
+    setLoading(true)
+
+    const verifyAuth = async () => {
+      try {
+        const authUser = await getMe(token)
+        if (cancelled) return
+
+        if (!isValidRole(authUser.role)) {
+          clearStoredAuth()
+          setToken(null)
+          setUser(null)
+          setLoading(false)
+          navigate('/login', { replace: true })
+          return
+        }
+
+        const normalizedUser = normalizeAuthUser(authUser)
+        setStoredUser(normalizedUser)
+        setUser(normalizedUser)
+      } catch (error: any) {
+        if (cancelled) return
+
+        const status = Number(error?.response?.status ?? error?.status)
+        if (status === 401 || status === 403) {
+          clearStoredAuth()
+          setToken(null)
+          setUser(null)
+          setLoading(false)
+          navigate('/login', { replace: true })
+          return
+        }
+
+        const fallbackUser = getStoredUser()
+        if (fallbackUser && isValidRole(fallbackUser.role)) {
+          setUser(fallbackUser)
+        } else {
+          setUser(null)
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void verifyAuth()
+
+    return () => {
+      cancelled = true
+    }
+  }, [navigate, token])
+
   const getResponseToken = (response: AuthResponse) => response.accessToken ?? response.token ?? ''
 
-  const handleAuthSuccess = (response: AuthResponse) => {
+  const handleAuthSuccess = (response: AuthResponse, redirectTo?: string) => {
     if (!isValidRole(response.role)) {
       clearStoredAuth()
+      validatedTokenRef.current = null
       setToken(null)
       setUser(null)
       navigate('/login', { replace: true })
@@ -131,23 +167,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const tokenValue = getResponseToken(response)
     setStoredToken(tokenValue)
+    validatedTokenRef.current = null
     setToken(tokenValue)
 
-    const userData: AuthUser = {
+    const userData: AuthUser = normalizeAuthUser({
       username: response.username,
       displayName: response.displayName ?? response.username,
       role: response.role,
       profileCompleted: response.profileCompleted ?? false,
-    }
+    })
 
     setStoredUser(userData)
     setUser(userData)
+
+    if (redirectTo && redirectTo.startsWith('/')) {
+      navigate(redirectTo, { replace: true })
+      return
+    }
+
     navigate(redirectByRole(response.role), { replace: true })
   }
 
-  const login = async (data: { username: string; password: string }) => {
+  const login = async (data: { username: string; password: string }, redirectTo?: string) => {
     const response = await apiLogin(data)
-    handleAuthSuccess(response)
+    handleAuthSuccess(response, redirectTo)
   }
 
   const register = async (data: { username: string; password: string }) => {
@@ -155,10 +198,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const logout = () => {
-    removeStoredToken()
-    removeStoredUser()
+    clearStoredAuth()
+    validatedTokenRef.current = null
     setToken(null)
     setUser(null)
+    setLoading(false)
     navigate('/login', { replace: true })
   }
 
@@ -176,7 +220,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     const authUser = await getMe(savedToken)
-    setUser(authUser)
+    if (!isValidRole(authUser.role)) {
+      logout()
+      return
+    }
+
+    const normalizedUser = normalizeAuthUser(authUser)
+    setStoredUser(normalizedUser)
+    setUser(normalizedUser)
     setToken(savedToken)
   }
 

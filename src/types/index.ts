@@ -77,25 +77,44 @@ export type ServicePackageBookingStatus =
   | 'CANCELLED'
   | string
 
+export type ServicePackageBookingPaymentStatus =
+  | 'PENDING'
+  | 'PAID'
+  | 'FAILED'
+  | 'CANCELLED'
+  | string
+
 export interface ServicePackageBooking {
   id: string
   bookingCode?: string
   packageId?: string
   packageName?: string
+  patient?: {
+    id?: string
+    fullName?: string
+    phone?: string
+    email?: string
+  }
   servicePackage?: {
     id?: string
     name?: string
     description?: string
+    price?: number
+    durationMinutes?: number
+    imageUrl?: string | null
   }
   bookingDate?: string
   bookingTime?: string
   amount?: number
+  totalAmount?: number
   paidAmount?: number
   status?: ServicePackageBookingStatus
+  paymentStatus?: ServicePackageBookingPaymentStatus
   note?: string
   paymentId?: string
   invoiceCode?: string
   createdAt?: string
+  updatedAt?: string
 }
 
 export interface Specialty {
@@ -154,10 +173,26 @@ export interface Appointment {
   time?: string
   appointmentTimeLabel?: string
   appointmentDate?: string
-  status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'pending' | 'confirmed' | 'completed' | 'cancelled'
+  appointmentTime?: string
+  type?: string
+  appointmentType?: string
+  status?:
+    | 'PENDING'
+    | 'CONFIRMED'
+    | 'COMPLETED'
+    | 'CANCELLED'
+    | 'pending'
+    | 'confirmed'
+    | 'completed'
+    | 'cancelled'
+    | string
+  statusDisplay?: string
+  statusColor?: string
   paymentStatus?: string
   symptoms?: string
   consultationFee?: number
+  followUpNote?: string
+  parentAppointmentId?: string
   medicalService?: {
     id?: string
     name?: string
@@ -167,8 +202,44 @@ export interface Appointment {
 }
 
 export interface BookingRules {
-  serverNow: string
-  minBookableAt: string
+  serverNow?: string
+  minBookableAt?: string
+  maxBookableDate?: string
+}
+
+export interface AppointmentBookingResponse {
+  appointmentId: number
+  appointmentCode: string
+  amount: number
+  paymentUrl: string
+  message: string
+}
+
+export interface AppointmentReceipt {
+  appointmentId: number
+  appointmentCode: string
+  patient: {
+    fullName?: string
+    phone?: string
+    email?: string
+  }
+  booking: {
+    doctorName?: string
+    specialtyName?: string
+    serviceName?: string
+    appointmentDate?: string
+    appointmentStatus?: string
+    paymentStatus?: string
+    consultationFee?: number
+  }
+  payment: {
+    method?: string
+    transactionNo?: string
+    bankCode?: string
+    amount?: number
+    paidAt?: string
+    responseCode?: string
+  }
 }
 
 export interface Patient {

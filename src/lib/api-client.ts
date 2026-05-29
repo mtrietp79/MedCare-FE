@@ -1,10 +1,4 @@
-import {
-  clearStoredAuth,
-  getStoredRole,
-  getStoredToken,
-  queueForbiddenNotice,
-  redirectByRole,
-} from '@/services/auth'
+import { getStoredToken, handleProtectedApiAuthFailure } from '@/services/auth'
 
 export async function apiClient<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken()
@@ -19,17 +13,7 @@ export async function apiClient<T>(endpoint: string, options: RequestInit = {}):
     headers,
   })
 
-  if (response.status === 401) {
-    clearStoredAuth()
-    window.location.href = '/login'
-    throw new Error('Het phien lam viec, vui long dang nhap lai.')
-  }
-
-  if (response.status === 403) {
-    queueForbiddenNotice('Bạn không có quyền truy cập')
-    window.location.href = redirectByRole(getStoredRole())
-    throw new Error('Bạn không có quyền truy cập')
-  }
+  handleProtectedApiAuthFailure(response.status, endpoint)
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))

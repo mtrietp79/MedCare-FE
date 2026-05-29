@@ -30,6 +30,7 @@ import { DoctorDetailPage } from '@/pages/doctors/DoctorDetailPage'
 import { BookingPage } from '@/pages/booking/BookingPage'
 import { ServicePackageBookingPage } from '@/pages/booking/ServicePackageBookingPage'
 import { ServicePackagePaymentResultPage } from '@/pages/booking/ServicePackagePaymentResultPage'
+import { VNPayPaymentResultPage } from '@/pages/booking/VNPayPaymentResultPage'
 
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
@@ -149,6 +150,16 @@ function App() {
                 </RequireAuth>
               }
             />
+            <Route
+              path="/payment/vnpay-result"
+              element={
+                <RequireAuth>
+                  <PatientGuard>
+                    <VNPayPaymentResultPage />
+                  </PatientGuard>
+                </RequireAuth>
+              }
+            />
 
             <Route
               element={
@@ -162,7 +173,7 @@ function App() {
               <Route path="/patient" element={<PatientDashboardPage />} />
               <Route path="/patient/profile" element={<PatientProfilePage />} />
               <Route path="/patient/appointments" element={<PatientAppointmentsPage />} />
-              <Route path="/patient/appointments/:id" element={<PatientAppointmentDetailPage />} />
+              <Route path="/patient/appointments/:appointmentId" element={<PatientAppointmentDetailPage />} />
               <Route path="/patient/medical-records" element={<PatientMedicalRecordsPage />} />
               <Route path="/patient/medical-records/:id" element={<PatientMedicalRecordDetailPage />} />
             </Route>

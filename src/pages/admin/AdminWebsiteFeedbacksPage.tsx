@@ -21,7 +21,7 @@ function getErrorStatus(error: unknown): number | undefined {
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
-  return 'Khong the tai danh sach feedback website.'
+  return 'Không thể tải danh sách feedback website.'
 }
 
 function formatDateDDMMYYYY(value?: string | null) {
@@ -36,14 +36,14 @@ function formatDateDDMMYYYY(value?: string | null) {
 
 function getStatusBadge(item: WebsiteFeedback) {
   if (item.status === 'APPROVED') {
-    return <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">Da duyet</Badge>
+    return <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">Đã duyệt</Badge>
   }
 
   if (item.status === 'HIDDEN') {
-    return <Badge className="border border-slate-300 bg-slate-100 text-slate-700">Da an</Badge>
+    return <Badge className="border border-slate-300 bg-slate-100 text-slate-700">Đã ẩn</Badge>
   }
 
-  return <Badge className="border border-amber-200 bg-amber-50 text-amber-700">Chua duyet</Badge>
+  return <Badge className="border border-amber-200 bg-amber-50 text-amber-700">Chưa duyệt</Badge>
 }
 
 export function AdminWebsiteFeedbacksPage() {
@@ -66,17 +66,17 @@ export function AdminWebsiteFeedbacksPage() {
       const message = getErrorMessage(fetchError)
 
       if (status === 401) {
-        setError('Phien dang nhap da het han. Vui long dang nhap lai.')
+        setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
       } else if (status === 403) {
-        setError('Khong co quyen truy cap du lieu feedback website.')
+        setError('Không có quyền truy cập dữ liệu feedback website.')
       } else if (status === 500) {
-        setError('He thong tam thoi bi loi. Vui long thu lai sau.')
+        setError('Hệ thống tạm thời bị lỗi. Vui lòng thử lại sau.')
       } else {
         setError(message)
       }
 
       toast({
-        title: 'Loi',
+        title: 'Lỗi',
         description: message,
         variant: 'destructive',
       })
@@ -106,14 +106,14 @@ export function AdminWebsiteFeedbacksPage() {
     try {
       setActionLoadingKey(`approve-${item.id}`)
       await websiteFeedbackService.approve(item.id)
-      toast({ title: 'Thanh cong', description: 'Da duyet feedback.' })
+      toast({ title: 'Thành công', description: 'Đã duyệt feedback.' })
       await loadFeedbacks()
     } catch (actionError: unknown) {
       const status = getErrorStatus(actionError)
       const message = getErrorMessage(actionError)
 
       toast({
-        title: status === 403 ? 'Khong co quyen' : 'Loi',
+        title: status === 403 ? 'Không có quyền' : 'Lỗi',
         description: message,
         variant: 'destructive',
       })
@@ -126,14 +126,14 @@ export function AdminWebsiteFeedbacksPage() {
     try {
       setActionLoadingKey(`hide-${id}`)
       await websiteFeedbackService.hide(id)
-      toast({ title: 'Thanh cong', description: 'Da an feedback.' })
+      toast({ title: 'Thành công', description: 'Đã ẩn feedback.' })
       await loadFeedbacks()
     } catch (actionError: unknown) {
       const status = getErrorStatus(actionError)
       const message = getErrorMessage(actionError)
 
       toast({
-        title: status === 403 ? 'Khong co quyen' : 'Loi',
+        title: status === 403 ? 'Không có quyền' : 'Lỗi',
         description: message,
         variant: 'destructive',
       })
@@ -143,20 +143,20 @@ export function AdminWebsiteFeedbacksPage() {
   }
 
   const handleDelete = async (id: string) => {
-    const confirmed = window.confirm('Ban co chac muon xoa feedback nay?')
+    const confirmed = window.confirm('Bạn có chắc muốn xóa feedback này?')
     if (!confirmed) return
 
     try {
       setActionLoadingKey(`delete-${id}`)
       await websiteFeedbackService.remove(id)
-      toast({ title: 'Thanh cong', description: 'Da xoa feedback.' })
+      toast({ title: 'Thành công', description: 'Đã xóa feedback.' })
       await loadFeedbacks()
     } catch (actionError: unknown) {
       const status = getErrorStatus(actionError)
       const message = getErrorMessage(actionError)
 
       toast({
-        title: status === 403 ? 'Khong co quyen' : 'Loi',
+        title: status === 403 ? 'Không có quyền' : 'Lỗi',
         description: message,
         variant: 'destructive',
       })
@@ -169,13 +169,13 @@ export function AdminWebsiteFeedbacksPage() {
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold">Feedback website</h1>
-        <p className="text-muted-foreground">Quan ly phan hoi danh gia MedCare tu homepage</p>
+        <p className="text-muted-foreground">Quản lý phản hồi đánh giá MedCare từ homepage</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Danh sach feedback</CardTitle>
-          <CardDescription>Duyet, an hoac xoa phan hoi website/co so y te</CardDescription>
+          <CardTitle>Danh sách feedback</CardTitle>
+          <CardDescription>Duyệt, ẩn hoặc xóa phản hồi website/cơ sở y tế</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative max-w-md">
@@ -183,7 +183,7 @@ export function AdminWebsiteFeedbacksPage() {
             <Input
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
-              placeholder="Tim theo ten, email hoac noi dung..."
+              placeholder="Tìm theo tên, email hoặc nội dung..."
               className="pl-9"
             />
           </div>
@@ -191,20 +191,20 @@ export function AdminWebsiteFeedbacksPage() {
           {loading && <AdminTableSkeleton rows={8} />}
           {!loading && error && <AdminErrorState message={error} onRetry={() => void loadFeedbacks()} />}
           {!loading && !error && filteredFeedbacks.length === 0 && (
-            <AdminEmptyState title="Chua co feedback phu hop." />
+            <AdminEmptyState title="Chưa có feedback phù hợp." />
           )}
 
           {!loading && !error && filteredFeedbacks.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nguoi gui</TableHead>
+                  <TableHead>Người gửi</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Rating</TableHead>
-                  <TableHead>Noi dung</TableHead>
-                  <TableHead>Ngay gui</TableHead>
-                  <TableHead>Trang thai</TableHead>
-                  <TableHead className="text-right">Hanh dong</TableHead>
+                  <TableHead>Nội dung</TableHead>
+                  <TableHead>Ngày gửi</TableHead>
+                  <TableHead>Trạng thái</TableHead>
+                  <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -234,7 +234,7 @@ export function AdminWebsiteFeedbacksPage() {
                             disabled={approveDisabled}
                           >
                             <CheckCircle2 className="h-4 w-4" />
-                            Duyet
+                            Duyệt
                           </Button>
 
                           <Button
@@ -244,7 +244,7 @@ export function AdminWebsiteFeedbacksPage() {
                             disabled={hideDisabled}
                           >
                             <EyeOff className="h-4 w-4" />
-                            An
+                            Ẩn
                           </Button>
 
                           <Button
@@ -255,7 +255,7 @@ export function AdminWebsiteFeedbacksPage() {
                             disabled={isLoadingAction('delete', item.id)}
                           >
                             <Trash2 className="h-4 w-4" />
-                            Xoa
+                            Xóa
                           </Button>
                         </div>
                       </TableCell>

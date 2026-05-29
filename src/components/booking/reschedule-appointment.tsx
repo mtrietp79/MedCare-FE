@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Calendar, Clock, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,6 +18,33 @@ import type { Appointment } from '@/types'
 interface RescheduleAppointmentProps {
   appointment: Appointment
   onSuccess?: (newAppointment: any) => void
+}
+
+function getAppointmentDateLabel(appointment: Appointment): string {
+  const rawDateSource = String(appointment.appointmentDate || appointment.date || '').trim()
+  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})/)
+  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
+  if (!dateSource) return '—'
+
+  const dateObject = new Date(dateSource)
+  if (Number.isNaN(dateObject.getTime())) return dateSource
+  return dateObject.toLocaleDateString('vi-VN')
+}
+
+function getAppointmentTimeLabel(appointment: Appointment): string {
+  const rawDateSource = String(appointment.appointmentDate || appointment.date || '').trim()
+  const rawTimeSource = String(appointment.appointmentTime || appointment.time || '').trim()
+  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/)
+  const embeddedTime = (datePrefixMatch?.[2] || '').trim()
+
+  const labelTimeCandidate =
+    String(appointment.appointmentTimeLabel || '')
+      .trim()
+      .match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM|SA|CH))?$/i)?.[0] || ''
+  const timeMatch = (rawTimeSource || embeddedTime || labelTimeCandidate).match(/^(\d{1,2}):(\d{2})/i)
+  if (!timeMatch) return '—'
+
+  return `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
 }
 
 export function RescheduleAppointmentDialog({
@@ -63,7 +90,7 @@ export function RescheduleAppointmentDialog({
           body: apiError?.data,
           message: apiError?.message,
         })
-        setSlotsFetchError(apiError?.message || 'Khong the tai khung gio kha dung')
+        setSlotsFetchError(apiError?.message || 'Kh?ng th? t?i khung gi? kh? d?ng')
         setError(
           err instanceof Error ? err.message : 'Không thể tải khung giờ khả dụng'
         )
@@ -147,22 +174,13 @@ export function RescheduleAppointmentDialog({
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Ngày:</span>
                     <span className="font-medium text-foreground">
-                      {appointment.appointmentDate
-                        ? new Date(appointment.appointmentDate).toLocaleDateString(
-                            'vi-VN'
-                          )
-                        : '—'}
+                      {getAppointmentDateLabel(appointment)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Giờ:</span>
                     <span className="font-medium text-foreground">
-                      {appointment.appointmentDate
-                        ? new Date(appointment.appointmentDate).toLocaleTimeString(
-                            'vi-VN',
-                            { hour: '2-digit', minute: '2-digit' }
-                          )
-                        : '—'}
+                      {getAppointmentTimeLabel(appointment)}
                     </span>
                   </div>
                 </div>
@@ -278,3 +296,6 @@ export function RescheduleAppointmentDialog({
     </>
   )
 }
+
+
+

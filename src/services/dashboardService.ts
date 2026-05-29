@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { API_BASE_URL, clearStoredAuth, getStoredRole, getStoredToken, queueForbiddenNotice, redirectByRole } from './auth'
+import { API_BASE_URL, getStoredToken, handleProtectedApiAuthFailure } from './auth'
 
 export interface DashboardSummaryResponse {
   totalAppointments?: number
@@ -48,21 +48,7 @@ dashboardClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status
-
-    if (status === 401) {
-      clearStoredAuth()
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login'
-      }
-    }
-
-    if (status === 403) {
-      queueForbiddenNotice('Bạn không có quyền truy cập')
-      if (typeof window !== 'undefined') {
-        window.location.href = redirectByRole(getStoredRole())
-      }
-    }
-
+    handleProtectedApiAuthFailure(status, error?.config?.url)
     return Promise.reject(error)
   }
 )

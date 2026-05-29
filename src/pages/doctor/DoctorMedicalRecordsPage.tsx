@@ -23,6 +23,7 @@ import {
 } from '@/services/doctorMedicalRecordService'
 import { safeString } from '@/lib/admin-normalizers'
 import { useToast } from '@/hooks/use-toast'
+import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
 
 interface PatientDetailState {
   patient?: {
@@ -69,6 +70,7 @@ export function DoctorMedicalRecordsPage() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [patientDetail, setPatientDetail] = useState<PatientDetailState>({ records: [] })
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null)
   const [followUpRecordId, setFollowUpRecordId] = useState<string | null>(null)
   const [followUpSubmitting, setFollowUpSubmitting] = useState(false)
   const [followUpForm, setFollowUpForm] = useState({ date: '', time: '', note: '' })
@@ -112,9 +114,31 @@ export function DoctorMedicalRecordsPage() {
     return () => window.clearTimeout(timeout)
   }, [keywordInput])
 
+  useEffect(() => {
+    return onQueryInvalidation((payload) => {
+      if (payload.keys.includes(QUERY_KEYS.doctorMedicalRecordSummary)) {
+        void fetchSummary()
+      }
+
+      if (payload.keys.includes(QUERY_KEYS.doctorMedicalRecordPatients)) {
+        void fetchPatients(keyword)
+      }
+
+      if (
+        detailOpen &&
+        selectedPatientId &&
+        (payload.keys.includes(QUERY_KEYS.doctorMedicalRecordPatients) ||
+          payload.keys.includes(QUERY_KEYS.patientMedicalRecordByAppointment))
+      ) {
+        void refreshPatientDetail(selectedPatientId)
+      }
+    })
+  }, [detailOpen, keyword, selectedPatientId])
+
   const openPatientDetail = async (patientId: string) => {
     setDetailOpen(true)
     setDetailLoading(true)
+    setSelectedPatientId(patientId)
     setFollowUpRecordId(null)
     setFollowUpForm({ date: '', time: '', note: '' })
 
@@ -132,6 +156,18 @@ export function DoctorMedicalRecordsPage() {
       })
     } finally {
       setDetailLoading(false)
+    }
+  }
+
+  const refreshPatientDetail = async (patientId: string) => {
+    try {
+      const data = await doctorMedicalRecordService.getPatientRecords(patientId)
+      setPatientDetail({
+        patient: data.patient,
+        records: Array.isArray(data.records) ? data.records : [],
+      })
+    } catch {
+      // Keep current detail view if refresh fails.
     }
   }
 
@@ -254,7 +290,15 @@ export function DoctorMedicalRecordsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+      <Dialog
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open)
+          if (!open) {
+            setSelectedPatientId(null)
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[980px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Hồ sơ bệnh án bệnh nhân</DialogTitle>

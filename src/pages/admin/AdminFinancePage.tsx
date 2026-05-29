@@ -46,7 +46,7 @@ function getErrorStatus(error: unknown): number | undefined {
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
-  return 'Khong the tai du lieu tai chinh.'
+  return 'Không thể tải dữ liệu tài chính.'
 }
 
 function normalizeSummary(raw: any): FinanceSummary {
@@ -105,17 +105,17 @@ export function AdminFinancePage() {
       const message = getErrorMessage(fetchError)
 
       if (status === 401) {
-        setError('Phien dang nhap da het han. Vui long dang nhap lai.')
+        setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
       } else if (status === 403) {
-        setError('Khong co quyen truy cap du lieu tai chinh.')
+        setError('Không có quyền truy cập dữ liệu tài chính.')
       } else if (status === 500) {
-        setError('He thong tam thoi bi loi. Vui long thu lai sau.')
+        setError('Hệ thống tạm thời bị lỗi. Vui lòng thử lại sau.')
       } else {
         setError(message)
       }
 
       toast({
-        title: 'Loi',
+        title: 'Lỗi',
         description: message,
         variant: 'destructive',
       })
@@ -159,7 +159,7 @@ export function AdminFinancePage() {
   const handlePayInvoice = async (invoiceId: string) => {
     try {
       await adminApi.payInvoice(invoiceId)
-      toast({ title: 'Thanh cong', description: 'Da thanh toan hoa don.' })
+      toast({ title: 'Thành công', description: 'Đã thanh toán hóa đơn.' })
       await fetchFinanceData()
     } catch (payError: unknown) {
       const status = getErrorStatus(payError)
@@ -167,7 +167,7 @@ export function AdminFinancePage() {
 
       if (status === 403) {
         toast({
-          title: 'Khong co quyen',
+          title: 'Không có quyền',
           description: message,
           variant: 'destructive',
         })
@@ -175,7 +175,7 @@ export function AdminFinancePage() {
       }
 
       toast({
-        title: 'Loi',
+        title: 'Lỗi',
         description: message,
         variant: 'destructive',
       })
@@ -183,9 +183,9 @@ export function AdminFinancePage() {
   }
 
   const statusBadge = (status: NormalizedInvoice['status']) => {
-    if (status === 'paid') return <Badge variant="default">Da thanh toan</Badge>
-    if (status === 'pending') return <Badge variant="secondary">Cho thanh toan</Badge>
-    return <Badge variant="destructive">Da huy</Badge>
+    if (status === 'paid') return <Badge variant="default">Đã thanh toán</Badge>
+    if (status === 'pending') return <Badge variant="secondary">Chờ thanh toán</Badge>
+    return <Badge variant="destructive">Đã hủy</Badge>
   }
 
   const formatCurrency = (amount: number) => `${amount.toLocaleString('vi-VN')} VND`
@@ -198,78 +198,78 @@ export function AdminFinancePage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-3xl font-bold">Quan ly tai chinh</h1>
-        <p className="text-muted-foreground">Theo doi doanh thu va xu ly hoa don</p>
+        <h1 className="text-3xl font-bold">Quản lý tài chính</h1>
+        <p className="text-muted-foreground">Theo dõi doanh thu và xử lý hóa đơn</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tong doanh thu</CardTitle>
+            <CardTitle className="text-sm font-medium">Tổng doanh thu</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(summary.totalRevenue)}</div>
             <p className="text-xs text-muted-foreground">
               <TrendingUp className="mr-1 inline h-3 w-3" />
-              Tu tat ca hoa don da thanh toan
+              Từ tất cả hóa đơn đã thanh toán
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Doanh thu thang nay</CardTitle>
+            <CardTitle className="text-sm font-medium">Doanh thu tháng này</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(summary.monthlyRevenue)}</div>
-            <p className="text-xs text-muted-foreground">Doanh thu tu hoa don da tra trong thang hien tai</p>
+            <p className="text-xs text-muted-foreground">Doanh thu từ hóa đơn đã trả trong tháng hiện tại</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cho thanh toan</CardTitle>
+            <CardTitle className="text-sm font-medium">Chờ thanh toán</CardTitle>
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(summary.pendingAmount)}</div>
-            <p className="text-xs text-muted-foreground">{summary.pendingInvoices} hoa don dang cho</p>
+            <p className="text-xs text-muted-foreground">{summary.pendingInvoices} hóa đơn đang chờ</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Da thanh toan</CardTitle>
+            <CardTitle className="text-sm font-medium">Đã thanh toán</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{summary.paidInvoices}</div>
-            <p className="text-xs text-muted-foreground">Tong hoa don da thanh toan</p>
+            <p className="text-xs text-muted-foreground">Tổng hóa đơn đã thanh toán</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Danh sach hoa don</CardTitle>
-          <CardDescription>Thanh toan, theo doi va tra cuu hoa don</CardDescription>
+          <CardTitle>Danh sách hóa đơn</CardTitle>
+          <CardDescription>Thanh toán, theo dõi và tra cứu hóa đơn</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-[260px] flex-1">
-              <Input placeholder="Tim theo ma hoa don, ho so, ten benh nhan" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
+              <Input placeholder="Tìm theo mã hóa đơn, hồ sơ, tên bệnh nhân" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
             </div>
             <Select value={statusFilter} onValueChange={(value: 'all' | NormalizedInvoice['status']) => setStatusFilter(value)}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tat ca trang thai</SelectItem>
-                <SelectItem value="pending">Cho thanh toan</SelectItem>
-                <SelectItem value="paid">Da thanh toan</SelectItem>
-                <SelectItem value="cancelled">Da huy</SelectItem>
+                <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                <SelectItem value="pending">Chờ thanh toán</SelectItem>
+                <SelectItem value="paid">Đã thanh toán</SelectItem>
+                <SelectItem value="cancelled">Đã hủy</SelectItem>
               </SelectContent>
             </Select>
             <Select value={sortBy} onValueChange={(value: 'newest' | 'oldest' | 'amount_desc') => setSortBy(value)}>
@@ -277,29 +277,29 @@ export function AdminFinancePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="newest">Moi nhat</SelectItem>
-                <SelectItem value="oldest">Cu nhat</SelectItem>
-                <SelectItem value="amount_desc">So tien giam dan</SelectItem>
+                <SelectItem value="newest">Mới nhất</SelectItem>
+                <SelectItem value="oldest">Cũ nhất</SelectItem>
+                <SelectItem value="amount_desc">Số tiền giảm dần</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {loading && <AdminTableSkeleton rows={8} />}
           {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchFinanceData()} />}
-          {!loading && !error && filteredInvoices.length === 0 && <AdminEmptyState title="Khong co hoa don phu hop." />}
+          {!loading && !error && filteredInvoices.length === 0 && <AdminEmptyState title="Không có hóa đơn phù hợp." />}
 
           {!loading && !error && filteredInvoices.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ma hoa don</TableHead>
-                  <TableHead>Benh nhan</TableHead>
-                  <TableHead>Bac si</TableHead>
-                  <TableHead>Ho so benh an</TableHead>
-                  <TableHead>Tong tien</TableHead>
-                  <TableHead>Trang thai</TableHead>
-                  <TableHead>Ngay tao</TableHead>
-                  <TableHead className="text-right">Hanh dong</TableHead>
+                  <TableHead>Mã hóa đơn</TableHead>
+                  <TableHead>Bệnh nhân</TableHead>
+                  <TableHead>Bác sĩ</TableHead>
+                  <TableHead>Hồ sơ bệnh án</TableHead>
+                  <TableHead>Tổng tiền</TableHead>
+                  <TableHead>Trạng thái</TableHead>
+                  <TableHead>Ngày tạo</TableHead>
+                  <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -333,37 +333,37 @@ export function AdminFinancePage() {
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Chi tiet hoa don {shortId(selectedInvoice?.id || '')}</DialogTitle>
-            <DialogDescription>Thong tin chi tiet hoa don</DialogDescription>
+            <DialogTitle>Chi tiết hóa đơn {shortId(selectedInvoice?.id || '')}</DialogTitle>
+            <DialogDescription>Thông tin chi tiết hóa đơn</DialogDescription>
           </DialogHeader>
           {selectedInvoice && (
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <Label>Benh nhan</Label>
+                <Label>Bệnh nhân</Label>
                 <p>{selectedInvoice.patientName || '-'}</p>
               </div>
               <div>
-                <Label>Bac si</Label>
+                <Label>Bác sĩ</Label>
                 <p>{selectedInvoice.doctorName || '-'}</p>
               </div>
               <div>
-                <Label>Ho so benh an</Label>
+                <Label>Hồ sơ bệnh án</Label>
                 <p>{shortId(selectedInvoice.medicalRecordId)}</p>
               </div>
               <div>
-                <Label>Tong tien</Label>
+                <Label>Tổng tiền</Label>
                 <p className="font-semibold">{formatCurrency(selectedInvoice.totalAmount)}</p>
               </div>
               <div>
-                <Label>Trang thai</Label>
+                <Label>Trạng thái</Label>
                 <div className="mt-1">{statusBadge(selectedInvoice.status)}</div>
               </div>
               <div>
-                <Label>Ngay tao</Label>
+                <Label>Ngày tạo</Label>
                 <p>{selectedInvoice.createdAt ? new Date(selectedInvoice.createdAt).toLocaleString('vi-VN') : '-'}</p>
               </div>
               <div>
-                <Label>Ngay thanh toan</Label>
+                <Label>Ngày thanh toán</Label>
                 <p>{selectedInvoice.paidAt ? new Date(selectedInvoice.paidAt).toLocaleString('vi-VN') : '-'}</p>
               </div>
             </div>

@@ -1,8 +1,11 @@
-﻿
+
 import type {
   Doctor,
   Specialty,
   Appointment,
+  AppointmentBookingResponse,
+  AppointmentReceipt,
+  BookingRules,
   Patient,
   DoctorSchedule,
   SearchResponse,
@@ -12,11 +15,8 @@ import type {
 } from '@/types'
 import { mockApi } from './mock-api'
 import {
-  clearStoredAuth,
-  getStoredRole,
   getStoredToken,
-  queueForbiddenNotice,
-  redirectByRole,
+  handleProtectedApiAuthFailure,
 } from './auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '/api'
@@ -42,15 +42,85 @@ export interface AppointmentSlot {
   disabledReason?: string | null
 }
 
+export interface PatientMedicalRecordDoctor {
+  id?: string
+  fullName?: string
+  phone?: string
+  email?: string
+  specialtyName?: string
+}
+
+export interface PatientMedicalRecordMedicineItem {
+  id?: string
+  medicineId?: string
+  name?: string
+  quantity?: number
+  unit?: string
+  dosage?: string
+  note?: string
+  unitPrice?: number
+  lineTotal?: number
+}
+
+export interface PatientMedicalRecordServiceItem {
+  id?: string
+  serviceId?: string
+  name?: string
+  quantity?: number
+  result?: string
+  note?: string
+  unitPrice?: number
+  lineTotal?: number
+}
+
+export interface PatientMedicalRecordInvoice {
+  id?: string
+  invoiceCode?: string
+  status?: string
+  consultationFee?: number
+  medicineTotal?: number
+  serviceTotal?: number
+  totalAmount?: number
+  canPayOnline?: boolean
+}
+
+export interface PatientMedicalRecordFollowUp {
+  appointmentId?: string
+  appointmentCode?: string
+  appointmentDate?: string
+  appointmentTime?: string
+  status?: string
+  statusDisplay?: string
+  statusColor?: string
+}
+
 export interface PatientMedicalRecord {
   id: string
   recordCode?: string
+  appointmentId?: string
+  appointmentCode?: string
+  appointmentDate?: string
+  appointmentTime?: string
   doctorName?: string
+  doctor?: PatientMedicalRecordDoctor
+  patient?: {
+    id?: string
+    fullName?: string
+    phone?: string
+    email?: string
+  }
   diagnosis?: string
   symptoms?: string
   advice?: string
+  treatmentPlan?: string
+  prescriptionText?: string
+  note?: string
+  medicines?: PatientMedicalRecordMedicineItem[]
+  services?: PatientMedicalRecordServiceItem[]
+  invoice?: PatientMedicalRecordInvoice | null
+  followUp?: PatientMedicalRecordFollowUp
   createdAt?: string
-  appointmentDate?: string
+  updatedAt?: string
 }
 
 export interface PatientInvoice {
@@ -66,6 +136,7 @@ export interface PatientInvoice {
 
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 const DMY_DATE_REGEX = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+const ISO_DATE_TIME_PREFIX_REGEX = /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2})(?::\d{2}(?:\.\d+)?)?)?/
 
 function normalizeDateToIsoDate(input: string): string {
   const raw = String(input || '').trim()
@@ -115,6 +186,417 @@ function toBoolean(value: unknown): boolean {
   return false
 }
 
+function asRecord(value: unknown): Record<string, any> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null
+}
+
+function toArray(value: unknown): any[] {
+  return Array.isArray(value) ? value : []
+}
+
+function pickString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed) return trimmed
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value)
+    }
+  }
+  return undefined
+}
+
+function pickNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim()) {
+      const next = Number(value)
+      if (Number.isFinite(next)) return next
+    }
+  }
+  return undefined
+}
+
+function hasPositiveNumber(...values: Array<number | undefined>): boolean {
+  return values.some((value) => typeof value === 'number' && Number.isFinite(value) && value > 0)
+}
+
+function toIsoDate(value: Date): string {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function parseTimeTo24h(value: unknown): string | undefined {
+  const raw = pickString(value)
+  if (!raw) return undefined
+
+  const normalized = raw.replace(/\u00a0/g, ' ').replace(/\./g, '').trim()
+  if (!normalized) return undefined
+
+  const dateTimePrefixMatch = normalized.match(ISO_DATE_TIME_PREFIX_REGEX)
+  if (dateTimePrefixMatch?.[2]) {
+    return parseTimeTo24h(dateTimePrefixMatch[2])
+  }
+
+  const timeMatch = normalized.match(/(\d{1,2}):(\d{2})/)
+  if (!timeMatch) return undefined
+
+  let hour = Number(timeMatch[1])
+  const minute = Number(timeMatch[2])
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || minute < 0 || minute > 59) {
+    return undefined
+  }
+
+  const meridiem = normalized.match(/\b(AM|PM|SA|CH)\b/i)?.[1]?.toUpperCase()
+  if (meridiem === 'AM' || meridiem === 'SA') {
+    if (hour === 12) hour = 0
+  } else if (meridiem === 'PM' || meridiem === 'CH') {
+    if (hour < 12) hour += 12
+  }
+
+  if (hour < 0 || hour > 23) return undefined
+
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+function extractDateTimeParts(value: unknown): { date?: string; time?: string } {
+  const raw = pickString(value)
+  if (!raw) return {}
+
+  const normalized = raw.replace(/\u00a0/g, ' ').trim()
+  if (!normalized) return {}
+
+  const prefixMatch = normalized.match(ISO_DATE_TIME_PREFIX_REGEX)
+  if (prefixMatch) {
+    return {
+      date: prefixMatch[1],
+      time: parseTimeTo24h(prefixMatch[2]),
+    }
+  }
+
+  if (ISO_DATE_REGEX.test(normalized)) {
+    return { date: normalized }
+  }
+
+  const parsed = new Date(normalized)
+  if (Number.isNaN(parsed.getTime())) {
+    return {}
+  }
+
+  const hours = String(parsed.getHours()).padStart(2, '0')
+  const minutes = String(parsed.getMinutes()).padStart(2, '0')
+  return {
+    date: toIsoDate(parsed),
+    time: `${hours}:${minutes}`,
+  }
+}
+
+function unwrapDataPayload<T>(input: T | { data?: T } | null | undefined): T | null {
+  if (input == null) return null
+  if (typeof input === 'object' && !Array.isArray(input) && 'data' in (input as Record<string, unknown>)) {
+    const value = (input as { data?: T }).data
+    return value ?? null
+  }
+  return input as T
+}
+
+function unwrapListPayload(input: unknown): any[] {
+  if (Array.isArray(input)) return input
+  const source = asRecord(input)
+  if (!source) return []
+
+  if (Array.isArray(source.data)) return source.data
+  if (Array.isArray(source.content)) return source.content
+
+  const dataRecord = asRecord(source.data)
+  if (dataRecord && Array.isArray(dataRecord.content)) return dataRecord.content
+
+  return []
+}
+
+function normalizeAppointment(raw: unknown): Appointment | null {
+  const source = asRecord(raw)
+  if (!source) return null
+
+  const patient = asRecord(source.patient)
+  const doctor = asRecord(source.doctor)
+  const specialty = asRecord(source.specialty)
+  const medicalService = asRecord(source.medicalService)
+
+  const id = pickString(source.id, source.appointmentId)
+  if (!id) return null
+
+  const dateFromPrimary = extractDateTimeParts(source.appointmentDate)
+  const dateFromFallback = extractDateTimeParts(source.date)
+  const dateFromLabel = extractDateTimeParts(source.appointmentTimeLabel)
+
+  const appointmentDate = pickString(
+    dateFromPrimary.date,
+    dateFromFallback.date,
+    dateFromLabel.date,
+    source.appointmentDate,
+    source.date
+  )
+  const appointmentTime =
+    parseTimeTo24h(source.appointmentTime) ??
+    parseTimeTo24h(source.time) ??
+    parseTimeTo24h(dateFromPrimary.time) ??
+    parseTimeTo24h(dateFromFallback.time) ??
+    parseTimeTo24h(dateFromLabel.time) ??
+    parseTimeTo24h(source.appointmentTimeLabel)
+
+  const appointmentType = pickString(source.appointmentType, source.type)
+  const appointmentTimeLabel = pickString(
+    source.appointmentTimeLabel,
+    appointmentDate && appointmentTime ? `${appointmentDate} ${appointmentTime}` : undefined,
+    appointmentTime
+  )
+
+  return {
+    id,
+    appointmentCode: pickString(source.appointmentCode, source.code),
+    patient: patient
+      ? {
+          id: pickString(patient.id),
+          fullName: pickString(patient.fullName, patient.name),
+        }
+      : undefined,
+    patientName: pickString(source.patientName, patient?.fullName, patient?.name),
+    patientPhone: pickString(source.patientPhone, patient?.phone),
+    patientEmail: pickString(source.patientEmail, patient?.email),
+    doctor: doctor
+      ? {
+          id: pickString(doctor.id),
+          fullName: pickString(doctor.fullName, doctor.name),
+        }
+      : undefined,
+    doctorId: pickString(source.doctorId, doctor?.id),
+    doctorName: pickString(source.doctorName, doctor?.fullName, doctor?.name),
+    specialty: source.specialty
+      ? typeof source.specialty === 'string'
+        ? source.specialty
+        : {
+            id: pickString(specialty?.id),
+            name: pickString(specialty?.name),
+          }
+      : undefined,
+    date: pickString(dateFromFallback.date, dateFromPrimary.date, source.date, source.appointmentDate),
+    time: pickString(appointmentTime, source.time, source.appointmentTime),
+    appointmentTimeLabel,
+    appointmentDate,
+    appointmentTime,
+    type: pickString(source.type, appointmentType),
+    appointmentType,
+    status: pickString(source.status),
+    statusDisplay: pickString(source.statusDisplay),
+    statusColor: pickString(source.statusColor),
+    paymentStatus: pickString(source.paymentStatus),
+    symptoms: pickString(source.symptoms),
+    consultationFee: pickNumber(source.consultationFee, source.fee),
+    followUpNote: pickString(source.followUpNote),
+    parentAppointmentId: pickString(source.parentAppointmentId),
+    medicalService: medicalService
+      ? {
+          id: pickString(medicalService.id),
+          name: pickString(medicalService.name),
+        }
+      : undefined,
+    notes: pickString(source.notes, source.note),
+    createdAt: pickString(source.createdAt),
+  }
+}
+
+function normalizeAppointmentList(input: unknown): Appointment[] {
+  return unwrapListPayload(input)
+    .map((item) => normalizeAppointment(item))
+    .filter((item): item is Appointment => item !== null)
+}
+
+function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | null {
+  const source = asRecord(raw)
+  if (!source) return null
+
+  const doctor = asRecord(source.doctor ?? source.examiningDoctor ?? source.attendingDoctor)
+  const patient = asRecord(source.patient)
+  const appointment = asRecord(source.appointment)
+  const invoice = asRecord(source.invoice ?? source.afterExamInvoice ?? source.postExamInvoice)
+  const followUp = asRecord(source.followUp ?? source.followUpAppointment)
+  const invoiceData = invoice || (source.invoiceCode || source.invoiceId || source.invoiceStatus ? source : null)
+  const followUpData =
+    followUp ||
+    (source.followUpAppointmentId || source.followUpAppointmentCode || source.followUpDate || source.followUpTime
+      ? source
+      : null)
+
+  const medicinesRaw = toArray(
+    source.medicines ?? source.medicineItems ?? source.prescriptionItems ?? source.prescriptionDetails
+  )
+  const servicesRaw = toArray(source.services ?? source.serviceItems ?? source.medicalServices)
+
+  const medicines: PatientMedicalRecordMedicineItem[] = medicinesRaw.reduce<PatientMedicalRecordMedicineItem[]>(
+    (accumulator, item) => {
+      const row = asRecord(item)
+      if (!row) return accumulator
+
+      const medicineInfo = asRecord(row.medicine)
+      const quantity = pickNumber(row.quantity, row.qty, row.count)
+      const unitPrice = pickNumber(row.unitPrice, row.price, row.medicinePrice)
+      const lineTotal =
+        pickNumber(row.lineTotal, row.totalAmount, row.amount) ??
+        (quantity !== undefined && unitPrice !== undefined ? quantity * unitPrice : undefined)
+
+      accumulator.push({
+        id: pickString(row.id),
+        medicineId: pickString(row.medicineId, medicineInfo?.id),
+        name: pickString(row.medicineName, row.name, medicineInfo?.name),
+        quantity,
+        unit: pickString(row.unit, medicineInfo?.unit),
+        dosage: pickString(row.dosage, row.usage),
+        note: pickString(row.note, row.notes),
+        unitPrice,
+        lineTotal,
+      })
+
+      return accumulator
+    },
+    []
+  )
+
+  const services: PatientMedicalRecordServiceItem[] = servicesRaw.reduce<PatientMedicalRecordServiceItem[]>(
+    (accumulator, item) => {
+      const row = asRecord(item)
+      if (!row) return accumulator
+
+      const serviceInfo = asRecord(row.service ?? row.medicalService)
+      const quantity = pickNumber(row.quantity, row.qty, row.count)
+      const unitPrice = pickNumber(row.unitPrice, row.price, row.servicePrice)
+      const lineTotal =
+        pickNumber(row.lineTotal, row.totalAmount, row.amount) ??
+        (quantity !== undefined && unitPrice !== undefined ? quantity * unitPrice : undefined)
+
+      accumulator.push({
+        id: pickString(row.id),
+        serviceId: pickString(row.serviceId, serviceInfo?.id),
+        name: pickString(row.serviceName, row.name, serviceInfo?.name),
+        quantity,
+        result: pickString(row.result, row.serviceResult, row.outcome),
+        note: pickString(row.note, row.notes),
+        unitPrice,
+        lineTotal,
+      })
+
+      return accumulator
+    },
+    []
+  )
+
+  const appointmentDate = pickString(
+    source.examinationDate,
+    source.appointmentDate,
+    source.visitDate,
+    source.date,
+    appointment?.appointmentDate,
+    appointment?.date
+  )
+  const appointmentTime = pickString(source.appointmentTime, source.time, appointment?.appointmentTimeLabel, appointment?.time)
+
+  const normalizedInvoice: PatientMedicalRecordInvoice | null = (() => {
+    if (!invoiceData) return null
+    const invoiceId = pickString(invoiceData.id, invoiceData.invoiceId)
+    const invoiceCode = pickString(invoiceData.invoiceCode, invoiceData.code)
+    const invoiceStatus = pickString(invoiceData.status, invoiceData.invoiceStatus)
+    const consultationFee = pickNumber(invoiceData.consultationFee)
+    const medicineTotal = pickNumber(invoiceData.medicineTotal)
+    const serviceTotal = pickNumber(invoiceData.serviceTotal)
+    const totalAmount =
+      pickNumber(invoiceData.totalAmount) ??
+      (hasPositiveNumber(consultationFee, medicineTotal, serviceTotal)
+        ? (consultationFee ?? 0) + (medicineTotal ?? 0) + (serviceTotal ?? 0)
+        : undefined)
+    const canPayOnline = toBoolean(invoiceData.canPayOnline)
+
+    const hasIdentity = Boolean(invoiceId || invoiceCode)
+    const hasStatus = Boolean(invoiceStatus)
+    const hasMoney = hasPositiveNumber(consultationFee, medicineTotal, serviceTotal, totalAmount)
+    if (!hasIdentity && !hasStatus && !hasMoney) {
+      return null
+    }
+
+    return {
+      id: invoiceId,
+      invoiceCode,
+      status: invoiceStatus,
+      consultationFee,
+      medicineTotal,
+      serviceTotal,
+      totalAmount,
+      canPayOnline,
+    }
+  })()
+
+  return {
+    id: pickString(source.id, source.recordId) ?? '',
+    recordCode: pickString(source.recordCode, source.code),
+    appointmentId: pickString(source.appointmentId, appointment?.id),
+    appointmentCode: pickString(source.appointmentCode, appointment?.appointmentCode, appointment?.code),
+    appointmentDate,
+    appointmentTime,
+    doctorName: pickString(source.doctorName, doctor?.fullName, doctor?.name),
+    doctor: doctor || source.doctorName
+      ? {
+          id: pickString(doctor?.id),
+          fullName: pickString(doctor?.fullName, doctor?.name, source.doctorName),
+          phone: pickString(doctor?.phone),
+          email: pickString(doctor?.email),
+          specialtyName: pickString(doctor?.specialtyName, doctor?.specialty?.name),
+        }
+      : undefined,
+    patient: patient
+      ? {
+          id: pickString(patient.id),
+          fullName: pickString(patient.fullName, patient.name),
+          phone: pickString(patient.phone),
+          email: pickString(patient.email),
+        }
+      : undefined,
+    diagnosis: pickString(source.diagnosis),
+    symptoms: pickString(source.symptoms),
+    advice: pickString(source.advice, source.doctorAdvice),
+    treatmentPlan: pickString(source.treatmentPlan, source.plan),
+    prescriptionText: pickString(source.prescriptionText, source.prescription),
+    note: pickString(source.note, source.notes),
+    medicines,
+    services,
+    invoice: normalizedInvoice,
+    followUp: followUpData
+      ? {
+          appointmentId: pickString(followUpData.appointmentId, followUpData.id, followUpData.followUpAppointmentId),
+          appointmentCode: pickString(
+            followUpData.appointmentCode,
+            followUpData.code,
+            followUpData.followUpAppointmentCode
+          ),
+          appointmentDate: pickString(followUpData.appointmentDate, followUpData.date, followUpData.followUpDate),
+          appointmentTime: pickString(
+            followUpData.appointmentTime,
+            followUpData.time,
+            followUpData.appointmentTimeLabel,
+            followUpData.followUpTime
+          ),
+          status: pickString(followUpData.status, followUpData.followUpStatus),
+          statusDisplay: pickString(followUpData.statusDisplay, followUpData.followUpStatusDisplay),
+          statusColor: pickString(followUpData.statusColor, followUpData.followUpStatusColor),
+        }
+      : undefined,
+    createdAt: pickString(source.createdAt),
+    updatedAt: pickString(source.updatedAt),
+  }
+}
+
 async function apiCallRawText(endpoint: string, options: FetchOptions = {}): Promise<string> {
   const url = `${API_BASE_URL}${endpoint}`
   const token = getStoredToken()
@@ -130,19 +612,7 @@ async function apiCallRawText(endpoint: string, options: FetchOptions = {}): Pro
   const rawText = (await response.text()).trim()
 
   if (!response.ok) {
-    if (response.status === 401) {
-      clearStoredAuth()
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login'
-      }
-    }
-
-    if (response.status === 403) {
-      queueForbiddenNotice('Bạn không có quyền truy cập')
-      if (typeof window !== 'undefined') {
-        window.location.href = redirectByRole(getStoredRole())
-      }
-    }
+    handleProtectedApiAuthFailure(response.status, endpoint)
 
     let parsed: unknown = null
     try {
@@ -210,21 +680,7 @@ async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise
     }
 
     if (!response.ok) {
-      if (response.status === 401) {
-        clearStoredAuth()
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login'
-        }
-        throw new Error('Unauthorized. Vui lòng đăng nhập lại.')
-      }
-
-      if (response.status === 403) {
-        queueForbiddenNotice('Bạn không có quyền truy cập')
-        if (typeof window !== 'undefined') {
-          window.location.href = redirectByRole(getStoredRole())
-        }
-        throw new Error('Bạn không có quyền truy cập')
-      }
+      handleProtectedApiAuthFailure(response.status, endpoint)
 
       const message =
         data && typeof data === 'object' && 'message' in data
@@ -248,7 +704,6 @@ async function apiCall<T>(endpoint: string, options: FetchOptions = {}): Promise
     throw error
   }
 }
-
 export const specialtyApi = {
   async getAll(): Promise<Specialty[]> {
     return apiCall<Specialty[]>('/specialties')
@@ -328,27 +783,51 @@ export const medicalServicesApi = {
 }
 
 function normalizeServicePackageBooking(raw: Record<string, any>): ServicePackageBooking {
+  const packageData =
+    raw.servicePackage && typeof raw.servicePackage === 'object' ? raw.servicePackage : null
+  const patientData = raw.patient && typeof raw.patient === 'object' ? raw.patient : null
+
+  const fallbackAmount = Number(raw.amount ?? raw.totalAmount ?? raw.paidAmount ?? raw.amountPaid ?? 0)
+  const normalizedAmount = Number.isFinite(fallbackAmount) ? fallbackAmount : 0
+
+  const fallbackPaidAmount = Number(raw.paidAmount ?? raw.amountPaid ?? raw.amount ?? raw.totalAmount ?? 0)
+  const normalizedPaidAmount = Number.isFinite(fallbackPaidAmount) ? fallbackPaidAmount : 0
+
   return {
     id: String(raw.id ?? raw.bookingId ?? ''),
     bookingCode: raw.bookingCode ?? raw.code ?? undefined,
-    packageId: raw.packageId ? String(raw.packageId) : raw.servicePackage?.id ? String(raw.servicePackage.id) : undefined,
-    packageName: raw.packageName ?? raw.servicePackage?.name ?? undefined,
-    servicePackage: raw.servicePackage
+    packageId: raw.packageId ? String(raw.packageId) : packageData?.id ? String(packageData.id) : undefined,
+    packageName: raw.packageName ?? packageData?.name ?? undefined,
+    patient: patientData || raw.patientName || raw.patientPhone || raw.patientEmail
       ? {
-          id: raw.servicePackage.id ? String(raw.servicePackage.id) : undefined,
-          name: raw.servicePackage.name ?? undefined,
-          description: raw.servicePackage.description ?? undefined,
+          id: patientData?.id ? String(patientData.id) : undefined,
+          fullName: patientData?.fullName ?? raw.patientName ?? undefined,
+          phone: patientData?.phone ?? raw.patientPhone ?? undefined,
+          email: patientData?.email ?? raw.patientEmail ?? undefined,
+        }
+      : undefined,
+    servicePackage: packageData
+      ? {
+          id: packageData.id ? String(packageData.id) : undefined,
+          name: packageData.name ?? undefined,
+          description: packageData.description ?? undefined,
+          price: Number(packageData.price ?? 0),
+          durationMinutes: Number(packageData.durationMinutes ?? 0),
+          imageUrl: packageData.imageUrl ?? undefined,
         }
       : undefined,
     bookingDate: raw.bookingDate ?? raw.date ?? undefined,
     bookingTime: raw.bookingTime ?? raw.time ?? undefined,
-    amount: Number(raw.amount ?? raw.totalAmount ?? 0),
-    paidAmount: Number(raw.paidAmount ?? raw.amountPaid ?? raw.amount ?? 0),
+    amount: normalizedAmount,
+    totalAmount: normalizedAmount,
+    paidAmount: normalizedPaidAmount,
     status: String(raw.status ?? raw.bookingStatus ?? ''),
+    paymentStatus: String(raw.paymentStatus ?? raw.payment?.status ?? ''),
     note: raw.note ?? undefined,
     paymentId: raw.paymentId ? String(raw.paymentId) : undefined,
     invoiceCode: raw.invoiceCode ?? raw.invoiceNumber ?? undefined,
     createdAt: raw.createdAt ?? undefined,
+    updatedAt: raw.updatedAt ?? undefined,
   }
 }
 
@@ -383,8 +862,8 @@ export const searchApi = {
 }
 
 export const appointmentApi = {
-  async getBookingRules(): Promise<{ serverNow: string; minBookableAt: string }> {
-    return apiCall<{ serverNow: string; minBookableAt: string }>('/appointments/booking-rules')
+  async getBookingRules(): Promise<BookingRules> {
+    return apiCall<BookingRules>('/appointments/booking-rules')
   },
 
   async getAll(query?: { status?: string; doctorId?: string; patientId?: string }): Promise<Appointment[]> {
@@ -394,25 +873,51 @@ export const appointmentApi = {
     if (query?.patientId) params.append('patientId', query.patientId)
 
     const endpoint = `/appointments${params.toString() ? `?${params.toString()}` : ''}`
-    return apiCall<Appointment[]>(endpoint)
+    const raw = await apiCall<any>(endpoint)
+    return normalizeAppointmentList(raw)
   },
 
   async getById(id: string): Promise<Appointment> {
-    return apiCall<Appointment>(`/appointments/${id}`)
+    const raw = await apiCall<any>(`/appointments/${id}`)
+    const payload = unwrapDataPayload(raw)
+    const normalized = normalizeAppointment(payload)
+    if (!normalized) {
+      throw new Error('Khong the doc thong tin lich kham.')
+    }
+    return normalized
   },
 
   async create(data: unknown): Promise<Appointment> {
-    return apiCall<Appointment>('/appointments', {
+    const raw = await apiCall<any>('/appointments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+    const payload = unwrapDataPayload(raw)
+    const normalized = normalizeAppointment(payload)
+    if (!normalized) {
+      throw new Error('Khong the tao lich kham.')
+    }
+    return normalized
+  },
+
+  async book(data: unknown): Promise<AppointmentBookingResponse> {
+    return apiCall<AppointmentBookingResponse>('/appointments/book', {
       method: 'POST',
       body: JSON.stringify(data),
     })
   },
 
   async update(id: string, data: Partial<Appointment>): Promise<Appointment> {
-    return apiCall<Appointment>(`/appointments/${id}`, {
+    const raw = await apiCall<any>(`/appointments/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     })
+    const payload = unwrapDataPayload(raw)
+    const normalized = normalizeAppointment(payload)
+    if (!normalized) {
+      throw new Error('Khong the cap nhat lich kham.')
+    }
+    return normalized
   },
 
   async delete(id: string): Promise<void> {
@@ -422,23 +927,41 @@ export const appointmentApi = {
   },
 
   async cancel(id: string): Promise<Appointment> {
-    return apiCall<Appointment>(`/appointments/${id}/cancel`, {
+    const raw = await apiCall<any>(`/appointments/${id}/cancel`, {
       method: 'PATCH',
     })
+    const payload = unwrapDataPayload(raw)
+    const normalized = normalizeAppointment(payload)
+    if (!normalized) {
+      throw new Error('Khong the huy lich kham.')
+    }
+    return normalized
   },
 
   async updateStatus(id: string, status: Appointment['status']): Promise<Appointment> {
-    return apiCall<Appointment>(`/appointments/${id}`, {
+    const raw = await apiCall<any>(`/appointments/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     })
+    const payload = unwrapDataPayload(raw)
+    const normalized = normalizeAppointment(payload)
+    if (!normalized) {
+      throw new Error('Khong the cap nhat trang thai lich kham.')
+    }
+    return normalized
   },
 
   async reschedule(id: string, data: { appointmentDate: string }): Promise<Appointment> {
-    return apiCall<Appointment>(`/appointments/${id}/reschedule`, {
+    const raw = await apiCall<any>(`/appointments/${id}/reschedule`, {
       method: 'POST',
       body: JSON.stringify(data),
     })
+    const payload = unwrapDataPayload(raw)
+    const normalized = normalizeAppointment(payload)
+    if (!normalized) {
+      throw new Error('Khong the doi lich kham.')
+    }
+    return normalized
   },
 
   async getDoctorSlots(doctorId: string, date: string): Promise<AppointmentSlot[]> {
@@ -523,38 +1046,55 @@ export const patientApi = {
   },
 
   async getServicePackageBookingById(id: string): Promise<ServicePackageBooking | null> {
-    const data = await apiCall<Record<string, any> | null>(`/patient/service-package-bookings/${id}`)
+    const data = await apiCall<Record<string, any> | { data?: Record<string, any> } | null>(
+      `/patient/service-package-bookings/${id}`
+    )
+
     if (!data || typeof data !== 'object') return null
-    return normalizeServicePackageBooking(data)
+
+    const payload =
+      !Array.isArray(data) && data.data && typeof data.data === 'object' && !Array.isArray(data.data)
+        ? data.data
+        : data
+
+    return normalizeServicePackageBooking(payload)
   },
 
   async getMyMedicalRecords(): Promise<PatientMedicalRecord[]> {
     const data = await apiCall<any>('/medical-records/my')
-    const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
-    return list.map((item: any) => ({
-      id: String(item?.id ?? ''),
-      recordCode: item?.recordCode ?? item?.code ?? undefined,
-      doctorName: item?.doctorName ?? item?.doctor?.fullName ?? undefined,
-      diagnosis: item?.diagnosis ?? undefined,
-      symptoms: item?.symptoms ?? undefined,
-      advice: item?.advice ?? undefined,
-      createdAt: item?.createdAt ?? undefined,
-      appointmentDate: item?.appointmentDate ?? item?.date ?? undefined,
-    }))
+    const list = unwrapListPayload(data)
+    return list
+      .map((item) => normalizePatientMedicalRecord(item))
+      .filter((item): item is PatientMedicalRecord => item !== null && item.id !== '')
   },
 
   async getMyMedicalRecordById(id: string): Promise<PatientMedicalRecord | null> {
-    const item = await apiCall<any>(`/medical-records/my/${id}`)
-    if (!item || typeof item !== 'object') return null
-    return {
-      id: String(item?.id ?? ''),
-      recordCode: item?.recordCode ?? item?.code ?? undefined,
-      doctorName: item?.doctorName ?? item?.doctor?.fullName ?? undefined,
-      diagnosis: item?.diagnosis ?? undefined,
-      symptoms: item?.symptoms ?? undefined,
-      advice: item?.advice ?? undefined,
-      createdAt: item?.createdAt ?? undefined,
-      appointmentDate: item?.appointmentDate ?? item?.date ?? undefined,
+    try {
+      const raw = await apiCall<any>(`/medical-records/my/${id}`)
+      const payload = unwrapDataPayload(raw)
+      const normalized = normalizePatientMedicalRecord(payload)
+      return normalized && normalized.id ? normalized : null
+    } catch (error) {
+      const apiError = error as ApiRequestError
+      if (apiError?.status === 404) {
+        return null
+      }
+      throw error
+    }
+  },
+
+  async getMyMedicalRecordByAppointmentId(appointmentId: string): Promise<PatientMedicalRecord | null> {
+    try {
+      const raw = await apiCall<any>(`/medical-records/my/appointment/${appointmentId}`)
+      const payload = unwrapDataPayload(raw)
+      const normalized = normalizePatientMedicalRecord(payload)
+      return normalized && normalized.id ? normalized : null
+    } catch (error) {
+      const apiError = error as ApiRequestError
+      if (apiError?.status === 404) {
+        return null
+      }
+      throw error
     }
   },
 
@@ -570,7 +1110,7 @@ export const patientApi = {
       id: String(item?.id ?? ''),
       invoiceCode: item?.invoiceCode ?? item?.code ?? undefined,
       medicalRecordId: item?.medicalRecordId ? String(item.medicalRecordId) : undefined,
-      totalAmount: Number(item?.totalAmount ?? item?.amount ?? 0),
+      totalAmount: Number(item?.totalAmount ?? 0),
       status: String(item?.status ?? ''),
       canPayOnline: toBoolean(item?.canPayOnline),
       createdAt: item?.createdAt ?? undefined,
@@ -585,7 +1125,7 @@ export const patientApi = {
       id: String(item?.id ?? ''),
       invoiceCode: item?.invoiceCode ?? item?.code ?? undefined,
       medicalRecordId: item?.medicalRecordId ? String(item.medicalRecordId) : undefined,
-      totalAmount: Number(item?.totalAmount ?? item?.amount ?? 0),
+      totalAmount: Number(item?.totalAmount ?? 0),
       status: String(item?.status ?? ''),
       canPayOnline: toBoolean(item?.canPayOnline),
       createdAt: item?.createdAt ?? undefined,
@@ -600,7 +1140,7 @@ export const patientApi = {
       id: String(item?.id ?? ''),
       invoiceCode: item?.invoiceCode ?? item?.code ?? undefined,
       medicalRecordId: item?.medicalRecordId ? String(item.medicalRecordId) : undefined,
-      totalAmount: Number(item?.totalAmount ?? item?.amount ?? 0),
+      totalAmount: Number(item?.totalAmount ?? 0),
       status: String(item?.status ?? ''),
       canPayOnline: toBoolean(item?.canPayOnline),
       createdAt: item?.createdAt ?? undefined,
@@ -731,6 +1271,11 @@ export const paymentApi = {
     const params = new URLSearchParams({ invoiceId })
     return apiCallRawText(`/payment/create-invoice-url?${params.toString()}`)
   },
+
+  async getAppointmentReceipt(appointmentId: string): Promise<AppointmentReceipt> {
+    const params = new URLSearchParams({ appointmentId })
+    return apiCall<AppointmentReceipt>(`/payment/appointment-receipt?${params.toString()}`)
+  },
 }
 
 export const medicineApi = {
@@ -809,3 +1354,5 @@ export const api = {
 }
 
 export default api
+
+

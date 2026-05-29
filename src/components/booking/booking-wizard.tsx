@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, CalendarDays, Check, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -28,6 +28,8 @@ interface BookingFormState {
 
 interface SlotItem extends AppointmentSlot {}
 
+const SLOT_DISABLED_REASONS = new Set(['PAST', 'LESS_THAN_2H', 'FULL', 'TOO_FAR'])
+
 const isRequiredProfileFieldFilled = (value?: string | null) => Boolean(value && String(value).trim())
 
 const isPatientProfileCompleted = (patient?: Patient | null) => {
@@ -45,7 +47,6 @@ const isPatientProfileCompleted = (patient?: Patient | null) => {
 }
 
 export function BookingWizard() {
-  const navigate = useNavigate()
   const location = useLocation()
   const { toast } = useToast()
 
@@ -140,16 +141,23 @@ export function BookingWizard() {
   const parseDateString = (dateString: string): Date | null => {
     if (!dateString) return null
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-      const date = new Date(dateString)
+      const [year, month, day] = dateString.split('-').map(Number)
+      const date = new Date(year, month - 1, day, 0, 0, 0, 0)
       return Number.isNaN(date.getTime()) ? null : date
     }
     if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateString)) {
       const [day, month, year] = dateString.split('/')
-      const date = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`)
+      const date = new Date(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0)
       return Number.isNaN(date.getTime()) ? null : date
     }
     const parsed = new Date(dateString)
     return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  const toDateOnly = (value: Date) => {
+    const next = new Date(value)
+    next.setHours(0, 0, 0, 0)
+    return next
   }
 
   const formatDateDisplay = (dateString?: string) => {
@@ -172,6 +180,8 @@ export function BookingWizard() {
       : ''
   }
 
+  const normalizeDisabledReason = (reason?: string | null) => String(reason || '').trim().toUpperCase()
+
   const getDoctorName = (doctor?: Doctor | null) => doctor?.name ?? doctor?.fullName ?? 'Bác sĩ'
   const getDoctorSpecialty = (specialty?: Doctor['specialty']) =>
     typeof specialty === 'string' ? specialty : specialty?.name ?? ''
@@ -185,19 +195,27 @@ export function BookingWizard() {
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount)
 
   const getSlotDisabledMessage = (reason?: string | null) => {
-    switch (reason) {
+    switch (normalizeDisabledReason(reason)) {
       case 'PAST':
         return 'Khung giờ đã qua.'
       case 'LESS_THAN_2H':
         return 'Chỉ được đặt trước ít nhất 2 giờ.'
       case 'FULL':
         return 'Khung giờ đã đầy.'
+      case 'TOO_FAR':
+        return 'Ngày hẹn vượt quá giới hạn cho phép.'
       default:
         return ''
     }
   }
 
-  const isSelectedSlotBookable = (slot?: SlotItem | null) => Boolean(slot && !slot.disabled && !slot.full)
+  const isSelectedSlotBookable = (slot?: SlotItem | null) =>
+    Boolean(
+      slot &&
+      !slot.disabled &&
+      !slot.full &&
+      !SLOT_DISABLED_REASONS.has(normalizeDisabledReason(slot.disabledReason))
+    )
 
   const selectedDoctor = useMemo<Doctor | null>(() => {
     if (assignedDoctorFromService?.id) {
@@ -215,9 +233,46 @@ export function BookingWizard() {
   }, [assignedDoctorFromService, doctors, formData.doctorId, selectedMedicalService?.specialty])
 
   const minDateString =
-    bookingRules?.serverNow?.split('T')[0] ?? new Date().toISOString().split('T')[0]
-  const minSelectableDate = parseDateString(minDateString) ?? new Date()
-  minSelectableDate.setHours(0, 0, 0, 0)
+    bookingRules?.minBookableAt?.split('T')[0] ||
+    bookingRules?.serverNow?.split('T')[0] ||
+    new Date().toISOString().split('T')[0]
+  const maxDateString = bookingRules?.maxBookableDate || ''
+
+  const minSelectableDate = useMemo(() => {
+    const parsed = parseDateString(minDateString)
+    return toDateOnly(parsed || new Date())
+  }, [minDateString])
+
+  const maxSelectableDate = useMemo(() => {
+    const parsed = parseDateString(maxDateString)
+    if (!parsed) return null
+    return toDateOnly(parsed)
+  }, [maxDateString])
+
+  const isDateOutOfRange = useCallback(
+    (value: Date) => {
+      const selectedDate = toDateOnly(value)
+      if (selectedDate < minSelectableDate) return true
+      if (maxSelectableDate && selectedDate > maxSelectableDate) return true
+      return false
+    },
+    [maxSelectableDate, minSelectableDate]
+  )
+
+  const bookingDateRangeLabel = useMemo(() => {
+    const minLabel = formatDateDisplay(minDateString)
+    const maxLabel = maxSelectableDate ? maxSelectableDate.toLocaleDateString('vi-VN') : ''
+
+    if (minLabel && maxLabel) {
+      return `Bạn có thể đặt lịch từ ${minLabel} đến ${maxLabel}.`
+    }
+
+    if (minLabel) {
+      return `Bạn có thể đặt lịch từ ${minLabel}.`
+    }
+
+    return null
+  }, [maxSelectableDate, minDateString])
 
   const sortedSlots = useMemo(
     () => [...slots].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()),
@@ -347,11 +402,18 @@ export function BookingWizard() {
           ? await api.appointments.getMedicalServiceSlots(String(selectedMedicalService?.id), formData.date)
           : await api.appointments.getDoctorSlots(formData.doctorId, formData.date)
 
-        const processed = (response || []).map((slot: any) => ({
-          ...slot,
-          disabled: Boolean(slot.disabled),
-          full: Boolean(slot.full),
-        })) as SlotItem[]
+        const processed = (response || []).map((slot: any) => {
+          const disabledReason = normalizeDisabledReason(slot.disabledReason)
+          const isFull = Boolean(slot.full) || disabledReason === 'FULL'
+          const disabledByReason = SLOT_DISABLED_REASONS.has(disabledReason)
+
+          return {
+            ...slot,
+            full: isFull,
+            disabled: Boolean(slot.disabled) || isFull || disabledByReason,
+            disabledReason,
+          }
+        }) as SlotItem[]
 
         setSlots(processed)
       } catch (slotError: unknown) {
@@ -425,8 +487,12 @@ export function BookingWizard() {
           symptoms: formData.notes,
         }
 
-        const appointment = await api.appointments.create(payload)
-        navigate(`/patient/appointments/${appointment.id}`, { replace: true })
+        const bookingResult = await api.appointments.book(payload)
+        if (!bookingResult?.paymentUrl) {
+          throw new Error(bookingResult?.message || 'Không nhận được đường dẫn thanh toán VNPay.')
+        }
+
+        window.location.href = bookingResult.paymentUrl
         return
       }
 
@@ -450,8 +516,12 @@ export function BookingWizard() {
         symptoms: formData.notes,
       }
 
-      const appointment = await api.appointments.create(appointmentPayload)
-      navigate(`/patient/appointments/${appointment.id}`, { replace: true })
+      const bookingResult = await api.appointments.book(appointmentPayload)
+      if (!bookingResult?.paymentUrl) {
+        throw new Error(bookingResult?.message || 'Không nhận được đường dẫn thanh toán VNPay.')
+      }
+
+      window.location.href = bookingResult.paymentUrl
     } catch (submitErrorValue: any) {
       const apiError = submitErrorValue as ApiRequestError
       if (apiError?.code === 'PROFILE_INCOMPLETE') {
@@ -706,8 +776,14 @@ export function BookingWizard() {
                             selected={parseDateString(formData.date) ?? undefined}
                             onSelect={(date) => {
                               if (!date) return
-                              if (date < minSelectableDate) {
-                                toast({ title: 'Lỗi', description: 'Vui lòng chọn ngày không trong quá khứ', variant: 'destructive' })
+                              if (isDateOutOfRange(date)) {
+                                toast({
+                                  title: 'Ngày khám chưa hợp lệ',
+                                  description:
+                                    bookingDateRangeLabel ||
+                                    'Vui lòng chọn ngày trong phạm vi hệ thống cho phép.',
+                                  variant: 'destructive',
+                                })
                                 return
                               }
                               setFormData((prev) => ({ ...prev, date: formatDateAsIso(date), time: '' }))
@@ -715,11 +791,14 @@ export function BookingWizard() {
                               setSlotsError(null)
                               setIsDatePickerOpen(false)
                             }}
-                            disabled={(date) => date < minSelectableDate}
+                            disabled={(date) => isDateOutOfRange(date)}
                             initialFocus
                           />
                         </PopoverContent>
                       </Popover>
+                      {bookingDateRangeLabel ? (
+                        <p className="mt-2 text-xs text-muted-foreground">{bookingDateRangeLabel}</p>
+                      ) : null}
                     </div>
 
                     {formData.date && (
@@ -936,7 +1015,7 @@ export function BookingWizard() {
                   ) : (
                     <>
                       <Check className="w-4 h-4" />
-                      Xác nhận đặt lịch
+                      Xác nhận và thanh toán
                     </>
                   )
                 ) : (

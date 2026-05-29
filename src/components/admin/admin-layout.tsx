@@ -28,43 +28,43 @@ const adminMenuItems = [
     title: 'Dashboard',
     href: '/admin/dashboard',
     icon: LayoutDashboard,
-    label: 'Tong quan',
+    label: 'Tổng quan',
   },
   {
-    title: 'Chuyen khoa',
+    title: 'Chuyên khoa',
     href: '/admin/specialties',
     icon: Stethoscope,
-    label: 'Quan ly chuyen khoa',
+    label: 'Quản lý chuyên khoa',
   },
   {
-    title: 'Bac si',
+    title: 'Bác sĩ',
     href: '/admin/doctors',
     icon: Users,
-    label: 'Quan ly bac si',
+    label: 'Quản lý bác sĩ',
   },
   {
-    title: 'Tai chinh',
+    title: 'Tài chính',
     href: '/admin/finance',
     icon: DollarSign,
-    label: 'Quan ly tai chinh',
+    label: 'Quản lý tài chính',
   },
   {
-    title: 'Phieu goi',
+    title: 'Phiếu gói',
     href: '/admin/service-package-bookings',
     icon: ClipboardList,
-    label: 'Quan ly phieu goi dich vu',
+    label: 'Quản lý phiếu gói dịch vụ',
   },
   {
     title: 'Feedback',
     href: '/admin/website-feedbacks',
     icon: MessageSquare,
-    label: 'Quan ly feedback website',
+    label: 'Quản lý feedback website',
   },
   {
-    title: 'Thuoc',
+    title: 'Thuốc',
     href: '/admin/medicines',
     icon: Pill,
-    label: 'Quan ly thuoc',
+    label: 'Quản lý thuốc',
   },
 ]
 
@@ -90,7 +90,7 @@ function AdminSidebar() {
           </div>
           <div>
             <p className="text-sm font-semibold text-[#111827]">MedCare Admin</p>
-            <p className="text-xs text-[#6b7280]">Quan ly he thong</p>
+            <p className="text-xs text-[#6b7280]">Quản lý hệ thống</p>
           </div>
         </Link>
       </SidebarFooter>
@@ -126,7 +126,7 @@ function AdminSidebar() {
       <SidebarFooter className="border-t border-[#e5e7eb] px-4 py-4">
         <Button variant="outline" className="w-full justify-center" onClick={handleLogout}>
           <LogOut className="h-4 w-4" />
-          Dang xuat
+          Đăng xuất
         </Button>
       </SidebarFooter>
     </Sidebar>

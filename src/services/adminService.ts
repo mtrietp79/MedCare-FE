@@ -180,6 +180,70 @@ export interface AdminServicePackageStats {
   totalPending: number
 }
 
+export interface AdminServicePackageSummary {
+  totalPackages: number
+  activePackages: number
+  inactivePackages: number
+  packagesWithoutItems: number
+  packagesWithBookings?: number
+}
+
+export interface AdminMedicalService {
+  id: string
+  name?: string
+  price?: number
+}
+
+export interface AdminServicePackageItem {
+  id?: string
+  medicalServiceId: string
+  medicalService?: AdminMedicalService
+  name?: string
+  price?: number
+}
+
+export interface AdminServicePackage {
+  id: string
+  name: string
+  description?: string | null
+  price: number
+  durationMinutes: number
+  imageUrl?: string | null
+  itemCount: number
+  status?: string | null
+  statusDisplay?: string | null
+  isActive?: boolean
+  hasBookings?: boolean
+  canDelete?: boolean
+  totalBooked?: number
+  totalCompleted?: number
+  totalPaid?: number
+  totalPending?: number
+  items?: AdminServicePackageItem[]
+  medicalServiceIds?: string[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface AdminServicePackagePayload {
+  name: string
+  description: string | null
+  price: number
+  durationMinutes: number
+  imageUrl: string | null
+  isActive: boolean
+  medicalServiceIds: string[]
+}
+
+export interface AdminServicePackageQuery {
+  keyword?: string
+  q?: string
+  search?: string
+  active?: boolean
+  status?: string
+  configured?: boolean
+}
+
 export interface AdminScheduleEntry {
   id: string
   appointmentCode?: string
@@ -426,6 +490,51 @@ function normalizeAdminServicePackageOverview(input: unknown): AdminServicePacka
     totalCompleted: pickNumber(source.totalCompleted, source.completedCount) ?? 0,
     totalPaid: pickNumber(source.totalPaid, source.paidCount) ?? 0,
     totalPending: pickNumber(source.totalPending, source.pendingCount) ?? 0,
+  }
+}
+
+function normalizeAdminServicePackage(input: unknown): AdminServicePackage {
+  const source = unwrapEntity(input) ?? {}
+  const items = Array.isArray(source.items) ? source.items.map((item: any) => ({
+    id: pickString(item.id),
+    medicalServiceId: pickString(item.medicalServiceId, item.serviceId),
+    medicalService: item.medicalService,
+    name: pickString(item.name, item.medicalService?.name),
+    price: pickNumber(item.price, item.medicalService?.price),
+  })) : []
+  
+  return {
+    id: pickString(source.id) ?? '',
+    name: pickString(source.name) ?? '',
+    description: pickString(source.description) ?? null,
+    price: pickNumber(source.price) ?? 0,
+    durationMinutes: pickNumber(source.durationMinutes, source.duration) ?? 0,
+    imageUrl: pickString(source.imageUrl, source.image) ?? null,
+    itemCount: pickNumber(source.itemCount, source.serviceItemCount, Array.isArray(source.items) ? source.items.length : 0) ?? 0,
+    status: pickString(source.status, source.statusDisplay) ?? null,
+    statusDisplay: pickString(source.statusDisplay, source.displayStatus) ?? null,
+    isActive: pickBoolean(source.isActive, source.active),
+    hasBookings: pickBoolean(source.hasBookings, source.hasBooking),
+    canDelete: pickBoolean(source.canDelete),
+    totalBooked: pickNumber(source.totalBooked, source.bookedCount),
+    totalCompleted: pickNumber(source.totalCompleted, source.completedCount),
+    totalPaid: pickNumber(source.totalPaid, source.paidCount),
+    totalPending: pickNumber(source.totalPending, source.pendingCount),
+    items,
+    medicalServiceIds: items.map(item => item.medicalServiceId).filter((id): id is string => Boolean(id)),
+    createdAt: pickString(source.createdAt),
+    updatedAt: pickString(source.updatedAt),
+  }
+}
+
+function normalizeAdminServicePackageSummary(input: unknown): AdminServicePackageSummary {
+  const source = asRecord(input) ?? {}
+  return {
+    totalPackages: pickNumber(source.totalPackages, source.total) ?? 0,
+    activePackages: pickNumber(source.activePackages, source.active) ?? 0,
+    inactivePackages: pickNumber(source.inactivePackages, source.inactive) ?? 0,
+    packagesWithoutItems: pickNumber(source.packagesWithoutItems, source.unconfigured) ?? 0,
+    packagesWithBookings: pickNumber(source.packagesWithBookings, source.booked),
   }
 }
 
@@ -892,6 +1001,111 @@ export const adminApi = {
   deleteMedicine: (id: string) => {
     const token = getStoredToken();
     return fetchJson(`${API_BASE_URL}/admin/medicines/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+
+  // Service Package Management APIs
+  getServicePackages: async (query?: AdminServicePackageQuery): Promise<AdminServicePackage[]> => {
+    const token = getStoredToken();
+    const params = new URLSearchParams()
+    
+    const keyword = pickString(query?.keyword, query?.q, query?.search)
+    if (keyword) {
+      params.append('keyword', keyword)
+    }
+    
+    if (query?.active !== undefined) {
+      params.append('active', String(query.active))
+    }
+    
+    const status = pickString(query?.status)
+    if (status && !shouldOmitQueryValue(status)) {
+      params.append('status', status)
+    }
+    
+    if (query?.configured !== undefined) {
+      params.append('configured', String(query.configured))
+    }
+    
+    const querySuffix = params.toString() ? `?${params.toString()}` : ''
+    const token_auth = `Bearer ${token}`;
+    const endpoint = `${API_BASE_URL}/admin/service-packages${querySuffix}`;
+    
+    console.debug('[AdminServicePackagesAPI] Request', {
+      method: 'GET',
+      url: endpoint,
+      params: {
+        keyword: keyword ?? undefined,
+        active: query?.active,
+        status: status && !shouldOmitQueryValue(status) ? status : undefined,
+        configured: query?.configured,
+      },
+    })
+
+    const data = await fetchJson<any>(endpoint, {
+      headers: { Authorization: token_auth }
+    });
+
+    console.debug('[AdminServicePackagesAPI] Response', {
+      method: 'GET',
+      url: endpoint,
+      body: data,
+    })
+
+    return unwrapList(data).map((item) => normalizeAdminServicePackage(item));
+  },
+
+  getServicePackagesSummary: async (): Promise<AdminServicePackageSummary> => {
+    const token = getStoredToken();
+    const data = await fetchJson<any>(
+      `${API_BASE_URL}/admin/service-packages/summary`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const unwrapped = unwrapEntity(data) ?? data;
+    return normalizeAdminServicePackageSummary(unwrapped);
+  },
+
+  getServicePackage: async (id: string): Promise<AdminServicePackage> => {
+    const token = getStoredToken();
+    const response = await fetchJson<any>(`${API_BASE_URL}/admin/service-packages/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return normalizeAdminServicePackage(response);
+  },
+
+  createServicePackage: async (data: AdminServicePackagePayload): Promise<AdminServicePackage> => {
+    const token = getStoredToken();
+    const response = await fetchJson<any>(`${API_BASE_URL}/admin/service-packages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data)
+    });
+    return normalizeAdminServicePackage(response);
+  },
+
+  updateServicePackage: async (id: string, data: AdminServicePackagePayload): Promise<AdminServicePackage> => {
+    const token = getStoredToken();
+    const response = await fetchJson<any>(`${API_BASE_URL}/admin/service-packages/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data)
+    });
+    return normalizeAdminServicePackage(response);
+  },
+
+  setServicePackageActive: (id: string, active: boolean) => {
+    const token = getStoredToken();
+    return fetchJson(`${API_BASE_URL}/admin/service-packages/${id}/active?active=${active}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+
+  deleteServicePackage: (id: string) => {
+    const token = getStoredToken();
+    return fetchJson(`${API_BASE_URL}/admin/service-packages/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });

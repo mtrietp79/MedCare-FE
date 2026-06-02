@@ -102,7 +102,7 @@ function AdminSidebar() {
             const isDashboard = item.href === '/admin/dashboard'
             const isActive = isDashboard
               ? location.pathname === '/admin' || location.pathname === '/admin/dashboard'
-              : location.pathname === item.href
+              : location.pathname === item.href || (item.href === '/admin/service-package-bookings' && location.pathname === '/admin/service-packages')
 
             return (
               <SidebarMenuItem key={item.href}>

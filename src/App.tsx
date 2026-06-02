@@ -58,7 +58,7 @@ import { AdminSpecialtiesPage } from '@/pages/admin/AdminSpecialtiesPage'
 import { AdminMedicinesPage } from '@/pages/admin/AdminMedicinesPage'
 import { AdminFinancePage } from '@/pages/admin/AdminFinancePage'
 import { AdminSchedulePage } from '@/pages/admin/AdminSchedulePage'
-import { AdminServicePackageBookingsPage } from '@/pages/admin/AdminServicePackageBookingsPage'
+import { AdminServicePackagesPage } from '@/pages/admin/AdminServicePackagesPage'
 import { AdminWebsiteFeedbacksPage } from '@/pages/admin/AdminWebsiteFeedbacksPage'
 
 export default function App() {
@@ -210,7 +210,8 @@ export default function App() {
 							<Route path="/admin/specialties" element={<AdminSpecialtiesPage />} />
 							<Route path="/admin/medicines" element={<AdminMedicinesPage />} />
 							<Route path="/admin/finance" element={<AdminFinancePage />} />
-							<Route path="/admin/service-package-bookings" element={<AdminServicePackageBookingsPage />} />
+							<Route path="/admin/service-package-bookings" element={<AdminServicePackagesPage />} />
+							<Route path="/admin/service-packages" element={<AdminServicePackagesPage />} />
 							<Route path="/admin/website-feedbacks" element={<AdminWebsiteFeedbacksPage />} />
 							<Route path="/admin/schedules" element={<AdminSchedulePage />} />
 						</Route>

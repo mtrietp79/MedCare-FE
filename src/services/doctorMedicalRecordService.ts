@@ -19,6 +19,8 @@ export interface MedicalRecordPatient {
 
 export interface MedicalRecordDetail {
   id: string
+  recordCreatedAt?: string
+  createdAt?: string
   appointmentId?: string
   visitDate?: string
   appointmentType?: string
@@ -142,6 +144,8 @@ function normalizeRecord(raw: unknown): MedicalRecordDetail | null {
 
   return {
     id,
+    recordCreatedAt: pickString(source.recordCreatedAt, source.createdAt),
+    createdAt: pickString(source.createdAt, source.recordCreatedAt),
     appointmentId: pickString(source.appointmentId),
     visitDate: pickString(source.examDate, source.examinationDate, source.visitDate, source.appointmentDate),
     appointmentType: pickString(source.type, source.appointmentType, source.visitType),

@@ -2,7 +2,7 @@
 import { motion } from 'framer-motion'
 import { Activity, Calendar, Clock, DollarSign, TrendingUp, Users } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
-import { safeLower } from '@/lib/admin-normalizers'
+import { useAuth } from '@/context/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PatientChart } from '@/components/admin/patient-chart'
 import { SpecialtyChart } from '@/components/admin/specialty-chart'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import { getAppointmentStatusClass, getAppointmentStatusLabel } from '@/lib/appointment-status'
 
 interface DashboardSummary {
   totalPatients: number
@@ -27,6 +28,9 @@ interface RecentAppointment {
   date: string
   time: string
   status: string
+  statusDisplay?: string
+  paymentStatus?: string
+  paymentStatusDisplay?: string
   specialty: string
 }
 
@@ -52,6 +56,7 @@ function normalizeRevenue(raw: any): RevenueData[] {
 }
 
 export function AdminDashboard() {
+  const { user, loading: authLoading } = useAuth()
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [recentAppointments, setRecentAppointments] = useState<RecentAppointment[]>([])
   const [revenueData, setRevenueData] = useState<RevenueData[]>([])
@@ -59,6 +64,10 @@ export function AdminDashboard() {
   const [error, setError] = useState('')
 
   const fetchDashboardData = async () => {
+    if (!user || user.role !== 'ROLE_ADMIN') {
+      return
+    }
+
     setLoading(true)
     setError('')
 
@@ -73,6 +82,12 @@ export function AdminDashboard() {
       setRecentAppointments(Array.isArray(appointmentsData) ? appointmentsData : [])
       setRevenueData(normalizeRevenue(revenueChartData))
     } catch (dashboardError: any) {
+      const status = Number(dashboardError?.response?.status ?? dashboardError?.status)
+      if (status === 403) {
+        setError('Bạn không có quyền truy cập')
+        return
+      }
+
       setError(dashboardError?.message || 'Không thể tải dữ liệu dashboard.')
     } finally {
       setLoading(false)
@@ -80,22 +95,19 @@ export function AdminDashboard() {
   }
 
   useEffect(() => {
-    void fetchDashboardData()
-  }, [])
-
-  const getStatusBadge = (status: string) => {
-    switch (safeLower(status)) {
-      case 'confirmed':
-        return <Badge variant="default">Đã xác nhận</Badge>
-      case 'pending':
-        return <Badge variant="secondary">Chờ xác nhận</Badge>
-      case 'completed':
-        return <Badge variant="outline">Hoàn thành</Badge>
-      case 'cancelled':
-        return <Badge variant="destructive">Đã hủy</Badge>
-      default:
-        return <Badge variant="secondary">{status || '-'}</Badge>
+    if (authLoading) return
+    if (!user || user.role !== 'ROLE_ADMIN') {
+      setLoading(false)
+      return
     }
+
+    void fetchDashboardData()
+  }, [authLoading, user])
+
+  const getStatusBadge = (status?: string, statusDisplay?: string) => {
+    const label = getAppointmentStatusLabel(status, statusDisplay)
+    const className = getAppointmentStatusClass(status, statusDisplay)
+    return <Badge className={`rounded-full border ${className}`}>{label}</Badge>
   }
 
   if (loading) {
@@ -197,8 +209,8 @@ export function AdminDashboard() {
             {recentAppointments.length === 0 && <AdminEmptyState title="Chưa có lịch hẹn gần đây." />}
             {recentAppointments.length > 0 && (
               <div className="space-y-4">
-                {recentAppointments.slice(0, 5).map((appointment) => (
-                  <div key={appointment.id} className="flex flex-col gap-3 rounded-3xl border border-border/80 bg-background p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                {recentAppointments.slice(0, 5).map((appointment, index) => (
+                  <div key={`${appointment.id || 'appointment'}-${index}`} className="flex flex-col gap-3 rounded-3xl border border-border/80 bg-background p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold">{appointment.patientName || '-'}</p>
                       <p className="text-xs text-muted-foreground">{appointment.doctorName || '-'} • {appointment.specialty || '-'}</p>
@@ -209,7 +221,7 @@ export function AdminDashboard() {
                         <Clock className="h-3 w-3" />
                         {appointment.time || '-'}
                       </p>
-                      {getStatusBadge(appointment.status)}
+                      {getStatusBadge(appointment.status, appointment.statusDisplay)}
                     </div>
                   </div>
                 ))}

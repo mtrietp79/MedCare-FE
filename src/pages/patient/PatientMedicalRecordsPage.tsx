@@ -81,7 +81,9 @@ export function PatientMedicalRecordsPage() {
                   <p className="text-sm text-muted-foreground">
                     Ngày khám: {formatDateTime(record.appointmentDate, record.appointmentTime)}
                   </p>
-                  <p className="text-sm text-muted-foreground">Ngày tạo: {formatDate(record.createdAt)}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Ngày tạo: {formatDate(record.recordCreatedAt || record.createdAt)}
+                  </p>
                 </div>
                 <Button asChild variant="outline">
                   <Link to={`/patient/medical-records/${record.id}`} className="gap-2">

@@ -6,20 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { api } from '@/services/api'
 import { PatientProfileForm } from './PatientProfilePage'
 import type { Patient, Appointment } from '@/types'
-
-const getPaymentStatusLabel = (status?: string) => {
-  switch ((status || 'UNPAID').toUpperCase()) {
-    case 'PAY_AT_CLINIC':
-      return 'Thanh toán tại phòng khám'
-    case 'PAID_ONLINE':
-      return 'Đã thanh toán VNPay'
-    case 'PAID':
-      return 'Đã thanh toán'
-    case 'UNPAID':
-    default:
-      return 'Chưa thanh toán'
-  }
-}
+import { getAppointmentStatusLabel } from '@/lib/appointment-status'
 
 function formatAppointmentDateTime(appointment?: Appointment | null): string {
   if (!appointment) return 'Chua co lich kham'
@@ -187,7 +174,7 @@ export function PatientDashboardPage() {
                   </div>
                   <div className="flex items-center justify-between text-sm text-muted-foreground">
                     <span>{typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name || 'Chuyên khoa'}</span>
-                    <span>{appointment.status || getPaymentStatusLabel(appointment.paymentStatus) || 'Đang xử lý'}</span>
+                    <span>{getAppointmentStatusLabel(appointment.status, appointment.statusDisplay)}</span>
                   </div>
                   <Button variant="ghost" asChild>
                     <Link to={`/patient/appointments/${appointment.id}`}>Xem chi tiết</Link>

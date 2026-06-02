@@ -36,14 +36,14 @@ const navigation = [
 function getAccountMenu(role: string | undefined): AccountMenuItem[] {
   if (role === 'ROLE_ADMIN') {
     return [
-      { label: 'Trang qu\u1ea3n tr\u1ecb', href: '/admin', icon: User },
+      { label: 'Trang qu\u1ea3n tr\u1ecb', href: '/admin/dashboard', icon: User },
       { label: '\u0110\u0103ng xu\u1ea5t', icon: LogOut, isLogout: true },
     ]
   }
 
   if (role === 'ROLE_DOCTOR') {
     return [
-      { label: 'H\u1ed3 s\u01a1 c\u00e1 nh\u00e2n', href: '/profile', icon: User },
+      { label: 'H\u1ed3 s\u01a1 c\u00e1 nh\u00e2n', href: '/doctor/profile', icon: User },
       { label: 'L\u1ecbch l\u00e0m vi\u1ec7c', href: '/doctor/schedule', icon: BriefcaseMedical },
       { label: '\u0110\u0103ng xu\u1ea5t', icon: LogOut, isLogout: true },
     ]

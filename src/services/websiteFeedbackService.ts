@@ -12,6 +12,10 @@ export interface WebsiteFeedback {
   approved: boolean
   hidden: boolean
   status: WebsiteFeedbackStatus
+  statusDisplay?: string
+  canApprove?: boolean
+  canHide?: boolean
+  canDelete?: boolean
 }
 
 export interface CreateWebsiteFeedbackPayload {
@@ -48,6 +52,7 @@ function normalizeStatus(item: any): WebsiteFeedbackStatus {
 
 function normalizeWebsiteFeedback(item: any): WebsiteFeedback {
   const status = normalizeStatus(item)
+  const statusDisplay = safeString(item?.statusDisplay || item?.displayStatus || '')
 
   return {
     id: safeString(item?.id || item?.feedbackId || ''),
@@ -59,6 +64,10 @@ function normalizeWebsiteFeedback(item: any): WebsiteFeedback {
     approved: status === 'APPROVED',
     hidden: status === 'HIDDEN',
     status,
+    statusDisplay: statusDisplay || undefined,
+    canApprove: typeof item?.canApprove === 'boolean' ? item.canApprove : undefined,
+    canHide: typeof item?.canHide === 'boolean' ? item.canHide : undefined,
+    canDelete: typeof item?.canDelete === 'boolean' ? item.canDelete : undefined,
   }
 }
 
@@ -124,8 +133,32 @@ export const websiteFeedbackService = {
     return tryMethods(`${API_BASE_URL}/admin/website-feedbacks/${id}/approve`, ['PUT', 'PATCH', 'POST'])
   },
 
+  unhide: async (id: string) => {
+    let lastError: unknown = null
+    for (const path of ['unhide', 'show', 'publish']) {
+      try {
+        return await tryMethods(`${API_BASE_URL}/admin/website-feedbacks/${id}/${path}`, ['PUT', 'PATCH', 'POST'])
+      } catch (error) {
+        const status = (error as HttpError)?.status
+        if (status === 401 || status === 403) throw error
+        lastError = error
+      }
+    }
+    throw lastError ?? new Error('Khong the hien feedback.')
+  },
+
   hide: async (id: string) => {
-    return tryMethods(`${API_BASE_URL}/admin/website-feedbacks/${id}/hide`, ['PUT', 'PATCH', 'POST'])
+    let lastError: unknown = null
+    for (const path of ['hide', 'archive', 'reject']) {
+      try {
+        return await tryMethods(`${API_BASE_URL}/admin/website-feedbacks/${id}/${path}`, ['PUT', 'PATCH', 'POST'])
+      } catch (error) {
+        const status = (error as HttpError)?.status
+        if (status === 401 || status === 403) throw error
+        lastError = error
+      }
+    }
+    throw lastError ?? new Error('Khong the an feedback.')
   },
 
   remove: async (id: string) => {
@@ -133,6 +166,7 @@ export const websiteFeedbackService = {
       `${API_BASE_URL}/admin/website-feedbacks/${id}`,
       `${API_BASE_URL}/admin/website-feedbacks/${id}/delete`,
       `${API_BASE_URL}/admin/website-feedbacks/${id}/remove`,
+      `${API_BASE_URL}/admin/website-feedbacks/${id}/destroy`,
     ])
   },
 }

@@ -16,25 +16,25 @@ import { PatientMedicalRecordDetails } from '@/components/patient/PatientMedical
 import { api, type PatientMedicalRecord } from '@/services/api'
 import type { Appointment } from '@/types'
 import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
+import {
+  getPaymentStatusKey,
+  getPaymentStatusLabel,
+  isPaymentSettled,
+  resolveAppointmentStatusView,
+} from '@/lib/appointment-status'
 
-type AppointmentStatusKey = 'pending' | 'completed' | 'cancelled'
-
-const STATUS_CLASS_BY_KEY: Record<AppointmentStatusKey, string> = {
-  pending: 'bg-amber-50 text-amber-700 border-amber-200',
-  completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  cancelled: 'bg-red-50 text-red-700 border-red-200',
+function normalizeStatusText(value?: string): string {
+  return String(value || '').trim().toUpperCase()
 }
 
-function getPaymentStatusLabel(status?: string) {
-  switch ((status || 'UNPAID').toUpperCase()) {
-    case 'PAID_ONLINE':
-      return 'Đã thanh toán VNPay'
-    case 'PAID':
-      return 'Đã thanh toán'
-    case 'UNPAID':
-    default:
-      return 'Chưa thanh toán'
-  }
+function isInvoicePendingPaymentStatus(status?: string): boolean {
+  const normalized = normalizeStatusText(status)
+  return (
+    normalized === 'UNPAID' ||
+    normalized === 'PENDING' ||
+    normalized === 'PENDING_PAYMENT' ||
+    normalized === 'WAITING_PAYMENT'
+  )
 }
 
 function getAppointmentTimeLabel(appointment: Appointment) {
@@ -73,68 +73,6 @@ function getAppointmentTypeLabel(appointment: Appointment): string {
   return rawType || 'Khám bệnh'
 }
 
-function getFallbackStatusKey(rawStatus?: string): AppointmentStatusKey {
-  const normalized = String(rawStatus || '').trim().toUpperCase()
-  if (normalized === 'CANCELLED') return 'cancelled'
-  if (normalized === 'COMPLETED') return 'completed'
-  return 'pending'
-}
-
-function getStatusLabelByKey(statusKey: AppointmentStatusKey) {
-  if (statusKey === 'cancelled') return 'Đã hủy'
-  if (statusKey === 'completed') return 'Đã khám'
-  return 'Chờ khám'
-}
-
-function mapStatusColorToClass(statusColor?: string): string | null {
-  const normalized = String(statusColor || '').trim().toLowerCase()
-  if (!normalized) return null
-
-  if (
-    normalized.includes('red') ||
-    normalized.includes('danger') ||
-    normalized.includes('error') ||
-    normalized.includes('cancel')
-  ) {
-    return STATUS_CLASS_BY_KEY.cancelled
-  }
-
-  if (
-    normalized.includes('green') ||
-    normalized.includes('success') ||
-    normalized.includes('complete') ||
-    normalized.includes('done')
-  ) {
-    return STATUS_CLASS_BY_KEY.completed
-  }
-
-  if (
-    normalized.includes('yellow') ||
-    normalized.includes('amber') ||
-    normalized.includes('warning') ||
-    normalized.includes('pending')
-  ) {
-    return STATUS_CLASS_BY_KEY.pending
-  }
-
-  return null
-}
-
-function getAppointmentStatusView(appointment: Appointment): {
-  key: AppointmentStatusKey
-  label: string
-  className: string
-} {
-  const fallbackKey = getFallbackStatusKey(appointment.status)
-  const label = String(appointment.statusDisplay || '').trim() || getStatusLabelByKey(fallbackKey)
-  const className = mapStatusColorToClass(appointment.statusColor) || STATUS_CLASS_BY_KEY[fallbackKey]
-  return {
-    key: fallbackKey,
-    label,
-    className,
-  }
-}
-
 function getErrorStatusCode(error: any): number | null {
   const status = Number(error?.status ?? error?.response?.status)
   return Number.isFinite(status) ? status : null
@@ -167,6 +105,7 @@ export function PatientAppointmentDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
+  const [invoicePaymentLoading, setInvoicePaymentLoading] = useState(false)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [recordDialogOpen, setRecordDialogOpen] = useState(false)
   const [recordLoading, setRecordLoading] = useState(false)
@@ -217,6 +156,25 @@ export function PatientAppointmentDetailPage() {
     }
   }
 
+  const startInvoiceVNPayPayment = async () => {
+    const invoiceId = String(record?.invoice?.id || '').trim()
+    if (!invoiceId) return
+
+    try {
+      setPaymentError(null)
+      setInvoicePaymentLoading(true)
+      const redirectUrl = await api.payments.createInvoicePaymentUrl(invoiceId)
+      window.location.href = redirectUrl
+    } catch (paymentStartError) {
+      setPaymentError(
+        paymentStartError instanceof Error
+          ? paymentStartError.message
+          : 'Không thể khởi tạo thanh toán VNPay cho hóa đơn.'
+      )
+      setInvoicePaymentLoading(false)
+    }
+  }
+
   const loadRecordByAppointment = useCallback(async () => {
     if (!appointment?.id) return
 
@@ -254,6 +212,11 @@ export function PatientAppointmentDetailPage() {
     })
   }, [appointmentId, loadAppointment, loadRecordByAppointment])
 
+  useEffect(() => {
+    if (!appointment?.id) return
+    void loadRecordByAppointment()
+  }, [appointment?.id, loadRecordByAppointment])
+
   const openMedicalRecordDialog = () => {
     setRecordDialogOpen(true)
     void loadRecordByAppointment()
@@ -290,13 +253,21 @@ export function PatientAppointmentDetailPage() {
     return null
   }
 
-  const normalizedPaymentStatus = String(appointment.paymentStatus || 'UNPAID').toUpperCase()
-  const statusView = getAppointmentStatusView(appointment)
+  const statusView = resolveAppointmentStatusView(appointment.status, appointment.statusDisplay)
+  const paymentStatusKey = getPaymentStatusKey(appointment.paymentStatus, appointment.paymentStatusDisplay)
   const isCancelled = statusView.key === 'cancelled'
   const isCompleted = statusView.key === 'completed'
-  const isPaymentFinalized = ['PAID_ONLINE', 'PAID'].includes(normalizedPaymentStatus)
+  const isPaymentFinalized = isPaymentSettled(appointment.paymentStatus, appointment.paymentStatusDisplay)
   const followUpAppointment = isFollowUpAppointment(appointment)
-  const canPayNow = !isCancelled && !isPaymentFinalized && !followUpAppointment
+  const appointmentTypeLabel = getAppointmentTypeLabel(appointment)
+  const isConsultationAppointment = appointmentTypeLabel === 'Khám bệnh'
+  const canPayAppointmentNow =
+    isConsultationAppointment && !isCancelled && !isCompleted && !isPaymentFinalized && paymentStatusKey === 'unpaid'
+  const invoiceTotalAmount = Number(record?.invoice?.totalAmount ?? 0)
+  const canPayInvoiceNow =
+    Boolean(record?.invoice?.canPayOnline) &&
+    isInvoicePendingPaymentStatus(record?.invoice?.status) &&
+    invoiceTotalAmount > 0
   const canCancel = !isCancelled && !isCompleted
 
   return (
@@ -352,7 +323,9 @@ export function PatientAppointmentDetailPage() {
             </div>
             <div className="rounded-3xl border p-5">
               <p className="text-sm text-muted-foreground">Thanh toán</p>
-              <p className="mt-2 font-medium">{getPaymentStatusLabel(appointment.paymentStatus)}</p>
+              <p className="mt-2 font-medium">
+                {getPaymentStatusLabel(appointment.paymentStatus, appointment.paymentStatusDisplay)}
+              </p>
             </div>
             <div className="rounded-3xl border p-5">
               <p className="text-sm text-muted-foreground">Triệu chứng</p>
@@ -373,7 +346,7 @@ export function PatientAppointmentDetailPage() {
               />
             ) : null}
 
-            {canPayNow ? (
+            {canPayAppointmentNow ? (
               <Button
                 onClick={() => void startVNPayPayment()}
                 variant="secondary"
@@ -383,11 +356,23 @@ export function PatientAppointmentDetailPage() {
                 <CreditCard className="h-4 w-4" />
                 {paymentLoading ? 'Đang chuyển hướng...' : 'Thanh toán VNPay'}
               </Button>
+            ) : canPayInvoiceNow ? (
+              <Button
+                onClick={() => void startInvoiceVNPayPayment()}
+                variant="secondary"
+                className="gap-2"
+                disabled={invoicePaymentLoading}
+              >
+                <CreditCard className="h-4 w-4" />
+                {invoicePaymentLoading ? 'Đang chuyển hướng...' : 'Thanh toán hóa đơn VNPay'}
+              </Button>
             ) : (
               <Button variant="secondary" disabled>
                 {followUpAppointment
                   ? 'Lịch tái khám chỉ thanh toán qua hóa đơn sau khám'
-                  : `Trạng thái thanh toán: ${getPaymentStatusLabel(appointment.paymentStatus)}`}
+                    : isCompleted
+                    ? 'Lịch khám đã hoàn tất'
+                    : `Trạng thái thanh toán: ${getPaymentStatusLabel(appointment.paymentStatus, appointment.paymentStatusDisplay)}`}
               </Button>
             )}
           </div>

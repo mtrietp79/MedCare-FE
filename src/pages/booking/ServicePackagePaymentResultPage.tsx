@@ -20,7 +20,10 @@ function formatCurrency(amount?: number) {
   return `${new Intl.NumberFormat('vi-VN').format(Number(amount || 0))} đ`
 }
 
-function mapServicePackageStatus(status?: string) {
+function mapServicePackageStatus(status?: string, statusDisplay?: string) {
+  const display = String(statusDisplay || '').trim()
+  if (display && !/^[A-Z0-9_]+$/.test(display)) return display
+
   const value = String(status || '').toUpperCase()
   if (value.includes('PENDING') || value.includes('UNPAID')) return 'Chờ thanh toán'
   if (value.includes('PAID')) return 'Đã thanh toán'
@@ -103,7 +106,7 @@ export function ServicePackagePaymentResultPage() {
 
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm space-y-2">
                   <div className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">Mã phiếu dịch vụ</span>
+                    <span className="text-muted-foreground">Mã booking gói dịch vụ</span>
                     <span className="font-semibold">{displayBookingCode}</span>
                   </div>
                   <div className="flex justify-between gap-3">
@@ -121,7 +124,7 @@ export function ServicePackagePaymentResultPage() {
                   <div className="flex justify-between gap-3">
                     <span className="text-muted-foreground">Trạng thái</span>
                     <span className="font-semibold text-emerald-700">
-                      {mapServicePackageStatus(booking?.status || 'PAID')}
+                      {mapServicePackageStatus(booking?.status || 'PAID', booking?.statusDisplay)}
                     </span>
                   </div>
                   {booking?.invoiceCode ? (
@@ -133,7 +136,7 @@ export function ServicePackagePaymentResultPage() {
                 </div>
 
                 {loading ? (
-                  <p className="text-center text-sm text-muted-foreground">Đang tải phiếu dịch vụ...</p>
+                  <p className="text-center text-sm text-muted-foreground">Đang tải booking gói dịch vụ...</p>
                 ) : null}
 
                 <div className="flex flex-wrap justify-center gap-3">

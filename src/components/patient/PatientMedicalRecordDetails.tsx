@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import type { PatientMedicalRecord } from '@/services/api'
+import { getAppointmentStatusClass, getAppointmentStatusLabel } from '@/lib/appointment-status'
 
 interface PatientMedicalRecordDetailsProps {
   record: PatientMedicalRecord
@@ -40,8 +41,8 @@ function invoiceStatusLabel(status?: string): string {
   const normalized = String(status || '').toUpperCase()
   if (normalized === 'PAID') return 'Đã thanh toán'
   if (normalized === 'CANCELLED') return 'Đã hủy'
-  if (normalized === 'FAILED') return 'Thất bại'
-  return 'Chờ thanh toán'
+  if (normalized === 'FAILED') return 'Thanh toán thất bại'
+  return 'Chưa thanh toán'
 }
 
 function invoiceStatusClass(status?: string): string {
@@ -49,20 +50,6 @@ function invoiceStatusClass(status?: string): string {
   if (normalized === 'PAID') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
   if (normalized === 'CANCELLED') return 'bg-slate-100 text-slate-700 border-slate-300'
   if (normalized === 'FAILED') return 'bg-red-50 text-red-700 border-red-200'
-  return 'bg-amber-50 text-amber-700 border-amber-200'
-}
-
-function followUpStatusLabel(status?: string): string {
-  const normalized = String(status || '').toUpperCase()
-  if (normalized === 'COMPLETED') return 'Đã khám'
-  if (normalized === 'CANCELLED') return 'Đã hủy'
-  return 'Chờ khám'
-}
-
-function followUpStatusClass(status?: string): string {
-  const normalized = String(status || '').toUpperCase()
-  if (normalized === 'COMPLETED') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  if (normalized === 'CANCELLED') return 'bg-red-50 text-red-700 border-red-200'
   return 'bg-amber-50 text-amber-700 border-amber-200'
 }
 
@@ -76,12 +63,12 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
   const services = Array.isArray(record.services) ? record.services : []
   const invoice = record.invoice
   const followUp = record.followUp
-  const recordCode = record.recordCode || `#${record.id}`
+  const recordCode = record.recordCode || record.recordId || record.id
   const doctorName = record.doctor?.fullName || record.doctorName || '-'
   const consultationFee = Number(invoice?.consultationFee ?? 0)
-  const medicineTotal = Number(invoice?.medicineTotal ?? 0)
-  const serviceTotal = Number(invoice?.serviceTotal ?? 0)
-  const calculatedTotal = consultationFee + medicineTotal + serviceTotal
+  const medicineFee = Number(invoice?.medicineFee ?? invoice?.medicineTotal ?? 0)
+  const serviceFee = Number(invoice?.serviceFee ?? invoice?.serviceTotal ?? 0)
+  const calculatedTotal = consultationFee + medicineFee + serviceFee
   const invoiceTotal = Number(invoice?.totalAmount ?? calculatedTotal)
 
   return (
@@ -102,7 +89,7 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
           </div>
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Ngày tạo hồ sơ</p>
-            <p className="font-medium">{formatDate(record.createdAt)}</p>
+            <p className="font-medium">{formatDate(record.recordCreatedAt || record.createdAt)}</p>
           </div>
         </CardContent>
       </Card>
@@ -221,12 +208,12 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
             </div>
             <p><span className="font-medium">Mã hóa đơn:</span> {textOrDash(invoice.invoiceCode)}</p>
             <p><span className="font-medium">Phí khám:</span> {formatCurrencyVnd(consultationFee)}</p>
-            <p><span className="font-medium">Tiền thuốc:</span> {formatCurrencyVnd(medicineTotal)}</p>
-            <p><span className="font-medium">Tiền dịch vụ:</span> {formatCurrencyVnd(serviceTotal)}</p>
+            <p><span className="font-medium">Tiền thuốc:</span> {formatCurrencyVnd(medicineFee)}</p>
+            <p><span className="font-medium">Tiền dịch vụ:</span> {formatCurrencyVnd(serviceFee)}</p>
             <p><span className="font-medium">Công thức:</span> Tổng tiền = Phí khám + Tiền thuốc + Tiền dịch vụ</p>
             <p>
               <span className="font-medium">Tổng tiền:</span>{' '}
-              {`${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(consultationFee)} + ${formatCurrencyVnd(medicineTotal)} + ${formatCurrencyVnd(serviceTotal)}`}
+              {`${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(consultationFee)} + ${formatCurrencyVnd(medicineFee)} + ${formatCurrencyVnd(serviceFee)}`}
             </p>
             <p><span className="font-medium">Có thể thanh toán online:</span> {invoice.canPayOnline ? 'Có' : 'Không'}</p>
           </CardContent>
@@ -244,8 +231,8 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
           <CardContent className="space-y-2 p-4 text-sm">
             <div className="flex items-center justify-between gap-2">
               <p className="font-semibold">Lịch tái khám</p>
-              <Badge className={`rounded-full border ${followUpStatusClass(followUp.statusDisplay || followUp.status)}`}>
-                {followUp.statusDisplay || followUpStatusLabel(followUp.status)}
+              <Badge className={`rounded-full border ${getAppointmentStatusClass(followUp.status, followUp.statusDisplay)}`}>
+                {getAppointmentStatusLabel(followUp.status, followUp.statusDisplay)}
               </Badge>
             </div>
             <p><span className="font-medium">Mã lịch:</span> {textOrDash(followUp.appointmentCode || followUp.appointmentId)}</p>

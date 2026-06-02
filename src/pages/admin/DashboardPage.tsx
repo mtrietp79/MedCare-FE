@@ -24,9 +24,11 @@ import {
 } from '@/services/dashboardService'
 import { useToast } from '@/hooks/use-toast'
 import { safeString } from '@/lib/admin-normalizers'
+import { useAuth } from '@/context/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import { getAppointmentStatusClass, getAppointmentStatusLabel } from '@/lib/appointment-status'
 
 interface DashboardSummary {
   totalAppointments: number
@@ -48,6 +50,7 @@ interface RecentAppointmentItem {
   date: string
   time: string
   status: string
+  statusDisplay?: string
   statusCode: string
 }
 
@@ -62,13 +65,6 @@ const fallbackMonthlyPatients: MonthlyPatientPoint[] = Array.from({ length: 12 }
   month: `Tháng ${index + 1}`,
   patients: 0,
 }))
-
-function normalizeText(value: string): string {
-  return safeString(value)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-}
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat('vi-VN').format(value)
@@ -120,32 +116,14 @@ function normalizeAppointments(raw: RecentAppointmentResponse[]): RecentAppointm
     specialtyName: safeString(item.specialtyName ?? item.specialty) || '-',
     date: safeString(item.date) || '-',
     time: safeString(item.time) || '-',
-    status: safeString(item.status) || safeString(item.statusCode) || '-',
+    status: safeString(item.status) || safeString(item.statusCode) || '',
+    statusDisplay: safeString(item.statusDisplay) || undefined,
     statusCode: safeString(item.statusCode) || '',
   }))
 }
 
-function statusBadgeClass(status: string, statusCode: string): string {
-  const code = normalizeText(statusCode)
-  const text = normalizeText(status)
-
-  if (code.includes('complete') || text.includes('da kham')) {
-    return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  }
-
-  if (code.includes('pending') || text.includes('cho kham') || text.includes('chua kham')) {
-    return 'bg-amber-50 text-amber-700 border-amber-200'
-  }
-
-  if (code.includes('cancel') || text.includes('huy lich') || text.includes('da huy')) {
-    return 'bg-red-50 text-red-700 border-red-200'
-  }
-
-  if (text.includes('xac nhan') || code.includes('confirm')) {
-    return 'bg-sky-50 text-sky-700 border-sky-200'
-  }
-
-  return 'bg-slate-100 text-slate-700 border-slate-200'
+function statusBadgeClass(status: string, statusDisplay?: string, statusCode?: string): string {
+  return getAppointmentStatusClass(statusCode || status, statusDisplay || status)
 }
 
 function formatDateTime(date: string, time: string): string {
@@ -158,6 +136,7 @@ function formatDateTime(date: string, time: string): string {
 }
 
 export function DashboardPage() {
+  const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const [summary, setSummary] = useState<DashboardSummary>(fallbackSummary)
   const [monthlyPatients, setMonthlyPatients] = useState<MonthlyPatientPoint[]>(fallbackMonthlyPatients)
@@ -166,6 +145,10 @@ export function DashboardPage() {
   const [error, setError] = useState('')
 
   const fetchDashboardData = async () => {
+    if (!user || user.role !== 'ROLE_ADMIN') {
+      return
+    }
+
     setLoading(true)
     setError('')
 
@@ -180,7 +163,10 @@ export function DashboardPage() {
       setMonthlyPatients(normalizeMonthlyPatients(monthlyPatientsResponse))
       setRecentAppointments(normalizeAppointments(recentAppointmentsResponse))
     } catch (dashboardError: any) {
-      const message = dashboardError?.message || 'Không thể tải dữ liệu dashboard.'
+      const status = Number(dashboardError?.response?.status ?? dashboardError?.status)
+      const message = status === 403
+        ? 'Bạn không có quyền truy cập'
+        : (dashboardError?.message || 'Không thể tải dữ liệu dashboard.')
       setError(message)
       toast({
         title: 'Lỗi',
@@ -193,8 +179,14 @@ export function DashboardPage() {
   }
 
   useEffect(() => {
+    if (authLoading) return
+    if (!user || user.role !== 'ROLE_ADMIN') {
+      setLoading(false)
+      return
+    }
+
     void fetchDashboardData()
-  }, [])
+  }, [authLoading, user])
 
   const stats = useMemo(
     () => [
@@ -339,8 +331,8 @@ export function DashboardPage() {
                       </div>
                     </TableCell>
                     <TableCell className="px-4 py-4">
-                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClass(appointment.status, appointment.statusCode)}`}>
-                        {appointment.status || '-'}
+                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeClass(appointment.status, appointment.statusDisplay, appointment.statusCode)}`}>
+                        {getAppointmentStatusLabel(appointment.statusCode || appointment.status, appointment.statusDisplay || appointment.status)}
                       </span>
                     </TableCell>
                   </TableRow>

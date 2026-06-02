@@ -109,7 +109,9 @@ export interface ServicePackageBooking {
   totalAmount?: number
   paidAmount?: number
   status?: ServicePackageBookingStatus
+  statusDisplay?: string
   paymentStatus?: ServicePackageBookingPaymentStatus
+  paymentStatusDisplay?: string
   note?: string
   paymentId?: string
   invoiceCode?: string
@@ -189,6 +191,7 @@ export interface Appointment {
   statusDisplay?: string
   statusColor?: string
   paymentStatus?: string
+  paymentStatusDisplay?: string
   symptoms?: string
   consultationFee?: number
   followUpNote?: string
@@ -229,7 +232,9 @@ export interface AppointmentReceipt {
     serviceName?: string
     appointmentDate?: string
     appointmentStatus?: string
+    appointmentStatusDisplay?: string
     paymentStatus?: string
+    paymentStatusDisplay?: string
     consultationFee?: number
   }
   payment: {

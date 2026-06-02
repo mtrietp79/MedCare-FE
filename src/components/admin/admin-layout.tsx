@@ -49,10 +49,10 @@ const adminMenuItems = [
     label: 'Quản lý tài chính',
   },
   {
-    title: 'Phiếu gói',
+    title: 'Gói dịch vụ',
     href: '/admin/service-package-bookings',
     icon: ClipboardList,
-    label: 'Quản lý phiếu gói dịch vụ',
+    label: 'Quản lý gói dịch vụ',
   },
   {
     title: 'Feedback',

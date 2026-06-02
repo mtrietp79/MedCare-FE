@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { adminApi, type AdminScheduleEntry } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import { getAppointmentStatusClass, getAppointmentStatusLabel } from '@/lib/appointment-status'
 
 interface HttpError extends Error {
   status?: number
@@ -31,34 +32,12 @@ function normalizeText(value?: string) {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-function statusBadgeClass(status?: string, statusCode?: string) {
-  const code = normalizeText(statusCode)
-  const text = normalizeText(status)
-
-  if (code.includes('cancel') || text.includes('huy lich') || text.includes('da huy')) {
-    return 'bg-red-50 text-red-700 border-red-200'
-  }
-
-  if (code.includes('complete') || text.includes('da kham')) {
-    return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  }
-
-  if (code.includes('pending') || text.includes('cho kham') || text.includes('chua kham')) {
-    return 'bg-amber-50 text-amber-700 border-amber-200'
-  }
-
-  return 'bg-slate-100 text-slate-700 border-slate-200'
+function statusBadgeClass(status?: string, statusDisplay?: string, statusCode?: string) {
+  return getAppointmentStatusClass(statusCode || status, statusDisplay || status)
 }
 
-function statusLabel(status?: string, statusCode?: string) {
-  const text = String(status || '').trim()
-  if (text) return text
-
-  const code = normalizeText(statusCode)
-  if (code.includes('cancel')) return 'Đã hủy'
-  if (code.includes('complete')) return 'Đã khám'
-  if (code.includes('pending')) return 'Chờ khám'
-  return '-'
+function statusLabel(status?: string, statusDisplay?: string, statusCode?: string) {
+  return getAppointmentStatusLabel(statusCode || status, statusDisplay || status)
 }
 
 function dateTimeLabel(date?: string, time?: string) {
@@ -124,6 +103,7 @@ export function AdminSchedulePage() {
         item.date,
         item.time,
         item.status,
+        item.statusDisplay,
         item.statusCode,
       ]
         .map((value) => normalizeText(value))
@@ -190,8 +170,8 @@ export function AdminSchedulePage() {
                     <TableCell>{item.specialtyName || '-'}</TableCell>
                     <TableCell>{dateTimeLabel(item.date, item.time)}</TableCell>
                     <TableCell>
-                      <Badge className={`border ${statusBadgeClass(item.status, item.statusCode)}`}>
-                        {statusLabel(item.status, item.statusCode)}
+                      <Badge className={`border ${statusBadgeClass(item.status, item.statusDisplay, item.statusCode)}`}>
+                        {statusLabel(item.status, item.statusDisplay, item.statusCode)}
                       </Badge>
                     </TableCell>
                   </TableRow>

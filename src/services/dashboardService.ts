@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { API_BASE_URL, getStoredToken, handleProtectedApiAuthFailure } from './auth'
+import { API_BASE_URL, getStoredRole, getStoredToken, handleProtectedApiAuthFailure } from './auth'
 
 export interface DashboardSummaryResponse {
   totalAppointments?: number
@@ -28,6 +28,9 @@ export interface RecentAppointmentResponse {
   date?: string
   time?: string
   status?: string
+  statusDisplay?: string
+  paymentStatus?: string
+  paymentStatusDisplay?: string
   statusCode?: string
 }
 
@@ -53,21 +56,83 @@ dashboardClient.interceptors.response.use(
   }
 )
 
+function getDashboardAuthContext() {
+  const token = getStoredToken()
+  const role = getStoredRole()
+  const authHeader = token ? `Bearer ${token}` : null
+  const isAdmin = role === 'ROLE_ADMIN'
+  const isLoginRoute = typeof window !== 'undefined' && window.location.pathname === '/login'
+
+  return { role, authHeader, isAdmin, isLoginRoute }
+}
+
 export const dashboardService = {
   async getSummary(): Promise<DashboardSummaryResponse> {
-    const { data } = await dashboardClient.get<DashboardSummaryResponse>('/admin/dashboard/summary')
+    const { role, authHeader, isAdmin, isLoginRoute } = getDashboardAuthContext()
+    const endpoint = '/admin/dashboard/summary'
+    console.debug('[DashboardService] Request', {
+      url: `${API_BASE_URL}${endpoint}`,
+      role,
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      hasAuthorizationHeader: Boolean(authHeader),
+      authorizationHeader: authHeader,
+    })
+
+    if (!isAdmin || !authHeader || isLoginRoute) {
+      console.debug('[DashboardService] Skip request', {
+        reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
+      })
+      return {}
+    }
+
+    const { data } = await dashboardClient.get<DashboardSummaryResponse>(endpoint)
     return data ?? {}
   },
 
   async getMonthlyPatients(year: number): Promise<MonthlyPatientsResponse[]> {
-    const { data } = await dashboardClient.get<MonthlyPatientsResponse[]>('/admin/dashboard/monthly-patients', {
+    const { role, authHeader, isAdmin, isLoginRoute } = getDashboardAuthContext()
+    const endpoint = '/admin/dashboard/monthly-patients'
+    console.debug('[DashboardService] Request', {
+      url: `${API_BASE_URL}${endpoint}`,
+      role,
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      hasAuthorizationHeader: Boolean(authHeader),
+      authorizationHeader: authHeader,
+      params: { year },
+    })
+
+    if (!isAdmin || !authHeader || isLoginRoute) {
+      console.debug('[DashboardService] Skip request', {
+        reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
+      })
+      return []
+    }
+
+    const { data } = await dashboardClient.get<MonthlyPatientsResponse[]>(endpoint, {
       params: { year },
     })
     return Array.isArray(data) ? data : []
   },
 
   async getRecentAppointments(): Promise<RecentAppointmentResponse[]> {
-    const { data } = await dashboardClient.get<any>('/admin/dashboard/recent-appointments')
+    const { role, authHeader, isAdmin, isLoginRoute } = getDashboardAuthContext()
+    const endpoint = '/admin/dashboard/recent-appointments'
+    console.debug('[DashboardService] Request', {
+      url: `${API_BASE_URL}${endpoint}`,
+      role,
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      hasAuthorizationHeader: Boolean(authHeader),
+      authorizationHeader: authHeader,
+    })
+
+    if (!isAdmin || !authHeader || isLoginRoute) {
+      console.debug('[DashboardService] Skip request', {
+        reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
+      })
+      return []
+    }
+
+    const { data } = await dashboardClient.get<any>(endpoint)
     return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
   },
 }

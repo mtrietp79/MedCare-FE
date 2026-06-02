@@ -64,6 +64,7 @@ export function BookingWizard() {
   const [doctors, setDoctors] = useState<Doctor[]>([])
   const [specialties, setSpecialties] = useState<Array<{ id: string; name: string }>>([])
   const [selectedSpecialtyId, setSelectedSpecialtyId] = useState<string | null>(null)
+  const [showAllSpecialties, setShowAllSpecialties] = useState(false)
   const [selectedMedicalService, setSelectedMedicalService] = useState<MedicalService | null>(null)
   const [bookingRules, setBookingRules] = useState<BookingRules | null>(null)
   const [patient, setPatient] = useState<Patient | null>(null)
@@ -109,6 +110,26 @@ export function BookingWizard() {
     () => Math.max(0, activeSteps.findIndex((step) => step.id === currentStep)),
     [activeSteps, currentStep]
   )
+
+  const DEFAULT_SPECIALTY_VISIBLE_COUNT = 6
+  const hasHiddenSpecialties = specialties.length > DEFAULT_SPECIALTY_VISIBLE_COUNT
+  const visibleSpecialties = useMemo(() => {
+    if (showAllSpecialties || !hasHiddenSpecialties) {
+      return specialties
+    }
+
+    if (!selectedSpecialtyId) {
+      return specialties.slice(0, DEFAULT_SPECIALTY_VISIBLE_COUNT)
+    }
+
+    const selectedIndex = specialties.findIndex((specialty) => specialty.id === selectedSpecialtyId)
+    if (selectedIndex < 0 || selectedIndex < DEFAULT_SPECIALTY_VISIBLE_COUNT) {
+      return specialties.slice(0, DEFAULT_SPECIALTY_VISIBLE_COUNT)
+    }
+
+    const pinned = specialties[selectedIndex]
+    return [...specialties.slice(0, DEFAULT_SPECIALTY_VISIBLE_COUNT - 1), pinned]
+  }, [hasHiddenSpecialties, selectedSpecialtyId, showAllSpecialties, specialties])
 
   const syncPatientIntoBookingForm = useCallback((patientData: Patient | null) => {
     if (!patientData) return
@@ -373,6 +394,11 @@ export function BookingWizard() {
 
     void loadDoctorsBySpecialty()
   }, [isServiceBooking, selectedSpecialtyId])
+
+  useEffect(() => {
+    if (currentStep !== 'specialty') return
+    setShowAllSpecialties(false)
+  }, [currentStep])
 
   useEffect(() => {
     const fetchSlots = async () => {
@@ -648,23 +674,38 @@ export function BookingWizard() {
                     <p className="text-muted-foreground">Không có chuyên khoa</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {specialties.map((specialty) => (
-                      <button
-                        key={specialty.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedSpecialtyId(specialty.id)
-                          setFormData((prev) => ({ ...prev, doctorId: '', date: '', time: '' }))
-                          setSelectedSlot(null)
-                        }}
-                        className={`p-4 rounded-lg border-2 text-center ${
-                          selectedSpecialtyId === specialty.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                        }`}
-                      >
-                        {specialty.name}
-                      </button>
-                    ))}
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {visibleSpecialties.map((specialty) => (
+                        <button
+                          key={specialty.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSpecialtyId(specialty.id)
+                            setFormData((prev) => ({ ...prev, doctorId: '', date: '', time: '' }))
+                            setSelectedSlot(null)
+                          }}
+                          className={`p-4 rounded-lg border-2 text-center ${
+                            selectedSpecialtyId === specialty.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                          }`}
+                        >
+                          {specialty.name}
+                        </button>
+                      ))}
+                    </div>
+
+                    {hasHiddenSpecialties && (
+                      <div className="flex justify-center">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowAllSpecialties((prev) => !prev)}
+                          className="min-w-[140px]"
+                        >
+                          {showAllSpecialties ? 'Thu gọn' : 'Hiện thêm'}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

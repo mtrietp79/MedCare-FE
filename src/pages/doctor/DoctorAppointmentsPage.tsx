@@ -1,19 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Check, ChevronsUpDown, Eye, FilePenLine, Pill, Plus, Stethoscope, Trash2 } from 'lucide-react'
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from 'react'
+import { CalendarDays, Eye, FilePenLine, Pill, Plus, Stethoscope, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Switch } from '@/components/ui/switch'
+import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -41,7 +35,19 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { safeString } from '@/lib/admin-normalizers'
 import { useToast } from '@/hooks/use-toast'
 import { QUERY_KEYS, invalidateQueries } from '@/lib/query-invalidation'
-import { cn } from '@/lib/utils'
+import {
+  getAppointmentStatusClass,
+  getAppointmentStatusKey,
+  getAppointmentStatusLabel,
+  resolvePaymentStatusView,
+} from '@/lib/appointment-status'
+import {
+  BillingSummaryPanel,
+  MedicineCategorySelect,
+  MedicineSelect,
+  PrescriptionItemsTable,
+  type PrescriptionTableItem,
+} from '@/components/doctor/complete-appointment'
 
 interface PrescriptionItemForm {
   medicineCategory: string
@@ -86,6 +92,12 @@ interface CompleteResultSummary {
   followUpText?: string
 }
 
+interface MedicineDraftErrors {
+  category?: string
+  medicineId?: string
+  quantity?: string
+}
+
 const SLOT_DISABLED_REASONS = new Set(['PAST', 'LESS_THAN_2H', 'FULL', 'TOO_FAR'])
 const MEDICINE_CATEGORY_ALL = '__all__'
 
@@ -93,12 +105,22 @@ const initialCompleteForm: CompleteFormState = {
   symptoms: '',
   diagnosis: '',
   advice: '',
-  medicines: [{ medicineCategory: MEDICINE_CATEGORY_ALL, medicineId: '', quantity: '1', dosage: '', note: '' }],
+  medicines: [],
   medicalServices: [],
   followUpEnabled: false,
   followUpDate: '',
   followUpTime: '',
   followUpNote: '',
+}
+
+function createInitialMedicineDraft(): PrescriptionItemForm {
+  return {
+    medicineCategory: MEDICINE_CATEGORY_ALL,
+    medicineId: '',
+    quantity: '1',
+    dosage: '',
+    note: '',
+  }
 }
 
 function parseDateInput(value?: string): Date | null {
@@ -170,31 +192,27 @@ function normalizeText(value: string): string {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-function normalizeStatus(rawStatus: string): 'pending' | 'completed' | 'cancelled' {
-  const status = normalizeText(rawStatus)
-  if (status.includes('huy') || status.includes('cancel')) return 'cancelled'
-  if (status.includes('completed') || status.includes('da kham') || status.includes('hoan thanh')) return 'completed'
-  return 'pending'
+function isAllMedicineCategory(value?: string): boolean {
+  const normalized = normalizeText(safeString(value))
+  return !normalized || normalized === MEDICINE_CATEGORY_ALL || normalized === 'all' || normalized === 'tat ca'
 }
 
-function getStatusLabel(rawStatus: string): string {
-  const key = normalizeStatus(rawStatus)
-  if (key === 'pending') return 'Chá» khÃ¡m'
-  if (key === 'completed') return 'ÄÃ£ khÃ¡m'
-  return 'Há»§y lá»‹ch'
+function getStatusKey(rawStatus?: string, rawStatusDisplay?: string): 'pending' | 'completed' | 'cancelled' {
+  return getAppointmentStatusKey(rawStatus, rawStatusDisplay)
 }
 
-function getStatusBadgeClass(rawStatus: string): string {
-  const key = normalizeStatus(rawStatus)
-  if (key === 'pending') return 'bg-amber-50 text-amber-700 border-amber-200'
-  if (key === 'completed') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  return 'bg-red-50 text-red-700 border-red-200'
+function getStatusLabel(rawStatus?: string, rawStatusDisplay?: string): string {
+  return getAppointmentStatusLabel(rawStatus, rawStatusDisplay)
+}
+
+function getStatusBadgeClass(rawStatus?: string, rawStatusDisplay?: string): string {
+  return getAppointmentStatusClass(rawStatus, rawStatusDisplay)
 }
 
 function getAppointmentTypeLabel(rawType: string): string {
   const type = normalizeText(rawType)
-  if (type.includes('tai') || type.includes('follow') || type.includes('revisit')) return 'TÃ¡i khÃ¡m'
-  return 'KhÃ¡m bá»‡nh'
+  if (type.includes('tai') || type.includes('follow') || type.includes('revisit')) return 'Tái khám'
+  return 'Khám bệnh'
 }
 
 function getPatientName(appointment: DoctorAppointment): string {
@@ -253,47 +271,11 @@ function isMedicineOutOfStock(medicine?: DoctorMedicine): boolean {
   return status.includes('het hang') || status.includes('out_of_stock')
 }
 
-function getPaymentStatusView(rawPaymentStatus?: string): { label: string; className: string } {
-  const source = safeString(rawPaymentStatus)
-  if (!source) {
-    return {
-      label: '-',
-      className: 'bg-slate-50 text-slate-700 border-slate-200',
-    }
-  }
-
-  const normalized = normalizeText(source)
-  if (normalized.includes('paid')) {
-    return {
-      label: 'ÄÃ£ thanh toÃ¡n',
-      className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    }
-  }
-
-  if (normalized.includes('fail')) {
-    return {
-      label: 'Thanh toÃ¡n tháº¥t báº¡i',
-      className: 'bg-red-50 text-red-700 border-red-200',
-    }
-  }
-
-  if (normalized.includes('cancel')) {
-    return {
-      label: 'ÄÃ£ há»§y thanh toÃ¡n',
-      className: 'bg-slate-100 text-slate-700 border-slate-300',
-    }
-  }
-
-  if (normalized.includes('unpaid') || normalized.includes('pending')) {
-    return {
-      label: 'ChÆ°a thanh toÃ¡n',
-      className: 'bg-amber-50 text-amber-700 border-amber-200',
-    }
-  }
-
+function getPaymentStatusView(rawPaymentStatus?: string, rawPaymentStatusDisplay?: string): { label: string; className: string } {
+  const view = resolvePaymentStatusView(rawPaymentStatus, rawPaymentStatusDisplay)
   return {
-    label: source,
-    className: 'bg-sky-50 text-sky-700 border-sky-200',
+    label: view.label,
+    className: view.className,
   }
 }
 
@@ -335,10 +317,16 @@ export function DoctorAppointmentsPage() {
   const [appointments, setAppointments] = useState<DoctorAppointment[]>([])
   const [medicines, setMedicines] = useState<DoctorMedicine[]>([])
   const [medicineCategories, setMedicineCategories] = useState<string[]>([])
+  const [medicineCategoriesLoading, setMedicineCategoriesLoading] = useState(false)
+  const [medicineCategoriesError, setMedicineCategoriesError] = useState('')
   const [medicinePickerKeyword, setMedicinePickerKeyword] = useState('')
   const [medicinePickerOptions, setMedicinePickerOptions] = useState<DoctorMedicine[]>([])
   const [medicinePickerLoading, setMedicinePickerLoading] = useState(false)
   const [medicinePickerError, setMedicinePickerError] = useState('')
+  const [medicinePickerRetrySeed, setMedicinePickerRetrySeed] = useState(0)
+  const [isMedicinePickerOpen, setIsMedicinePickerOpen] = useState(false)
+  const [medicineDraft, setMedicineDraft] = useState<PrescriptionItemForm>(createInitialMedicineDraft())
+  const [medicineDraftErrors, setMedicineDraftErrors] = useState<MedicineDraftErrors>({})
   const [medicalServices, setMedicalServices] = useState<DoctorMedicalService[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -355,7 +343,6 @@ export function DoctorAppointmentsPage() {
   const [followUpSlotsLoading, setFollowUpSlotsLoading] = useState(false)
   const [followUpSlotsError, setFollowUpSlotsError] = useState('')
   const [isFollowUpDatePickerOpen, setIsFollowUpDatePickerOpen] = useState(false)
-  const [openMedicinePickerIndex, setOpenMedicinePickerIndex] = useState<number | null>(null)
   const [serviceDraftId, setServiceDraftId] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [completeResultSummary, setCompleteResultSummary] = useState<CompleteResultSummary | null>(null)
@@ -369,6 +356,26 @@ export function DoctorAppointmentsPage() {
     return nextAppointments
   }
 
+  const loadMedicineCategories = async () => {
+    setMedicineCategoriesLoading(true)
+    setMedicineCategoriesError('')
+
+    try {
+      const categoriesResult = await doctorAppointmentService.getMedicineCategories()
+      const normalized = Array.isArray(categoriesResult)
+        ? categoriesResult.map((item) => safeString(item)).filter(Boolean)
+        : []
+      setMedicineCategories(normalized)
+      return normalized
+    } catch (categoryError: any) {
+      setMedicineCategories([])
+      setMedicineCategoriesError(getBackendErrorMessage(categoryError, 'Không thể tải danh mục thuốc.'))
+      return []
+    } finally {
+      setMedicineCategoriesLoading(false)
+    }
+  }
+
   const loadData = async () => {
     setLoading(true)
     setError('')
@@ -376,10 +383,10 @@ export function DoctorAppointmentsPage() {
     try {
       await refreshAppointmentsList()
 
-      const [medicinesResult, servicesResult, medicineCategoriesResult] = await Promise.allSettled([
+      const [medicinesResult, servicesResult] = await Promise.allSettled([
         doctorAppointmentService.getMedicines(),
         doctorAppointmentService.getMedicalServices(),
-        doctorAppointmentService.getMedicineCategories(),
+        loadMedicineCategories(),
       ])
 
       setMedicines(
@@ -393,14 +400,8 @@ export function DoctorAppointmentsPage() {
           ? servicesResult.value
           : []
       )
-
-      setMedicineCategories(
-        medicineCategoriesResult.status === 'fulfilled' && Array.isArray(medicineCategoriesResult.value)
-          ? medicineCategoriesResult.value.map((item) => safeString(item)).filter(Boolean)
-          : []
-      )
     } catch (fetchError: any) {
-      setError(fetchError?.message || 'KhÃ´ng thá»ƒ táº£i danh sÃ¡ch lá»‹ch háº¹n.')
+      setError(fetchError?.message || 'Không thể tải danh sách lịch hẹn.')
     } finally {
       setLoading(false)
     }
@@ -416,12 +417,12 @@ export function DoctorAppointmentsPage() {
         ? getAppointmentTypeLabel(
             safeString(selectedAppointment.appointmentType) || safeString(selectedAppointment.type)
           )
-        : 'KhÃ¡m bá»‡nh',
+        : 'Khám bệnh',
     [selectedAppointment]
   )
 
   const isCurrentAppointmentFollowUp = useMemo(
-    () => selectedAppointmentTypeLabel === 'TÃ¡i khÃ¡m',
+    () => selectedAppointmentTypeLabel === 'Tái khám',
     [selectedAppointmentTypeLabel]
   )
 
@@ -447,6 +448,7 @@ export function DoctorAppointmentsPage() {
 
     medicineCategories.forEach((category) => {
       const normalizedCategory = getMedicineCategoryLabel(category)
+      if (isAllMedicineCategory(normalizedCategory)) return
       if (!uniqueCategories.has(normalizedCategory)) {
         uniqueCategories.set(normalizedCategory, normalizedCategory)
       }
@@ -465,9 +467,63 @@ export function DoctorAppointmentsPage() {
   }, [medicineCategories, medicines])
 
   const activeMedicinePickerCategory = useMemo(() => {
-    if (openMedicinePickerIndex === null) return MEDICINE_CATEGORY_ALL
-    return safeString(formState.medicines[openMedicinePickerIndex]?.medicineCategory) || MEDICINE_CATEGORY_ALL
-  }, [formState.medicines, openMedicinePickerIndex])
+    const category = safeString(medicineDraft.medicineCategory)
+    return isAllMedicineCategory(category) ? MEDICINE_CATEGORY_ALL : category
+  }, [medicineDraft.medicineCategory])
+
+  const selectedDraftMedicine = useMemo(
+    () => medicineById.get(String(medicineDraft.medicineId)) || null,
+    [medicineById, medicineDraft.medicineId]
+  )
+
+  const draftQuantityValue = useMemo(() => {
+    const quantity = Number(medicineDraft.quantity)
+    return Number.isFinite(quantity) && quantity > 0 ? quantity : 0
+  }, [medicineDraft.quantity])
+
+  const draftUnitPrice = Number(selectedDraftMedicine?.price ?? 0)
+  const draftLineTotal = draftQuantityValue * draftUnitPrice
+
+  const prescriptionTableItems = useMemo<PrescriptionTableItem[]>(
+    () =>
+      formState.medicines
+        .map((item) => {
+          const medicine = medicineById.get(String(item.medicineId))
+          if (!medicine) return null
+
+          const quantity = Number(item.quantity)
+          const safeQuantity = Number.isFinite(quantity) && quantity > 0 ? quantity : 0
+          const unitPrice = Number(medicine.price ?? 0)
+
+          return {
+            medicineId: String(item.medicineId),
+            name: medicine.name,
+            category: getMedicineCategoryLabel(medicine.medicineCategory),
+            unit: getMedicineUnitLabel(medicine.unit),
+            quantity: safeQuantity,
+            unitPrice,
+            lineTotal: safeQuantity * unitPrice,
+            dosage: item.dosage,
+            note: item.note,
+          }
+        })
+        .filter((item): item is PrescriptionTableItem => item !== null),
+    [formState.medicines, medicineById]
+  )
+
+  const filteredMedicineByCategory = useMemo(() => {
+    if (activeMedicinePickerCategory === MEDICINE_CATEGORY_ALL) return medicines
+    return medicines.filter(
+      (medicine) => getMedicineCategoryLabel(medicine.medicineCategory) === activeMedicinePickerCategory
+    )
+  }, [activeMedicinePickerCategory, medicines])
+
+  const medicineSelectOptions = useMemo(
+    () => (isMedicinePickerOpen ? medicinePickerOptions : filteredMedicineByCategory),
+    [filteredMedicineByCategory, isMedicinePickerOpen, medicinePickerOptions]
+  )
+
+  const draftUnitLabel = getMedicineUnitLabel(selectedDraftMedicine?.unit)
 
   const servicePriceById = useMemo(() => {
     const nextMap = new Map<string, number>()
@@ -536,7 +592,7 @@ export function DoctorAppointmentsPage() {
       const type = normalizeText(
         getAppointmentTypeLabel(safeString(appointment.appointmentType) || safeString(appointment.type))
       )
-      const status = normalizeText(getStatusLabel(safeString(appointment.status)))
+      const status = normalizeText(getStatusLabel(appointment.status, appointment.statusDisplay))
       return [patient, date, type, status].some((value) => value.includes(keywordLower))
     })
   }, [appointments, keyword])
@@ -592,7 +648,7 @@ export function DoctorAppointmentsPage() {
         if (!active) return
         setFollowUpSlots([])
         setFollowUpSlotsError(
-          getBackendErrorMessage(slotError, 'KhÃ´ng thá»ƒ táº£i khung giá» tÃ¡i khÃ¡m. Vui lÃ²ng nháº­p giá» thá»§ cÃ´ng.')
+          getBackendErrorMessage(slotError, 'Không thể tải khung giờ tái khám. Vui lòng nhập giờ thủ công.')
         )
       } finally {
         if (active) {
@@ -609,7 +665,7 @@ export function DoctorAppointmentsPage() {
   }, [formState.followUpDate, formState.followUpEnabled, selectedAppointment?.doctorId])
 
   useEffect(() => {
-    if (!completeOpen || openMedicinePickerIndex === null) {
+    if (!completeOpen) {
       setMedicinePickerOptions([])
       setMedicinePickerLoading(false)
       setMedicinePickerError('')
@@ -633,13 +689,14 @@ export function DoctorAppointmentsPage() {
         })
 
         if (!active) return
-        setMedicinePickerOptions(Array.isArray(result) ? result : [])
+        const normalizedResult = Array.isArray(result) ? result : []
+        setMedicinePickerOptions(normalizedResult)
 
         setMedicines((prev) => {
-          if (!Array.isArray(result) || result.length === 0) return prev
+          if (normalizedResult.length === 0) return prev
           const byId = new Map<string, DoctorMedicine>()
           prev.forEach((item) => byId.set(String(item.id), item))
-          result.forEach((item) => byId.set(String(item.id), item))
+          normalizedResult.forEach((item) => byId.set(String(item.id), item))
           return Array.from(byId.values())
         })
       } catch (fetchError: any) {
@@ -658,7 +715,7 @@ export function DoctorAppointmentsPage() {
     return () => {
       active = false
     }
-  }, [activeMedicinePickerCategory, completeOpen, debouncedMedicinePickerKeyword, openMedicinePickerIndex])
+  }, [activeMedicinePickerCategory, completeOpen, debouncedMedicinePickerKeyword, medicinePickerRetrySeed])
 
   const openDetail = async (appointment: DoctorAppointment) => {
     try {
@@ -676,11 +733,13 @@ export function DoctorAppointmentsPage() {
     setFollowUpSlots([])
     setFollowUpSlotsError('')
     setIsFollowUpDatePickerOpen(false)
-    setOpenMedicinePickerIndex(null)
+    setIsMedicinePickerOpen(false)
     setMedicinePickerKeyword('')
     setMedicinePickerOptions([])
     setMedicinePickerError('')
     setMedicinePickerLoading(false)
+    setMedicineDraft(createInitialMedicineDraft())
+    setMedicineDraftErrors({})
     setServiceDraftId('')
     setSubmitError('')
     setDiagnosisError('')
@@ -689,6 +748,7 @@ export function DoctorAppointmentsPage() {
     setFormState({
       ...initialCompleteForm,
       symptoms: fallbackSymptoms,
+      medicines: [],
     })
 
     try {
@@ -708,75 +768,117 @@ export function DoctorAppointmentsPage() {
     setCompleteOpen(true)
   }
 
-  const handleAddMedicineRow = () => {
-    const hasPendingRow = formState.medicines.some((item) => !safeString(item.medicineId))
-    if (hasPendingRow) {
-      toast({
-        title: 'Chưa chọn thuốc',
-        description: 'Vui lòng chọn thuốc ở dòng hiện tại trước khi thêm dòng mới.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    setFormState((prev) => ({
+  const handleMedicineDraftFieldChange = (field: keyof PrescriptionItemForm, value: string) => {
+    setMedicineDraft((prev) => ({
       ...prev,
-      medicines: [
-        ...prev.medicines,
-        { medicineCategory: MEDICINE_CATEGORY_ALL, medicineId: '', quantity: '1', dosage: '', note: '' },
-      ],
+      [field]: value,
     }))
   }
 
-  const handleRemoveMedicineRow = (index: number) => {
-    setOpenMedicinePickerIndex((prev) => {
-      if (prev === null) return prev
-      if (prev === index) return null
-      if (prev > index) return prev - 1
-      return prev
-    })
-    if (openMedicinePickerIndex === index) {
-      setMedicinePickerKeyword('')
-      setMedicinePickerOptions([])
-      setMedicinePickerError('')
-    }
+  const handleMedicineCategoryChange = (nextCategory: string) => {
+    setMedicineDraft((prev) => ({
+      ...prev,
+      medicineCategory: nextCategory,
+      medicineId: '',
+    }))
+    setMedicinePickerRetrySeed((prev) => prev + 1)
+    setMedicineDraftErrors((prev) => ({
+      ...prev,
+      category: undefined,
+      medicineId: undefined,
+    }))
+    setSubmitError('')
+  }
+
+  const handleSelectMedicine = (medicine: DoctorMedicine) => {
+    setMedicineDraft((prev) => ({ ...prev, medicineId: String(medicine.id) }))
+    setMedicineDraftErrors((prev) => ({ ...prev, medicineId: undefined }))
+    setSubmitError('')
+  }
+
+  const handleRemoveMedicineItem = (index: number) => {
     setFormState((prev) => ({
       ...prev,
       medicines: prev.medicines.filter((_, itemIndex) => itemIndex !== index),
     }))
   }
 
-  const handleMedicineChange = (index: number, field: keyof PrescriptionItemForm, value: string) => {
-    setFormState((prev) => ({
-      ...prev,
-      medicines: prev.medicines.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, [field]: value } : item
-      ),
-    }))
-  }
+  const handleAddMedicineItem = () => {
+    const nextErrors: MedicineDraftErrors = {}
 
-  const handleMedicineCategoryChange = (index: number, nextCategory: string) => {
-    if (openMedicinePickerIndex === index) {
-      setMedicinePickerKeyword('')
+    const selectedCategory = safeString(medicineDraft.medicineCategory)
+    const selectedMedicineId = safeString(medicineDraft.medicineId)
+    const quantity = Number(medicineDraft.quantity)
+
+    if (!selectedCategory) {
+      nextErrors.category = 'Vui lòng chọn danh mục thuốc.'
     }
 
-    setFormState((prev) => ({
-      ...prev,
-      medicines: prev.medicines.map((item, itemIndex) => {
-        if (itemIndex !== index) return item
+    if (!selectedMedicineId) {
+      nextErrors.medicineId = 'Vui lòng chọn thuốc.'
+    }
 
-        const currentMedicine = medicines.find((medicine) => String(medicine.id) === String(item.medicineId))
-        const currentCategory = getMedicineCategoryLabel(currentMedicine?.medicineCategory)
-        const stillValid =
-          nextCategory === MEDICINE_CATEGORY_ALL || (item.medicineId && currentCategory === nextCategory)
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      nextErrors.quantity = 'Số lượng phải lớn hơn 0.'
+    }
+
+    const selectedMedicine = selectedMedicineId ? medicineById.get(selectedMedicineId) : null
+    if (selectedMedicine && isMedicineOutOfStock(selectedMedicine)) {
+      nextErrors.medicineId = 'Thuốc đã hết hàng, vui lòng chọn thuốc khác.'
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setMedicineDraftErrors(nextErrors)
+      return
+    }
+
+    setMedicineDraftErrors({})
+
+    setFormState((prev) => {
+      const duplicateIndex = prev.medicines.findIndex((item) => String(item.medicineId) === selectedMedicineId)
+      if (duplicateIndex >= 0) {
+        const shouldMerge = window.confirm('Thuốc đã tồn tại trong đơn. Bạn có muốn gộp số lượng không?')
+        if (!shouldMerge) {
+          return prev
+        }
 
         return {
-          ...item,
-          medicineCategory: nextCategory,
-          medicineId: stillValid ? item.medicineId : '',
+          ...prev,
+          medicines: prev.medicines.map((item, index) => {
+            if (index !== duplicateIndex) return item
+
+            const mergedQuantity = Number(item.quantity || '0') + quantity
+            return {
+              ...item,
+              quantity: String(mergedQuantity),
+              dosage: medicineDraft.dosage.trim() || item.dosage,
+              note: medicineDraft.note.trim() || item.note,
+            }
+          }),
         }
-      }),
+      }
+
+      return {
+        ...prev,
+        medicines: [
+          ...prev.medicines,
+          {
+            medicineCategory: selectedCategory || MEDICINE_CATEGORY_ALL,
+            medicineId: selectedMedicineId,
+            quantity: String(quantity),
+            dosage: medicineDraft.dosage.trim(),
+            note: medicineDraft.note.trim(),
+          },
+        ],
+      }
+    })
+
+    setMedicineDraft((prev) => ({
+      ...createInitialMedicineDraft(),
+      medicineCategory: prev.medicineCategory || MEDICINE_CATEGORY_ALL,
     }))
+    setMedicinePickerKeyword('')
+    setSubmitError('')
   }
 
   const handleAddService = () => {
@@ -819,23 +921,23 @@ export function DoctorAppointmentsPage() {
     const nextErrors: FollowUpValidationErrors = {}
 
     if (!formState.followUpDate) {
-      nextErrors.date = 'Vui lÃ²ng chá»n ngÃ y tÃ¡i khÃ¡m.'
+      nextErrors.date = 'Vui lòng chọn ngày tái khám.'
     } else {
       const now = new Date()
       const localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
       if (formState.followUpDate < localToday) {
-        nextErrors.date = 'NgÃ y tÃ¡i khÃ¡m khÃ´ng Ä‘Æ°á»£c á»Ÿ quÃ¡ khá»©.'
+        nextErrors.date = 'Ngày tái khám không được ở quá khứ.'
       }
     }
 
     if (!formState.followUpTime) {
-      nextErrors.time = 'Vui lÃ²ng chá»n giá» tÃ¡i khÃ¡m.'
+      nextErrors.time = 'Vui lòng chọn giờ tái khám.'
     }
 
     if (!nextErrors.date && !nextErrors.time && formState.followUpDate && formState.followUpTime) {
       const followUpDateTime = new Date(`${formState.followUpDate}T${formState.followUpTime}:00`)
       if (Number.isNaN(followUpDateTime.getTime()) || followUpDateTime.getTime() <= Date.now()) {
-        nextErrors.time = 'Gio tai kham phai lon hon thoi diem hien tai.'
+        nextErrors.time = 'Giờ tái khám phải lớn hơn thời điểm hiện tại.'
       }
     }
 
@@ -855,6 +957,7 @@ export function DoctorAppointmentsPage() {
       return {
         ...appointment,
         status: result.status || 'COMPLETED',
+        statusDisplay: safeString(result.statusDisplay) || appointment.statusDisplay,
         type: result.appointmentType || appointment.appointmentType || appointment.type,
         appointmentType: result.appointmentType || appointment.appointmentType || appointment.type,
         consultationFee:
@@ -876,11 +979,13 @@ export function DoctorAppointmentsPage() {
           appointmentTime: followUp.appointmentTime,
           appointmentTimeLabel: followUp.appointmentTime,
           time: followUp.appointmentTime,
-          type: followUp.appointmentType || followUp.type || 'TÃ¡i khÃ¡m',
-          appointmentType: followUp.appointmentType || followUp.type || 'TÃ¡i khÃ¡m',
+          type: followUp.appointmentType || followUp.type || 'Tái khám',
+          appointmentType: followUp.appointmentType || followUp.type || 'Tái khám',
           status: followUp.status || 'PENDING',
+          statusDisplay: followUp.statusDisplay,
           consultationFee: followUp.consultationFee,
           paymentStatus: followUp.paymentStatus,
+          paymentStatusDisplay: followUp.paymentStatusDisplay,
           followUpNote: followUp.note,
           parentAppointmentId: followUp.parentAppointmentId
             ? String(followUp.parentAppointmentId)
@@ -901,7 +1006,7 @@ export function DoctorAppointmentsPage() {
 
     const diagnosisValue = formState.diagnosis.trim()
     if (!diagnosisValue) {
-      setDiagnosisError('Vui lÃ²ng nháº­p cháº©n Ä‘oÃ¡n trÆ°á»›c khi xÃ¡c nháº­n.')
+      setDiagnosisError('Vui lòng nhập chẩn đoán trước khi xác nhận.')
       return
     }
     setDiagnosisError('')
@@ -995,15 +1100,15 @@ export function DoctorAppointmentsPage() {
         const failedResult = syncResults.find((result) => result.status === 'rejected') as PromiseRejectedResult
         const syncErrorMessage = getBackendErrorMessage(
           failedResult?.reason,
-          'HoÃ n táº¥t khÃ¡m thÃ nh cÃ´ng nhÆ°ng chÆ°a Ä‘á»“ng bá»™ Ä‘Æ°á»£c toÃ n bá»™ dá»¯ liá»‡u.'
+          'Hoàn tất khám thành công nhưng chưa đồng bộ được toàn bộ dữ liệu.'
         )
         toast({
-          title: 'Cáº£nh bÃ¡o',
+          title: 'Cảnh báo',
           description: syncErrorMessage,
           variant: 'destructive',
         })
       } else {
-        toast({ title: 'ThÃ nh cÃ´ng', description: 'ÄÃ£ hoÃ n táº¥t lá»‹ch khÃ¡m.' })
+        toast({ title: 'Thành công', description: 'Đã hoàn tất lịch khám.' })
       }
 
       const consultationFee = Number(completeResult.invoice?.consultationFee ?? 0)
@@ -1013,15 +1118,15 @@ export function DoctorAppointmentsPage() {
       const invoiceTotal = Number(completeResult.invoice?.totalAmount ?? calculatedTotal)
 
       const invoiceTitle = completeResult.invoice
-        ? `HÃ³a Ä‘Æ¡n #${completeResult.invoice.id || '-'}`
+        ? `Hóa đơn #${completeResult.invoice.id || '-'}`
         : undefined
       const invoiceFormula = completeResult.invoice
-        ? `Tá»•ng tiá»n = PhÃ­ khÃ¡m + Tiá»n thuá»‘c + Tiá»n dá»‹ch vá»¥: ${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(
+        ? `Tổng tiền = Phí khám + Tiền thuốc + Tiền dịch vụ: ${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(
             consultationFee
           )} + ${formatCurrencyVnd(medicineTotal)} + ${formatCurrencyVnd(serviceTotal)}`
         : undefined
       const followUpText = completeResult.followUpAppointment?.id
-        ? `ÄÃ£ táº¡o lá»‹ch tÃ¡i khÃ¡m #${completeResult.followUpAppointment.id}.`
+        ? `Đã tạo lịch tái khám #${completeResult.followUpAppointment.id}.`
         : undefined
       setCompleteResultSummary({ invoiceTitle, invoiceFormula, followUpText })
 
@@ -1032,10 +1137,10 @@ export function DoctorAppointmentsPage() {
       setFollowUpErrors({})
       setSubmitError('')
     } catch (submitError: any) {
-      const errorMessage = getBackendErrorMessage(submitError, 'Khong the hoan tat lich kham.')
+      const errorMessage = getBackendErrorMessage(submitError, 'Không thể hoàn tất lịch khám.')
       setSubmitError(errorMessage)
       toast({
-        title: 'Lá»—i',
+        title: 'Lỗi',
         description: errorMessage,
         variant: 'destructive',
       })
@@ -1044,25 +1149,73 @@ export function DoctorAppointmentsPage() {
     }
   }
 
-  const selectedStatusLabel = selectedAppointment ? getStatusLabel(safeString(selectedAppointment.status)) : '-'
-  const selectedStatusBadgeClass = getStatusBadgeClass(selectedStatusLabel)
-  const selectedPaymentView = getPaymentStatusView(selectedAppointment?.paymentStatus)
+  const handleCompleteFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    void handleCompleteAppointment()
+  }
+
+  const handleCompleteFormKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== 'Enter') return
+    const target = event.target as HTMLElement
+    if (target.tagName.toLowerCase() === 'textarea') return
+    if (target.closest('[data-slot="command"]')) return
+    if ((target as HTMLButtonElement).type === 'submit') return
+    event.preventDefault()
+  }
+
+  const handleSaveDraft = () => {
+    if (!selectedAppointment?.id) return
+
+    try {
+      const draftKey = `doctor-complete-draft:${selectedAppointment.id}`
+      localStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          formState,
+          medicineDraft,
+        })
+      )
+
+      toast({
+        title: 'Đã lưu nháp',
+        description: 'Dữ liệu hoàn tất khám đã được lưu tạm trên trình duyệt.',
+      })
+    } catch {
+      toast({
+        title: 'Không thể lưu nháp',
+        description: 'Vui lòng thử lại.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const selectedStatusLabel = selectedAppointment
+    ? getStatusLabel(selectedAppointment.status, selectedAppointment.statusDisplay)
+    : '-'
+  const selectedStatusBadgeClass = getStatusBadgeClass(
+    selectedAppointment?.status,
+    selectedAppointment?.statusDisplay
+  )
+  const selectedPaymentView = getPaymentStatusView(
+    selectedAppointment?.paymentStatus,
+    selectedAppointment?.paymentStatusDisplay
+  )
   const todayDateOnly = toDateOnly(new Date())
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-[#111827]">Lá»‹ch háº¹n</h1>
-        <p className="text-[#6b7280]">Quáº£n lÃ½ lá»‹ch khÃ¡m cá»§a bá»‡nh nhÃ¢n</p>
+        <h1 className="text-3xl font-bold text-[#111827]">Lịch hẹn</h1>
+        <p className="text-[#6b7280]">Quản lý lịch khám của bệnh nhân</p>
       </div>
 
       <Card className="rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
         <CardHeader>
-          <CardTitle>Danh sÃ¡ch lá»‹ch háº¹n</CardTitle>
+          <CardTitle>Danh sách lịch hẹn</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <Input
-            placeholder="TÃ¬m theo bá»‡nh nhÃ¢n, ngÃ y khÃ¡m, tráº¡ng thÃ¡i..."
+            placeholder="Tìm theo bệnh nhân, ngày khám, trạng thái..."
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             className="max-w-md"
@@ -1083,17 +1236,17 @@ export function DoctorAppointmentsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Bá»‡nh nhÃ¢n</TableHead>
-                  <TableHead>NgÃ y giá»</TableHead>
-                  <TableHead>Loáº¡i khÃ¡m</TableHead>
-                  <TableHead>Tráº¡ng thÃ¡i</TableHead>
-                  <TableHead className="text-right">HÃ nh Ä‘á»™ng</TableHead>
+                  <TableHead>Bệnh nhân</TableHead>
+                  <TableHead>Ngày giờ</TableHead>
+                  <TableHead>Loại khám</TableHead>
+                  <TableHead>Trạng thái</TableHead>
+                  <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredAppointments.map((appointment) => {
-                  const statusLabel = getStatusLabel(safeString(appointment.status))
-                  const statusKey = normalizeStatus(safeString(appointment.status))
+                  const statusLabel = getStatusLabel(appointment.status, appointment.statusDisplay)
+                  const statusKey = getStatusKey(appointment.status, appointment.statusDisplay)
                   const appointmentType = getAppointmentTypeLabel(
                     safeString(appointment.appointmentType) || safeString(appointment.type)
                   )
@@ -1108,20 +1261,20 @@ export function DoctorAppointmentsPage() {
                       <TableCell>
                         <div>{appointmentType}</div>
                         {isFollowUpAppointment(appointment) && appointment.parentAppointmentId && (
-                          <div className="text-xs text-[#6b7280]">Lá»‹ch gá»‘c: #{appointment.parentAppointmentId}</div>
+                          <div className="text-xs text-[#6b7280]">Lịch gốc: #{appointment.parentAppointmentId}</div>
                         )}
                         {safeString(appointment.followUpNote) && (
-                          <div className="text-xs text-[#6b7280]">Ghi chÃº: {safeString(appointment.followUpNote)}</div>
+                          <div className="text-xs text-[#6b7280]">Ghi chú: {safeString(appointment.followUpNote)}</div>
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge className={`rounded-full border ${getStatusBadgeClass(statusLabel)}`}>
+                        <Badge className={`rounded-full border ${getStatusBadgeClass(appointment.status, appointment.statusDisplay)}`}>
                           {statusLabel}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         {statusKey === 'cancelled' && (
-                          <Badge className="rounded-full border bg-red-50 text-red-700 border-red-200">ÄÃ£ há»§y</Badge>
+                          <Badge className="rounded-full border bg-red-50 text-red-700 border-red-200">Đã hủy</Badge>
                         )}
 
                         {statusKey !== 'cancelled' && (
@@ -1145,7 +1298,7 @@ export function DoctorAppointmentsPage() {
                 {filteredAppointments.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="py-10 text-center text-[#6b7280]">
-                      KhÃ´ng cÃ³ lá»‹ch háº¹n phÃ¹ há»£p.
+                      Không có lịch hẹn phù hợp.
                     </TableCell>
                   </TableRow>
                 )}
@@ -1158,44 +1311,47 @@ export function DoctorAppointmentsPage() {
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Chi tiáº¿t lá»‹ch háº¹n</DialogTitle>
-            <DialogDescription>ThÃ´ng tin cuá»™c háº¹n cá»§a bá»‡nh nhÃ¢n</DialogDescription>
+            <DialogTitle>Chi tiết lịch hẹn</DialogTitle>
+            <DialogDescription>Thông tin cuộc hẹn của bệnh nhân</DialogDescription>
           </DialogHeader>
 
           {selectedAppointment && (
             <div className="grid gap-3 text-sm">
-              <div><span className="font-semibold">Bá»‡nh nhÃ¢n:</span> {getPatientName(selectedAppointment)}</div>
-              <div><span className="font-semibold">NgÃ y khÃ¡m:</span> {getDateLabel(selectedAppointment)}</div>
-              <div><span className="font-semibold">Giá» khÃ¡m:</span> {getTimeLabel(selectedAppointment)}</div>
+              <div><span className="font-semibold">Bệnh nhân:</span> {getPatientName(selectedAppointment)}</div>
+              <div><span className="font-semibold">Ngày khám:</span> {getDateLabel(selectedAppointment)}</div>
+              <div><span className="font-semibold">Giờ khám:</span> {getTimeLabel(selectedAppointment)}</div>
               <div>
-                <span className="font-semibold">Loáº¡i khÃ¡m:</span>{' '}
+                <span className="font-semibold">Loại khám:</span>{' '}
                 {getAppointmentTypeLabel(
                   safeString(selectedAppointment.appointmentType) || safeString(selectedAppointment.type)
                 )}
               </div>
-              <div><span className="font-semibold">Tráº¡ng thÃ¡i:</span> {getStatusLabel(safeString(selectedAppointment.status))}</div>
+              <div><span className="font-semibold">Trạng thái:</span> {getStatusLabel(selectedAppointment.status, selectedAppointment.statusDisplay)}</div>
               <div>
-                <span className="font-semibold">PhÃ­ khÃ¡m:</span>{' '}
+                <span className="font-semibold">Phí khám:</span>{' '}
                 {selectedAppointment.consultationFee !== undefined
                   ? formatCurrencyVnd(selectedAppointment.consultationFee)
                   : '-'}
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-semibold">Thanh toÃ¡n:</span>
+                <span className="font-semibold">Thanh toán:</span>
                 <Badge
-                  className={`rounded-full border ${getPaymentStatusView(selectedAppointment.paymentStatus).className}`}
+                  className={`rounded-full border ${getPaymentStatusView(
+                    selectedAppointment.paymentStatus,
+                    selectedAppointment.paymentStatusDisplay
+                  ).className}`}
                 >
-                  {getPaymentStatusView(selectedAppointment.paymentStatus).label}
+                  {getPaymentStatusView(selectedAppointment.paymentStatus, selectedAppointment.paymentStatusDisplay).label}
                 </Badge>
               </div>
               {selectedAppointment.parentAppointmentId && (
-                <div><span className="font-semibold">Lá»‹ch gá»‘c:</span> #{selectedAppointment.parentAppointmentId}</div>
+                <div><span className="font-semibold">Lịch gốc:</span> #{selectedAppointment.parentAppointmentId}</div>
               )}
               {safeString(selectedAppointment.followUpNote) && (
-                <div><span className="font-semibold">Ghi chÃº tÃ¡i khÃ¡m:</span> {safeString(selectedAppointment.followUpNote)}</div>
+                <div><span className="font-semibold">Ghi chú tái khám:</span> {safeString(selectedAppointment.followUpNote)}</div>
               )}
               <div>
-                <span className="font-semibold">Triá»‡u chá»©ng/ Ghi chÃº:</span>{' '}
+                <span className="font-semibold">Triệu chứng/ Ghi chú:</span>{' '}
                 {(() => {
                   const symptomsText = safeString(selectedAppointment.symptoms)
                   const notesText = safeString(selectedAppointment.notes)
@@ -1215,644 +1371,496 @@ export function DoctorAppointmentsPage() {
           if (!nextOpen) {
             setServiceDraftId('')
             setIsFollowUpDatePickerOpen(false)
-            setOpenMedicinePickerIndex(null)
+            setIsMedicinePickerOpen(false)
             setMedicinePickerKeyword('')
             setMedicinePickerOptions([])
             setMedicinePickerError('')
             setMedicinePickerLoading(false)
+            setMedicineDraft(createInitialMedicineDraft())
+            setMedicineDraftErrors({})
             setFollowUpSlots([])
             setFollowUpSlotsError('')
             setDiagnosisError('')
           }
         }}
       >
-        <DialogContent className="sm:max-w-[1200px] max-h-[92vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>HoÃ n táº¥t khÃ¡m & kÃª Ä‘Æ¡n</DialogTitle>
-            <DialogDescription>
-              HoÃ n thiá»‡n há»“ sÆ¡ khÃ¡m, kÃª thuá»‘c, chá»n dá»‹ch vá»¥ vÃ  táº¡o lá»‹ch tÃ¡i khÃ¡m náº¿u cáº§n.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="sm:max-w-[1240px] max-h-[92vh] overflow-hidden p-0">
+          <form onSubmit={handleCompleteFormSubmit} onKeyDown={handleCompleteFormKeyDown} className="flex max-h-[92vh] flex-col">
+            <div className="overflow-y-auto px-4 pb-6 pt-5 sm:px-6">
+              <DialogHeader className="mb-4 space-y-1 text-left">
+                <DialogTitle className="text-lg font-semibold">Hoàn tất khám & kê đơn</DialogTitle>
+                <DialogDescription className="text-sm">
+                  Ghi nhận nội dung khám, kê thuốc, thêm dịch vụ và hẹn tái khám nếu cần.
+                </DialogDescription>
+              </DialogHeader>
 
-          {selectedAppointment ? (
-            <div className="space-y-6">
-              <div className="rounded-2xl border border-[#dbeafe] bg-[#f8fbff] p-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Bá»‡nh nhÃ¢n</p>
-                    <h3 className="text-xl font-semibold text-[#0f172a]">{getPatientName(selectedAppointment)}</h3>
-                    <p className="mt-1 text-sm text-[#475569]">
-                      MÃ£ lá»‹ch: {safeString(selectedAppointment.appointmentCode) || `#${selectedAppointment.id}`}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge className="rounded-full border bg-blue-50 text-blue-700 border-blue-200">
-                      {selectedAppointmentTypeLabel}
-                    </Badge>
-                    <Badge className={`rounded-full border ${selectedStatusBadgeClass}`}>
-                      {selectedStatusLabel}
-                    </Badge>
-                    <Badge className={`rounded-full border ${selectedPaymentView.className}`}>
-                      {selectedPaymentView.label}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-xl border border-[#e5e7eb] bg-white px-3 py-2">
-                    <p className="text-xs text-[#64748b]">NgÃ y khÃ¡m</p>
-                    <p className="font-semibold text-[#111827]">{getDateLabel(selectedAppointment)}</p>
-                  </div>
-                  <div className="rounded-xl border border-[#e5e7eb] bg-white px-3 py-2">
-                    <p className="text-xs text-[#64748b]">Giá» khÃ¡m</p>
-                    <p className="font-semibold text-[#111827]">{getTimeLabel(selectedAppointment)}</p>
-                  </div>
-                  <div className="rounded-xl border border-[#e5e7eb] bg-white px-3 py-2">
-                    <p className="text-xs text-[#64748b]">Loáº¡i lá»‹ch</p>
-                    <p className="font-semibold text-[#111827]">{selectedAppointmentTypeLabel}</p>
-                  </div>
-                  <div className="rounded-xl border border-[#e5e7eb] bg-white px-3 py-2">
-                    <p className="text-xs text-[#64748b]">Tráº¡ng thÃ¡i</p>
-                    <p className="font-semibold text-[#111827]">{selectedStatusLabel}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-[#e5e7eb] bg-white p-4">
-                    <p className="mb-4 text-sm font-semibold text-[#111827]">Ná»™i dung khÃ¡m</p>
-                    <div className="space-y-4">
+              {selectedAppointment ? (
+                <div className="mx-auto w-full max-w-[1280px] space-y-5">
+                  <section className="rounded-lg border border-slate-200 px-4 py-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div>
-                        <Label>Triá»‡u chá»©ng</Label>
-                        <Textarea
-                          value={formState.symptoms}
-                          onChange={(event) => setFormState((prev) => ({ ...prev, symptoms: event.target.value }))}
-                          placeholder="MÃ´ táº£ triá»‡u chá»©ng bá»‡nh nhÃ¢n..."
-                          rows={4}
-                        />
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Bệnh nhân</p>
+                        <h3 className="text-xl font-semibold text-slate-900">{getPatientName(selectedAppointment)}</h3>
+                        <p className="mt-1 text-sm text-slate-600">
+                          Mã lịch: {safeString(selectedAppointment.appointmentCode) || `#${selectedAppointment.id}`}
+                        </p>
                       </div>
 
-                      <div>
-                        <Label>Cháº©n Ä‘oÃ¡n</Label>
-                        <Textarea
-                          value={formState.diagnosis}
-                          onChange={(event) => {
-                            const nextDiagnosis = event.target.value
-                            setFormState((prev) => ({ ...prev, diagnosis: nextDiagnosis }))
-                            if (diagnosisError && nextDiagnosis.trim()) {
-                              setDiagnosisError('')
-                            }
-                          }}
-                          placeholder="Nháº­p cháº©n Ä‘oÃ¡n (báº¯t buá»™c)"
-                          rows={4}
-                        />
-                        {diagnosisError && <p className="mt-1 text-xs text-red-600">{diagnosisError}</p>}
-                      </div>
-
-                      <div>
-                        <Label>Lá»i dáº·n bÃ¡c sÄ©</Label>
-                        <Textarea
-                          value={formState.advice}
-                          onChange={(event) => setFormState((prev) => ({ ...prev, advice: event.target.value }))}
-                          placeholder="LÆ°u Ã½ cho bá»‡nh nhÃ¢n sau khÃ¡m..."
-                          rows={4}
-                        />
+                      <div className="flex flex-wrap gap-2">
+                        <Badge className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs text-blue-700">
+                          {selectedAppointmentTypeLabel}
+                        </Badge>
+                        <Badge className={`rounded-md border px-2.5 py-1 text-xs ${selectedStatusBadgeClass}`}>
+                          {selectedStatusLabel}
+                        </Badge>
+                        <Badge className={`rounded-md border px-2.5 py-1 text-xs ${selectedPaymentView.className}`}>
+                          {selectedPaymentView.label}
+                        </Badge>
                       </div>
                     </div>
-                  </div>
-                </div>
 
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-[#e5e7eb] bg-white p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-[#111827]">
-                        <Pill className="h-4 w-4 text-sky-600" />
-                        KÃª thuá»‘c
+                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                        <p className="text-xs text-slate-500">Ngày khám</p>
+                        <p className="text-sm font-semibold text-slate-900">{getDateLabel(selectedAppointment)}</p>
                       </div>
-                      <Button type="button" variant="outline" size="sm" onClick={handleAddMedicineRow}>
-                        <Plus className="mr-1 h-4 w-4" />
-                        ThÃªm dÃ²ng
-                      </Button>
+                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                        <p className="text-xs text-slate-500">Giờ khám</p>
+                        <p className="text-sm font-semibold text-slate-900">{getTimeLabel(selectedAppointment)}</p>
+                      </div>
+                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                        <p className="text-xs text-slate-500">Loại lịch</p>
+                        <p className="text-sm font-semibold text-slate-900">{selectedAppointmentTypeLabel}</p>
+                      </div>
+                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                        <p className="text-xs text-slate-500">Trạng thái</p>
+                        <p className="text-sm font-semibold text-slate-900">{selectedStatusLabel}</p>
+                      </div>
                     </div>
+                  </section>
 
-                    <div className="overflow-x-auto">
-                      <table className="min-w-[1080px] w-full text-sm">
-                        <thead>
-                          <tr className="border-b text-left text-[#64748b]">
-                            <th className="py-2 pr-2 font-medium w-[190px]">Danh má»¥c</th>
-                            <th className="py-2 px-2 font-medium">Thuá»‘c</th>
-                            <th className="py-2 px-2 font-medium w-[86px]">SL</th>
-                            <th className="py-2 px-2 font-medium w-[140px]">ÄÆ¡n giÃ¡</th>
-                            <th className="py-2 px-2 font-medium w-[150px]">ThÃ nh tiá»n</th>
-                            <th className="py-2 px-2 font-medium w-[190px]">Liá»u dÃ¹ng</th>
-                            <th className="py-2 px-2 font-medium w-[190px]">Ghi chÃº</th>
-                            <th className="py-2 pl-2 font-medium w-[58px] text-center">XÃ³a</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {formState.medicines.map((item, index) => {
-                            const quantity = Number.isFinite(Number(item.quantity)) && Number(item.quantity) > 0
-                              ? Number(item.quantity)
-                              : 0
-                            const selectedCategory = safeString(item.medicineCategory) || MEDICINE_CATEGORY_ALL
-                            const categoryMedicines =
-                              selectedCategory === MEDICINE_CATEGORY_ALL
-                                ? medicines
-                                : medicines.filter(
-                                    (medicine) =>
-                                      getMedicineCategoryLabel(medicine.medicineCategory) === selectedCategory
-                                  )
-                            const isCurrentPickerRow = openMedicinePickerIndex === index
-                            const currentPickerOptions = isCurrentPickerRow ? medicinePickerOptions : categoryMedicines
-                            const filteredMedicineCommandOptions = currentPickerOptions.map((medicine) => {
-                              const categoryLabel = getMedicineCategoryLabel(medicine.medicineCategory)
-                              const unitLabel = getMedicineUnitLabel(medicine.unit)
-                              const stock = Number(medicine.quantity ?? 0)
-                              const outOfStock = isMedicineOutOfStock(medicine)
-                              return {
-                                ...medicine,
-                                categoryLabel,
-                                unitLabel,
-                                stock,
-                                outOfStock,
-                                searchValue: `${normalizeText(medicine.name)} ${normalizeText(categoryLabel)} ${normalizeText(unitLabel)} ${medicine.name} ${categoryLabel} ${unitLabel} ${String(medicine.id)}`,
+                  <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+                    <section className="rounded-lg border border-slate-200 p-4 xl:col-span-12">
+                      <h3 className="text-base font-semibold text-slate-900">Nội dung khám</h3>
+                      <div className="mt-3 grid grid-cols-1 gap-4 xl:grid-cols-12">
+                        <div className="xl:col-span-4">
+                          <Label className="mb-1.5 block text-xs font-medium text-slate-600">Triệu chứng</Label>
+                          <Textarea
+                            value={formState.symptoms}
+                            onChange={(event) => setFormState((prev) => ({ ...prev, symptoms: event.target.value }))}
+                            placeholder="Mô tả triệu chứng bệnh nhân..."
+                            rows={4}
+                            className="min-h-[108px]"
+                          />
+                        </div>
+                        <div className="xl:col-span-4">
+                          <Label className="mb-1.5 block text-xs font-medium text-slate-600">Chẩn đoán</Label>
+                          <Textarea
+                            value={formState.diagnosis}
+                            onChange={(event) => {
+                              const nextDiagnosis = event.target.value
+                              setFormState((prev) => ({ ...prev, diagnosis: nextDiagnosis }))
+                              if (diagnosisError && nextDiagnosis.trim()) {
+                                setDiagnosisError('')
                               }
-                            })
-                            const unitPrice = Number(medicinePriceById.get(item.medicineId) ?? 0)
-                            const lineTotal = quantity * unitPrice
-                            const selectedMedicine = medicineById.get(String(item.medicineId))
-                            const selectedMedicineUnitLabel = getMedicineUnitLabel(selectedMedicine?.unit)
-                            const selectedMedicineCategoryLabel = getMedicineCategoryLabel(selectedMedicine?.medicineCategory)
-                            const selectedMedicineOutOfStock = isMedicineOutOfStock(selectedMedicine)
-                            const selectedMedicineStillValid =
-                              selectedMedicine &&
-                              (selectedCategory === MEDICINE_CATEGORY_ALL ||
-                                selectedMedicineCategoryLabel === selectedCategory)
-
-                            return (
-                              <tr key={index} className="border-b last:border-0">
-                                <td className="py-2 pr-2 align-top">
-                                  <Select
-                                    value={selectedCategory}
-                                    onValueChange={(value) => handleMedicineCategoryChange(index, value)}
-                                  >
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Táº¥t cáº£" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {medicineCategoryOptions.map((category) => (
-                                        <SelectItem key={category.value} value={category.value}>
-                                          {category.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </td>
-                                <td className="py-2 px-2 align-top">
-                                  <Popover
-                                    open={openMedicinePickerIndex === index}
-                                    onOpenChange={(open) => {
-                                      if (open) {
-                                        setOpenMedicinePickerIndex(index)
-                                        setMedicinePickerKeyword('')
-                                      } else {
-                                        setOpenMedicinePickerIndex(null)
-                                      }
-                                    }}
-                                  >
-                                    <PopoverTrigger asChild>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        role="combobox"
-                                        className="h-10 w-full justify-between font-normal"
-                                      >
-                                        {selectedMedicineStillValid ? (
-                                          <span className="flex min-w-0 items-center gap-2">
-                                            <span className="truncate">{selectedMedicine?.name}</span>
-                                            <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0 text-[10px] text-slate-600">
-                                              {selectedMedicineUnitLabel}
-                                            </span>
-                                          </span>
-                                        ) : (
-                                          <span className="text-muted-foreground">Chọn thuốc</span>
-                                        )}
-                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[420px] p-0" align="start">
-                                      <Command>
-                                        <CommandInput
-                                          placeholder="Tìm thuốc theo tên..."
-                                          value={isCurrentPickerRow ? medicinePickerKeyword : ''}
-                                          onValueChange={(value) => {
-                                            if (openMedicinePickerIndex === index) {
-                                              setMedicinePickerKeyword(value)
-                                            }
-                                          }}
-                                          autoFocus
-                                        />
-                                        <CommandList>
-                                          {isCurrentPickerRow && medicinePickerLoading ? (
-                                            <div className="px-3 py-4 text-sm text-muted-foreground">
-                                              Đang tải danh sách thuốc...
-                                            </div>
-                                          ) : null}
-                                          <CommandEmpty>Không có thuốc trong danh mục này.</CommandEmpty>
-                                          <CommandGroup>
-                                            {filteredMedicineCommandOptions.map((medicine) => (
-                                              <CommandItem
-                                                key={medicine.id}
-                                                value={medicine.searchValue}
-                                                disabled={medicine.outOfStock}
-                                                onSelect={() => {
-                                                  if (medicine.outOfStock) return
-                                                  handleMedicineChange(index, 'medicineId', medicine.id)
-                                                  setOpenMedicinePickerIndex(null)
-                                                  setMedicinePickerKeyword('')
-                                                }}
-                                              >
-                                                <Check
-                                                  className={cn(
-                                                    'mr-1 h-4 w-4 shrink-0',
-                                                    String(item.medicineId) === String(medicine.id)
-                                                      ? 'opacity-100'
-                                                      : 'opacity-0'
-                                                  )}
-                                                />
-                                                <div className="flex w-full min-w-0 items-start justify-between gap-3">
-                                                  <div className="min-w-0">
-                                                    <div className="flex min-w-0 items-center gap-2">
-                                                      <span className="truncate">{medicine.name}</span>
-                                                      <Badge
-                                                        className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0 text-[10px] font-medium text-slate-600"
-                                                      >
-                                                        {medicine.categoryLabel}
-                                                      </Badge>
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground">
-                                                      Đơn vị: {medicine.unitLabel} • Tồn kho: {medicine.stock}
-                                                      {medicine.outOfStock ? ' • Hết hàng' : ''}
-                                                    </p>
-                                                  </div>
-                                                  <span className="whitespace-nowrap text-xs font-semibold text-[#0f172a]">
-                                                    {formatCurrencyVnd(Number(medicine.price ?? 0))}
-                                                  </span>
-                                                </div>
-                                              </CommandItem>
-                                            ))}
-                                          </CommandGroup>
-                                        </CommandList>
-                                      </Command>
-                                    </PopoverContent>
-                                  </Popover>
-                                  {!selectedMedicineStillValid && item.medicineId && (
-                                    <p className="mt-1 text-xs text-amber-700">Thuốc đã được reset theo danh mục mới.</p>
-                                  )}
-                                  {isCurrentPickerRow && medicinePickerError && (
-                                    <p className="mt-1 text-xs text-red-600">{medicinePickerError}</p>
-                                  )}
-                                  {isCurrentPickerRow &&
-                                    !medicinePickerLoading &&
-                                    !medicinePickerError &&
-                                    filteredMedicineCommandOptions.length === 0 &&
-                                    !safeString(medicinePickerKeyword) && (
-                                      <p className="mt-1 text-xs text-amber-700">
-                                        Không có thuốc trong danh mục này.
-                                      </p>
-                                    )}
-                                  {selectedMedicineOutOfStock && item.medicineId && (
-                                    <p className="mt-1 text-xs text-amber-700">
-                                      Thuốc đã chọn đang hết hàng, vui lòng đổi thuốc khác.
-                                    </p>
-                                  )}
-                                </td>
-                                <td className="py-2 px-2 align-top">
-                                  <p className="mb-1 text-[11px] text-[#64748b]">Sá»‘ lÆ°á»£ng ({selectedMedicineUnitLabel})</p>
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    value={item.quantity}
-                                    onChange={(event) => handleMedicineChange(index, 'quantity', event.target.value)}
-                                  />
-                                </td>
-                                <td className="py-2 px-2 align-top">
-                                  <div className="h-10 rounded-md border bg-[#f8fafc] px-3 text-xs font-medium text-[#0f172a] flex items-center">
-                                    {formatCurrencyVnd(unitPrice)}
-                                  </div>
-                                </td>
-                                <td className="py-2 px-2 align-top">
-                                  <div className="h-10 rounded-md border bg-[#f8fafc] px-3 text-xs font-semibold text-[#0f172a] flex items-center">
-                                    {formatCurrencyVnd(lineTotal)}
-                                  </div>
-                                </td>
-                                <td className="py-2 px-2 align-top">
-                                  <Input
-                                    value={item.dosage}
-                                    onChange={(event) => handleMedicineChange(index, 'dosage', event.target.value)}
-                                    placeholder="VÃ­ dá»¥: 2 viÃªn/ngÃ y"
-                                  />
-                                </td>
-                                <td className="py-2 px-2 align-top">
-                                  <Input
-                                    value={item.note}
-                                    onChange={(event) => handleMedicineChange(index, 'note', event.target.value)}
-                                    placeholder="Ghi chÃº"
-                                  />
-                                </td>
-                                <td className="py-2 pl-2 align-top text-center">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleRemoveMedicineRow(index)}
-                                    disabled={formState.medicines.length === 1}
-                                  >
-                                    <Trash2 className="h-4 w-4 text-red-500" />
-                                  </Button>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="mt-3 text-right text-sm">
-                      <span className="text-[#64748b]">Táº¡m tÃ­nh thuá»‘c: </span>
-                      <span className="font-semibold text-[#111827]">{formatCurrencyVnd(medicinePreviewTotal)}</span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-[#e5e7eb] bg-white p-4">
-                    <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#111827]">
-                      <Stethoscope className="h-4 w-4 text-sky-600" />
-                      Dá»‹ch vá»¥ y táº¿
-                    </div>
-
-                    <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-                      <Select
-                        value={serviceDraftId || '__none__'}
-                        onValueChange={(value) => setServiceDraftId(value === '__none__' ? '' : value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Chá»n dá»‹ch vá»¥ Ä‘á»ƒ thÃªm" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Chá»n dá»‹ch vá»¥ Ä‘á»ƒ thÃªm</SelectItem>
-                          {availableServiceOptions.map((service) => (
-                            <SelectItem key={service.id} value={service.id}>
-                              {service.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button type="button" variant="outline" onClick={handleAddService} disabled={!serviceDraftId}>
-                        <Plus className="mr-1 h-4 w-4" />
-                        ThÃªm dá»‹ch vá»¥
-                      </Button>
-                    </div>
-
-                    {selectedServiceDetails.length === 0 ? (
-                      <div className="rounded-xl border border-dashed p-4 text-sm text-[#64748b]">
-                        ChÆ°a chá»n dá»‹ch vá»¥ phÃ¡t sinh.
+                            }}
+                            placeholder="Nhập chẩn đoán (bắt buộc)"
+                            rows={4}
+                            className="min-h-[108px]"
+                          />
+                          {diagnosisError ? <p className="mt-1 text-xs text-red-600">{diagnosisError}</p> : null}
+                        </div>
+                        <div className="xl:col-span-4">
+                          <Label className="mb-1.5 block text-xs font-medium text-slate-600">Lời dặn bác sĩ</Label>
+                          <Textarea
+                            value={formState.advice}
+                            onChange={(event) => setFormState((prev) => ({ ...prev, advice: event.target.value }))}
+                            placeholder="Lưu ý cho bệnh nhân sau khám..."
+                            rows={4}
+                            className="min-h-[108px]"
+                          />
+                        </div>
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {selectedServiceDetails.map((service) => (
-                          <div
-                            key={service.serviceId}
-                            className="rounded-xl border border-[#e5e7eb] bg-[#f8fafc] p-3"
-                          >
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <div>
-                                <p className="font-medium text-[#111827]">{service.name}</p>
-                                <p className="text-xs text-[#64748b]">ÄÆ¡n giÃ¡: {formatCurrencyVnd(service.price)}</p>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemoveService(service.serviceId)}
-                              >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
-                            </div>
+                    </section>
+
+                    <section className="rounded-lg border border-slate-200 p-4 xl:col-span-12">
+                      <div className="flex items-center gap-2">
+                        <Pill className="h-4 w-4 text-sky-600" />
+                        <h3 className="text-base font-semibold text-slate-900">Kê thuốc</h3>
+                      </div>
+
+                      <div className="mt-3 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <MedicineCategorySelect
+                            value={medicineDraft.medicineCategory}
+                            options={medicineCategoryOptions}
+                            loading={medicineCategoriesLoading}
+                            error={medicineCategoriesError}
+                            onRetry={() => void loadMedicineCategories()}
+                            onValueChange={handleMedicineCategoryChange}
+                          />
+
+                          <MedicineSelect
+                            open={isMedicinePickerOpen}
+                            keyword={medicinePickerKeyword}
+                            selectedMedicine={selectedDraftMedicine}
+                            selectedMedicineId={medicineDraft.medicineId}
+                            options={medicineSelectOptions}
+                            loading={medicinePickerLoading}
+                            error={medicinePickerError}
+                            disabled={medicineCategoriesLoading}
+                            onRetry={() => setMedicinePickerRetrySeed((prev) => prev + 1)}
+                            onOpenChange={(open) => {
+                              setIsMedicinePickerOpen(open)
+                              if (open) {
+                                setMedicinePickerError('')
+                              }
+                            }}
+                            onKeywordChange={setMedicinePickerKeyword}
+                            onSelectMedicine={handleSelectMedicine}
+                            onClearFilter={() => setMedicinePickerKeyword('')}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+                          <div className="md:col-span-2">
+                            <Label className="mb-1.5 block text-xs font-medium text-slate-600">Số lượng ({draftUnitLabel})</Label>
                             <Input
-                              className="mt-2"
-                              placeholder="Ghi chÃº dá»‹ch vá»¥"
-                              value={service.note}
-                              onChange={(event) => handleServiceNoteChange(service.serviceId, event.target.value)}
+                              type="number"
+                              min={1}
+                              value={medicineDraft.quantity}
+                              onChange={(event) => {
+                                handleMedicineDraftFieldChange('quantity', event.target.value)
+                                setMedicineDraftErrors((prev) => ({ ...prev, quantity: undefined }))
+                              }}
+                              className="h-11"
+                            />
+                            {medicineDraftErrors.quantity ? (
+                              <p className="mt-1 text-xs text-red-600">{medicineDraftErrors.quantity}</p>
+                            ) : null}
+                          </div>
+                          <div className="md:col-span-3">
+                            <Label className="mb-1.5 block text-xs font-medium text-slate-600">Đơn giá</Label>
+                            <div className="flex h-11 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800">
+                              {formatCurrencyVnd(draftUnitPrice)}
+                            </div>
+                          </div>
+                          <div className="md:col-span-3">
+                            <Label className="mb-1.5 block text-xs font-medium text-slate-600">Thành tiền</Label>
+                            <div className="flex h-11 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900">
+                              {formatCurrencyVnd(draftLineTotal)}
+                            </div>
+                          </div>
+                          <div className="md:col-span-2">
+                            <Label className="mb-1.5 block text-xs font-medium text-slate-600">Liều dùng</Label>
+                            <Input
+                              value={medicineDraft.dosage}
+                              onChange={(event) => handleMedicineDraftFieldChange('dosage', event.target.value)}
+                              className="h-11"
+                              placeholder="VD: 2 viên/ngày"
                             />
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          <div className="md:col-span-2">
+                            <Label className="mb-1.5 block text-xs font-medium text-slate-600">Ghi chú</Label>
+                            <Input
+                              value={medicineDraft.note}
+                              onChange={(event) => handleMedicineDraftFieldChange('note', event.target.value)}
+                              className="h-11"
+                              placeholder="Ghi chú"
+                            />
+                          </div>
+                        </div>
 
-                    <div className="mt-3 text-right text-sm">
-                      <span className="text-[#64748b]">Táº¡m tÃ­nh dá»‹ch vá»¥: </span>
-                      <span className="font-semibold text-[#111827]">{formatCurrencyVnd(servicePreviewTotal)}</span>
-                    </div>
-                  </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="space-y-1">
+                            {medicineDraftErrors.category ? (
+                              <p className="text-xs text-red-600">{medicineDraftErrors.category}</p>
+                            ) : null}
+                            {medicineDraftErrors.medicineId ? (
+                              <p className="text-xs text-red-600">{medicineDraftErrors.medicineId}</p>
+                            ) : null}
+                          </div>
 
-                  <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 text-sm">
-                    <p className="mb-2 font-semibold text-[#0c4a6e]">Tá»•ng chi phÃ­ sau khÃ¡m</p>
-
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#475569]">
-                          {isCurrentAppointmentFollowUp ? 'PhÃ­ khÃ¡m tÃ¡i khÃ¡m (50%)' : 'PhÃ­ khÃ¡m'}
-                        </span>
-                        {isCurrentAppointmentFollowUp ? (
-                          <span className="font-medium text-[#111827]">{formatCurrencyVnd(consultationFeeAppliedPreview)}</span>
-                        ) : (
-                          <span className="font-medium text-emerald-700">ÄÃ£ thanh toÃ¡n khi Ä‘áº·t lá»‹ch (0 VND)</span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#475569]">Tiá»n thuá»‘c</span>
-                        <span className="font-medium text-[#111827]">{formatCurrencyVnd(medicinePreviewTotal)}</span>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#475569]">Tiá»n dá»‹ch vá»¥</span>
-                        <span className="font-medium text-[#111827]">{formatCurrencyVnd(servicePreviewTotal)}</span>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 border-t border-sky-200 pt-3">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-[#0f172a]">Tá»•ng cá»™ng</span>
-                        <span className="text-lg font-bold text-[#0f172a]">{formatCurrencyVnd(estimatedTotal)}</span>
-                      </div>
-                      <p className="mt-1 text-xs text-[#64748b]">
-                        Tá»•ng = phÃ­ khÃ¡m Ã¡p dá»¥ng + thuá»‘c + dá»‹ch vá»¥
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3 rounded-2xl border border-[#e5e7eb] bg-white p-4">
-                <label className="flex items-center gap-2 text-sm font-semibold text-[#111827]">
-                  <input
-                    type="checkbox"
-                    checked={formState.followUpEnabled}
-                    onChange={(event) => {
-                      const checked = event.target.checked
-                      setFormState((prev) => ({
-                        ...prev,
-                        followUpEnabled: checked,
-                        followUpDate: checked ? prev.followUpDate : '',
-                        followUpTime: checked ? prev.followUpTime : '',
-                        followUpNote: checked ? prev.followUpNote : '',
-                      }))
-
-                      if (!checked) {
-                        setFollowUpErrors({})
-                        setFollowUpSlots([])
-                        setFollowUpSlotsError('')
-                      }
-
-                      setSubmitError('')
-                    }}
-                  />
-                  Háº¹n tÃ¡i khÃ¡m
-                </label>
-
-                {formState.followUpEnabled && (
-                  <div className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
-                    <div>
-                      <Label className="mb-2 block">NgÃ y tÃ¡i khÃ¡m</Label>
-                      <Popover open={isFollowUpDatePickerOpen} onOpenChange={setIsFollowUpDatePickerOpen}>
-                        <PopoverTrigger asChild>
-                          <Button type="button" variant="outline" className="h-11 w-full justify-between">
-                            {formState.followUpDate ? (
-                              <span>{formatDateDisplay(formState.followUpDate)}</span>
-                            ) : (
-                              <span className="text-muted-foreground">Chá»n ngÃ y tÃ¡i khÃ¡m</span>
-                            )}
-                            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                          <Button type="button" onClick={handleAddMedicineItem} className="h-10">
+                            <Plus className="mr-1 h-4 w-4" />
+                            Thêm thuốc
                           </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={parseDateInput(formState.followUpDate) ?? undefined}
-                            onSelect={(date) => {
-                              if (!date) return
-                              const normalizedDate = toDateOnly(date)
-                              if (normalizedDate < todayDateOnly) return
+                        </div>
+                      </div>
 
-                              setFormState((prev) => ({
-                                ...prev,
-                                followUpDate: formatDateAsIso(normalizedDate),
-                                followUpTime: '',
-                              }))
-                              setFollowUpErrors((prev) => ({ ...prev, date: undefined, time: undefined }))
-                              setSubmitError('')
-                              setIsFollowUpDatePickerOpen(false)
-                            }}
-                            disabled={(date) => toDateOnly(date) < todayDateOnly}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      {followUpErrors.date && <p className="mt-1 text-xs text-red-600">{followUpErrors.date}</p>}
-                    </div>
+                      <div className="mt-4">
+                        <PrescriptionItemsTable items={prescriptionTableItems} onDeleteItem={handleRemoveMedicineItem} />
+                      </div>
 
-                    <div>
-                      <Label className="mb-2 block">Giá» tÃ¡i khÃ¡m (24h)</Label>
-                      {formState.followUpDate ? (
-                        <>
-                          {followUpSlotsLoading ? (
-                            <div className="rounded-xl border border-dashed p-3 text-sm text-[#64748b]">
-                              Äang táº£i khung giá»...
-                            </div>
-                          ) : followUpSlotViews.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-2">
-                              {followUpSlotViews.map((slot) => (
-                                <button
-                                  key={slot.value}
-                                  type="button"
-                                  disabled={slot.disabled}
-                                  onClick={() => {
-                                    setFormState((prev) => ({ ...prev, followUpTime: slot.value }))
-                                    setSubmitError('')
-                                    if (followUpErrors.time) {
-                                      setFollowUpErrors((prev) => ({ ...prev, time: undefined }))
-                                    }
-                                  }}
-                                  className={`h-10 rounded-lg border text-sm font-medium transition ${
-                                    formState.followUpTime === slot.value
-                                      ? 'border-sky-500 bg-sky-50 text-sky-700'
-                                      : slot.disabled
-                                        ? 'border-slate-200 bg-slate-100 text-slate-400'
-                                        : 'border-slate-200 bg-white text-slate-700 hover:border-sky-300'
-                                  }`}
-                                >
-                                  {slot.label}
-                                </button>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="rounded-xl border border-dashed p-3 text-sm text-[#64748b]">
-                              KhÃ´ng cÃ³ khung giá» kháº£ dá»¥ng cho ngÃ y nÃ y, vui lÃ²ng chá»n ngÃ y khÃ¡c.
-                            </div>
-                          )}
+                      <div className="mt-3 text-right text-sm">
+                        <span className="text-slate-600">Tạm tính thuốc: </span>
+                        <span className="font-semibold text-slate-900">{formatCurrencyVnd(medicinePreviewTotal)}</span>
+                      </div>
+                    </section>
 
-                          {followUpSlotsError && (
-                            <p className="mt-2 text-xs text-amber-700">{followUpSlotsError}</p>
-                          )}
-                        </>
+                    <section className="rounded-lg border border-slate-200 p-4 xl:col-span-12">
+                      <div className="flex items-center gap-2">
+                        <Stethoscope className="h-4 w-4 text-sky-600" />
+                        <h3 className="text-base font-semibold text-slate-900">Dịch vụ y tế phát sinh</h3>
+                      </div>
+
+                      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <Select
+                          value={serviceDraftId || '__none__'}
+                          onValueChange={(value) => setServiceDraftId(value === '__none__' ? '' : value)}
+                        >
+                          <SelectTrigger className="h-11">
+                            <SelectValue placeholder="Chọn dịch vụ để thêm" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Chọn dịch vụ để thêm</SelectItem>
+                            {availableServiceOptions.map((service) => (
+                              <SelectItem key={service.id} value={service.id}>
+                                {service.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button type="button" variant="outline" onClick={handleAddService} disabled={!serviceDraftId} className="h-11">
+                          <Plus className="mr-1 h-4 w-4" />
+                          Thêm dịch vụ
+                        </Button>
+                      </div>
+
+                      {selectedServiceDetails.length === 0 ? (
+                        <div className="mt-3 rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-600">
+                          Chưa chọn dịch vụ phát sinh.
+                        </div>
                       ) : (
-                        <div className="rounded-xl border border-dashed p-3 text-sm text-[#64748b]">
-                          Chá»n ngÃ y trÆ°á»›c Ä‘á»ƒ hiá»ƒn thá»‹ khung giá».
+                        <div className="mt-3 space-y-2">
+                          {selectedServiceDetails.map((service) => (
+                            <div key={service.serviceId} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="font-medium text-slate-900">{service.name}</p>
+                                  <p className="text-xs text-slate-600">Đơn giá: {formatCurrencyVnd(service.price)}</p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleRemoveService(service.serviceId)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
+                              </div>
+                              <Input
+                                className="mt-2 h-10"
+                                placeholder="Ghi chú dịch vụ"
+                                value={service.note}
+                                onChange={(event) => handleServiceNoteChange(service.serviceId, event.target.value)}
+                              />
+                            </div>
+                          ))}
                         </div>
                       )}
 
-                      {followUpErrors.time && <p className="mt-1 text-xs text-red-600">{followUpErrors.time}</p>}
-                    </div>
+                      <div className="mt-3 text-right text-sm">
+                        <span className="text-slate-600">Tạm tính dịch vụ: </span>
+                        <span className="font-semibold text-slate-900">{formatCurrencyVnd(servicePreviewTotal)}</span>
+                      </div>
+                    </section>
 
-                    <div>
-                      <Label className="mb-2 block">Ghi chÃº tÃ¡i khÃ¡m</Label>
-                      <Textarea
-                        rows={3}
-                        value={formState.followUpNote}
-                        onChange={(event) => {
-                          setFormState((prev) => ({ ...prev, followUpNote: event.target.value }))
-                          setSubmitError('')
-                        }}
-                        placeholder="Dáº·n lá»‹ch tÃ¡i khÃ¡m hoáº·c lÆ°u Ã½ thÃªm"
+                    <section className="rounded-lg border border-slate-200 p-4 xl:col-span-12">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-base font-semibold text-slate-900">Hẹn tái khám</h3>
+                          <p className="text-xs text-slate-500">Bật lịch tái khám nếu cần theo dõi sau điều trị.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={formState.followUpEnabled}
+                            onCheckedChange={(checked) => {
+                              setFormState((prev) => ({
+                                ...prev,
+                                followUpEnabled: checked,
+                                followUpDate: checked ? prev.followUpDate : '',
+                                followUpTime: checked ? prev.followUpTime : '',
+                                followUpNote: checked ? prev.followUpNote : '',
+                              }))
+
+                              if (!checked) {
+                                setFollowUpErrors({})
+                                setFollowUpSlots([])
+                                setFollowUpSlotsError('')
+                              }
+
+                              setSubmitError('')
+                            }}
+                          />
+                          <span className="text-sm font-medium text-slate-700">Hẹn tái khám</span>
+                        </div>
+                      </div>
+
+                      {formState.followUpEnabled ? (
+                        <div className="mt-3 grid gap-3 xl:grid-cols-12">
+                          <div className="xl:col-span-4">
+                            <Label className="mb-1.5 block text-xs font-medium text-slate-600">Ngày tái khám</Label>
+                            <Popover open={isFollowUpDatePickerOpen} onOpenChange={setIsFollowUpDatePickerOpen}>
+                              <PopoverTrigger asChild>
+                                <Button type="button" variant="outline" className="h-11 w-full justify-between">
+                                  {formState.followUpDate ? (
+                                    <span>{formatDateDisplay(formState.followUpDate)}</span>
+                                  ) : (
+                                    <span className="text-muted-foreground">Chọn ngày tái khám</span>
+                                  )}
+                                  <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="z-[90] w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={parseDateInput(formState.followUpDate) ?? undefined}
+                                  onSelect={(date) => {
+                                    if (!date) return
+                                    const normalizedDate = toDateOnly(date)
+                                    if (normalizedDate < todayDateOnly) return
+
+                                    setFormState((prev) => ({
+                                      ...prev,
+                                      followUpDate: formatDateAsIso(normalizedDate),
+                                      followUpTime: '',
+                                    }))
+                                    setFollowUpErrors((prev) => ({ ...prev, date: undefined, time: undefined }))
+                                    setSubmitError('')
+                                    setIsFollowUpDatePickerOpen(false)
+                                  }}
+                                  disabled={(date) => toDateOnly(date) < todayDateOnly}
+                                  initialFocus
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            {followUpErrors.date ? <p className="mt-1 text-xs text-red-600">{followUpErrors.date}</p> : null}
+                          </div>
+
+                          <div className="xl:col-span-4">
+                            <Label className="mb-1.5 block text-xs font-medium text-slate-600">Giờ tái khám (24h)</Label>
+                            {formState.followUpDate ? (
+                              <>
+                                {followUpSlotsLoading ? (
+                                  <div className="rounded-lg border border-dashed border-slate-200 p-3 text-sm text-slate-600">
+                                    Đang tải khung giờ...
+                                  </div>
+                                ) : followUpSlotViews.length > 0 ? (
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {followUpSlotViews.map((slot) => (
+                                      <button
+                                        key={slot.value}
+                                        type="button"
+                                        disabled={slot.disabled}
+                                        onClick={() => {
+                                          setFormState((prev) => ({ ...prev, followUpTime: slot.value }))
+                                          setSubmitError('')
+                                          if (followUpErrors.time) {
+                                            setFollowUpErrors((prev) => ({ ...prev, time: undefined }))
+                                          }
+                                        }}
+                                        className={`h-10 rounded-md border text-sm font-medium transition ${
+                                          formState.followUpTime === slot.value
+                                            ? 'border-sky-500 bg-sky-50 text-sky-700'
+                                            : slot.disabled
+                                              ? 'border-slate-200 bg-slate-100 text-slate-400'
+                                              : 'border-slate-200 bg-white text-slate-700 hover:border-sky-300'
+                                        }`}
+                                      >
+                                        {slot.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="rounded-lg border border-dashed border-slate-200 p-3 text-sm text-slate-600">
+                                    Không có khung giờ phù hợp cho ngày này.
+                                  </div>
+                                )}
+
+                                {followUpSlotsError ? (
+                                  <p className="mt-2 text-xs text-amber-700">{followUpSlotsError}</p>
+                                ) : null}
+                              </>
+                            ) : (
+                              <div className="rounded-lg border border-dashed border-slate-200 p-3 text-sm text-slate-600">
+                                Chọn ngày trước để hiển thị khung giờ.
+                              </div>
+                            )}
+
+                            {followUpErrors.time ? <p className="mt-1 text-xs text-red-600">{followUpErrors.time}</p> : null}
+                          </div>
+
+                          <div className="xl:col-span-4">
+                            <Label className="mb-1.5 block text-xs font-medium text-slate-600">Ghi chú tái khám</Label>
+                            <Textarea
+                              rows={3}
+                              value={formState.followUpNote}
+                              onChange={(event) => {
+                                setFormState((prev) => ({ ...prev, followUpNote: event.target.value }))
+                                setSubmitError('')
+                              }}
+                              placeholder="Dặn lịch tái khám hoặc lưu ý thêm"
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                    </section>
+
+                    <div className="xl:col-span-12">
+                      <BillingSummaryPanel
+                        isFollowUpAppointment={isCurrentAppointmentFollowUp}
+                        consultationFee={consultationFeePreview}
+                        consultationFeeApplied={consultationFeeAppliedPreview}
+                        medicineTotal={medicinePreviewTotal}
+                        serviceTotal={servicePreviewTotal}
+                        total={estimatedTotal}
                       />
                     </div>
                   </div>
-                )}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-600">
+                  Không tìm thấy dữ liệu lịch hẹn để hoàn tất khám.
+                </div>
+              )}
+
+              {submitError ? (
+                <div className="mx-auto mt-4 w-full max-w-[1280px] rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {submitError}
+                </div>
+              ) : null}
+            </div>
+
+            <DialogFooter className="border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
+              <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSaveDraft}
+                  disabled={submitting || !selectedAppointment}
+                >
+                  Lưu nháp
+                </Button>
+
+                <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row sm:items-center">
+                  <Button type="button" variant="outline" onClick={() => setCompleteOpen(false)} disabled={submitting}>
+                    Hủy
+                  </Button>
+                  <Button type="submit" disabled={submitting || !selectedAppointment}>
+                    {submitting ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Spinner className="size-4" />
+                        Đang xử lý...
+                      </span>
+                    ) : (
+                      'Xác nhận hoàn tất khám'
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed p-4 text-sm text-[#64748b]">
-              KhÃ´ng tÃ¬m tháº¥y dá»¯ liá»‡u lá»‹ch háº¹n Ä‘á»ƒ hoÃ n táº¥t khÃ¡m.
-            </div>
-          )}
-
-          {submitError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {submitError}
-            </div>
-          )}
-
-          <DialogFooter className="mt-2">
-            <Button type="button" variant="outline" onClick={() => setCompleteOpen(false)} disabled={submitting}>
-              Há»§y
-            </Button>
-            <Button type="button" onClick={() => void handleCompleteAppointment()} disabled={submitting || !selectedAppointment}>
-              {submitting ? 'Äang xá»­ lÃ½...' : 'XÃ¡c nháº­n'}
-            </Button>
-          </DialogFooter>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

@@ -3,6 +3,7 @@ import { Edit3, PackageCheck, Search } from 'lucide-react'
 import {
   adminApi,
   type AdminServicePackageBooking,
+  type AdminServicePackageStats,
 } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -29,6 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import { resolvePaymentStatusView } from '@/lib/appointment-status'
 
 type BookingStatusKey = 'PENDING_PAYMENT' | 'PAID' | 'RECEIVED' | 'COMPLETED' | 'CANCELLED'
 
@@ -55,6 +57,12 @@ function getStatusLabel(value?: string): string {
   return statusOptions.find((item) => item.value === status)?.label || 'Chờ thanh toán'
 }
 
+function pickServicePackageStatusLabel(value?: string, statusDisplay?: string): string {
+  const display = safeString(statusDisplay)
+  if (display) return display
+  return getStatusLabel(value)
+}
+
 function getStatusBadgeClass(value?: string): string {
   const status = normalizeBookingStatus(value)
   if (status === 'PAID') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -62,14 +70,6 @@ function getStatusBadgeClass(value?: string): string {
   if (status === 'COMPLETED') return 'bg-blue-50 text-blue-700 border-blue-200'
   if (status === 'CANCELLED') return 'bg-red-50 text-red-700 border-red-200'
   return 'bg-amber-50 text-amber-700 border-amber-200'
-}
-
-function getPaymentLabel(value?: string): string {
-  const text = safeLower(value)
-  if (text.includes('paid') || text.includes('da thanh toan')) return 'Đã thanh toán'
-  if (text.includes('pending') || text.includes('cho thanh toan') || text.includes('unpaid')) return 'Chờ thanh toán'
-  if (!text) return 'Không xác định'
-  return value || 'Không xác định'
 }
 
 function formatDateTime(booking: AdminServicePackageBooking): string {
@@ -88,6 +88,12 @@ export function AdminServicePackageBookingsPage() {
   const { toast } = useToast()
 
   const [bookings, setBookings] = useState<AdminServicePackageBooking[]>([])
+  const [packageStats, setPackageStats] = useState<AdminServicePackageStats>({
+    totalBooked: 0,
+    totalCompleted: 0,
+    totalPaid: 0,
+    totalPending: 0,
+  })
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [error, setError] = useState('')
@@ -105,20 +111,28 @@ export function AdminServicePackageBookingsPage() {
     setError('')
 
     try {
-      const data = await adminApi.getServicePackageBookings({
-        status: statusFilter === 'all' ? undefined : statusFilter,
-        keyword: debouncedSearch.trim() || undefined,
+      const [bookingData, statsData] = await Promise.all([
+        adminApi.getServicePackageBookings({
+          status: statusFilter === 'all' ? undefined : statusFilter,
+          keyword: debouncedSearch.trim() || undefined,
+        }),
+        adminApi.getServicePackageStats().catch(() => ({
+          totalBooked: 0,
+          totalCompleted: 0,
+          totalPaid: 0,
+          totalPending: 0,
+        })),
+      ])
+
+      setBookings(Array.isArray(bookingData) ? bookingData : [])
+      setPackageStats({
+        totalBooked: safeNumber(statsData.totalBooked, 0),
+        totalCompleted: safeNumber(statsData.totalCompleted, 0),
+        totalPaid: safeNumber(statsData.totalPaid, 0),
+        totalPending: safeNumber(statsData.totalPending, 0),
       })
-
-      const normalized = Array.isArray(data)
-        ? data
-        : Array.isArray((data as any)?.data)
-          ? (data as any).data
-          : []
-
-      setBookings(normalized)
     } catch (fetchError: any) {
-      setError(fetchError?.message || 'Không thể tải danh sách phiếu gói dịch vụ.')
+      setError(fetchError?.message || 'Không thể tải danh sách gói dịch vụ.')
     } finally {
       setLoading(false)
     }
@@ -138,15 +152,6 @@ export function AdminServicePackageBookingsPage() {
     [bookings]
   )
 
-  const summary = useMemo(() => {
-    const total = sortedBookings.length
-    const pending = sortedBookings.filter((item) => normalizeBookingStatus(item.status) === 'PENDING_PAYMENT').length
-    const paid = sortedBookings.filter((item) => normalizeBookingStatus(item.status) === 'PAID').length
-    const received = sortedBookings.filter((item) => normalizeBookingStatus(item.status) === 'RECEIVED').length
-    const completed = sortedBookings.filter((item) => normalizeBookingStatus(item.status) === 'COMPLETED').length
-    return { total, pending, paid, received, completed }
-  }, [sortedBookings])
-
   const openStatusDialog = (booking: AdminServicePackageBooking) => {
     setSelectedBooking(booking)
     setSelectedStatus(normalizeBookingStatus(booking.status))
@@ -159,7 +164,7 @@ export function AdminServicePackageBookingsPage() {
     setUpdating(true)
     try {
       await adminApi.updateServicePackageBookingStatus(String(selectedBooking.id), selectedStatus)
-      toast({ title: 'Thành công', description: 'Đã cập nhật trạng thái phiếu gói dịch vụ.' })
+      toast({ title: 'Thành công', description: 'Đã cập nhật trạng thái booking gói dịch vụ.' })
       setIsStatusDialogOpen(false)
       setSelectedBooking(null)
       await fetchBookings()
@@ -177,54 +182,48 @@ export function AdminServicePackageBookingsPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Phiếu gói dịch vụ</h1>
-        <p className="text-muted-foreground">Tiếp nhận và theo dõi trạng thái phiếu dịch vụ của bệnh nhân</p>
+        <h1 className="text-3xl font-bold">Gói dịch vụ</h1>
+        <p className="text-muted-foreground">Tiếp nhận và theo dõi trạng thái booking gói dịch vụ của bệnh nhân</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Tổng phiếu</CardTitle>
+            <CardTitle className="text-sm font-medium">Đã đặt</CardTitle>
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold">{summary.total}</div></CardContent>
+          <CardContent><div className="text-2xl font-bold">{packageStats.totalBooked}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Chờ thanh toán</CardTitle>
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-amber-600">{summary.pending}</div></CardContent>
+          <CardContent><div className="text-2xl font-bold text-amber-600">{packageStats.totalPending}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Đã thanh toán</CardTitle>
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-emerald-600">{summary.paid}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Đã tiếp nhận</CardTitle>
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-sky-600">{summary.received}</div></CardContent>
+          <CardContent><div className="text-2xl font-bold text-emerald-600">{packageStats.totalPaid}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Hoàn thành</CardTitle>
           </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-blue-600">{summary.completed}</div></CardContent>
+          <CardContent><div className="text-2xl font-bold text-blue-600">{packageStats.totalCompleted}</div></CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Danh sách phiếu</CardTitle>
-          <CardDescription>Quản lý và cập nhật trạng thái phiếu gói dịch vụ</CardDescription>
+          <CardTitle>Danh sách booking</CardTitle>
+          <CardDescription>Quản lý và cập nhật trạng thái booking gói dịch vụ</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-[280px] flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Tìm theo mã phiếu, bệnh nhân, gói dịch vụ..."
+                placeholder="Tìm theo mã booking, bệnh nhân, gói dịch vụ..."
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
                 className="pl-8"
@@ -249,14 +248,14 @@ export function AdminServicePackageBookingsPage() {
           {loading && <AdminTableSkeleton rows={8} />}
           {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchBookings()} />}
           {!loading && !error && sortedBookings.length === 0 && (
-            <AdminEmptyState title="Không có phiếu gói dịch vụ phù hợp." />
+            <AdminEmptyState title="Không có booking gói dịch vụ phù hợp." />
           )}
 
           {!loading && !error && sortedBookings.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Mã phiếu</TableHead>
+                  <TableHead>Mã booking</TableHead>
                   <TableHead>Bệnh nhân</TableHead>
                   <TableHead>Gói dịch vụ</TableHead>
                   <TableHead>Ngày giờ đến</TableHead>
@@ -283,10 +282,12 @@ export function AdminServicePackageBookingsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge className={`rounded-full border ${getStatusBadgeClass(booking.status)}`}>
-                        {getStatusLabel(booking.status)}
+                        {pickServicePackageStatusLabel(booking.status, booking.statusDisplay)}
                       </Badge>
                     </TableCell>
-                    <TableCell>{getPaymentLabel(booking.paymentStatus)}</TableCell>
+                    <TableCell>
+                      {resolvePaymentStatusView(booking.paymentStatus, booking.paymentStatusDisplay).label}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => openStatusDialog(booking)}>
                         <Edit3 className="h-4 w-4" />
@@ -305,10 +306,10 @@ export function AdminServicePackageBookingsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <PackageCheck className="h-5 w-5 text-sky-600" />
-              Cập nhật trạng thái phiếu
+              Cập nhật trạng thái booking
             </DialogTitle>
             <DialogDescription>
-              Chọn trạng thái mới cho phiếu {safeString(selectedBooking?.bookingCode) || selectedBooking?.id || ''}.
+              Chọn trạng thái mới cho booking {safeString(selectedBooking?.bookingCode) || selectedBooking?.id || ''}.
             </DialogDescription>
           </DialogHeader>
 

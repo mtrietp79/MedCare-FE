@@ -330,6 +330,9 @@ export function DoctorMedicalRecordsPage() {
                           {normalizeTypeLabel(record.appointmentType)}
                         </Badge>
                       </div>
+                      <div className="text-sm text-[#6b7280]">
+                        Ngày tạo hồ sơ: {formatDateDdMmYyyy(record.recordCreatedAt || record.createdAt)}
+                      </div>
 
                       <div><span className="font-semibold">Triệu chứng:</span> {safeString(record.symptoms) || '-'}</div>
                       <div><span className="font-semibold">Chẩn đoán:</span> {safeString(record.diagnosis) || '-'}</div>

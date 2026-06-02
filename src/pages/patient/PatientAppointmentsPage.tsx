@@ -27,16 +27,16 @@ import { api, type PatientInvoice } from '@/services/api'
 import { doctorFeedbackService } from '@/services/doctorFeedbackService'
 import type { Appointment, ServicePackageBooking } from '@/types'
 import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
+import { resolveAppointmentStatusView, resolvePaymentStatusView } from '@/lib/appointment-status'
 
 type ServicePackageStatusKey = 'PENDING_PAYMENT' | 'PAID' | 'RECEIVED' | 'COMPLETED' | 'CANCELLED'
-type ServicePackagePaymentStatusKey = 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED'
-type AppointmentStatusKey = 'pending' | 'completed' | 'cancelled'
 type DoctorFeedbackEligibility = 'CAN_FEEDBACK' | 'ALREADY_FEEDBACKED' | 'UNKNOWN'
 
-const APPOINTMENT_STATUS_CLASS: Record<AppointmentStatusKey, string> = {
-  pending: 'bg-amber-50 text-amber-700 border-amber-200',
-  completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  cancelled: 'bg-red-50 text-red-700 border-red-200',
+function pickDisplayLabel(value?: string): string | undefined {
+  const text = String(value || '').trim()
+  if (!text) return undefined
+  if (/^[A-Z0-9_]+$/.test(text)) return undefined
+  return text
 }
 
 function normalizeServicePackageStatus(status?: string): ServicePackageStatusKey {
@@ -53,7 +53,10 @@ function normalizeServicePackageStatus(status?: string): ServicePackageStatusKey
   return 'PENDING_PAYMENT'
 }
 
-function servicePackageStatusLabel(status?: string) {
+function servicePackageStatusLabel(status?: string, statusDisplay?: string) {
+  const display = pickDisplayLabel(statusDisplay)
+  if (display) return display
+
   const normalized = normalizeServicePackageStatus(status)
   if (normalized === 'PAID') return 'Đã thanh toán'
   if (normalized === 'RECEIVED') return 'Đã tiếp nhận'
@@ -71,94 +74,12 @@ function servicePackageStatusClass(status?: string) {
   return 'bg-amber-50 text-amber-700 border-amber-200'
 }
 
-function normalizeServicePackagePaymentStatus(status?: string): ServicePackagePaymentStatusKey {
-  const value = String(status || '').trim().toUpperCase()
-  if (value === 'PAID') return 'PAID'
-  if (value === 'FAILED') return 'FAILED'
-  if (value === 'CANCELLED') return 'CANCELLED'
-  if (value === 'PENDING') return 'PENDING'
-  if (value.includes('FAIL')) return 'FAILED'
-  if (value.includes('CANCEL')) return 'CANCELLED'
-  if (value.includes('PAID')) return 'PAID'
-  return 'PENDING'
+function servicePackagePaymentStatusLabel(status?: string, paymentStatusDisplay?: string) {
+  return resolvePaymentStatusView(status, paymentStatusDisplay).label
 }
 
-function servicePackagePaymentStatusLabel(status?: string) {
-  const normalized = normalizeServicePackagePaymentStatus(status)
-  if (normalized === 'PAID') return 'Đã thanh toán'
-  if (normalized === 'FAILED') return 'Thất bại'
-  if (normalized === 'CANCELLED') return 'Đã hủy'
-  return 'Chờ thanh toán'
-}
-
-function servicePackagePaymentStatusClass(status?: string) {
-  const normalized = normalizeServicePackagePaymentStatus(status)
-  if (normalized === 'PAID') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  if (normalized === 'FAILED') return 'bg-red-50 text-red-700 border-red-200'
-  if (normalized === 'CANCELLED') return 'bg-slate-100 text-slate-700 border-slate-300'
-  return 'bg-amber-50 text-amber-700 border-amber-200'
-}
-
-function getFallbackAppointmentStatusKey(rawStatus?: string): AppointmentStatusKey {
-  const normalized = String(rawStatus || '').trim().toUpperCase()
-  if (normalized === 'CANCELLED') return 'cancelled'
-  if (normalized === 'COMPLETED') return 'completed'
-  return 'pending'
-}
-
-function getAppointmentStatusLabelByKey(statusKey: AppointmentStatusKey): string {
-  if (statusKey === 'cancelled') return 'Đã hủy'
-  if (statusKey === 'completed') return 'Đã khám'
-  return 'Chờ khám'
-}
-
-function mapAppointmentStatusColorToClass(statusColor?: string): string | null {
-  const normalized = String(statusColor || '').trim().toLowerCase()
-  if (!normalized) return null
-
-  if (
-    normalized.includes('red') ||
-    normalized.includes('danger') ||
-    normalized.includes('error') ||
-    normalized.includes('cancel')
-  ) {
-    return APPOINTMENT_STATUS_CLASS.cancelled
-  }
-
-  if (
-    normalized.includes('green') ||
-    normalized.includes('success') ||
-    normalized.includes('complete') ||
-    normalized.includes('done')
-  ) {
-    return APPOINTMENT_STATUS_CLASS.completed
-  }
-
-  if (
-    normalized.includes('yellow') ||
-    normalized.includes('amber') ||
-    normalized.includes('warning') ||
-    normalized.includes('pending')
-  ) {
-    return APPOINTMENT_STATUS_CLASS.pending
-  }
-
-  return null
-}
-
-function getAppointmentStatusView(appointment: Appointment): {
-  key: AppointmentStatusKey
-  label: string
-  className: string
-} {
-  const fallbackKey = getFallbackAppointmentStatusKey(appointment.status)
-  const label = String(appointment.statusDisplay || '').trim() || getAppointmentStatusLabelByKey(fallbackKey)
-  const className = mapAppointmentStatusColorToClass(appointment.statusColor) || APPOINTMENT_STATUS_CLASS[fallbackKey]
-  return {
-    key: fallbackKey,
-    label,
-    className,
-  }
+function servicePackagePaymentStatusClass(status?: string, paymentStatusDisplay?: string) {
+  return resolvePaymentStatusView(status, paymentStatusDisplay).className
 }
 
 function formatDate(value?: string) {
@@ -216,25 +137,32 @@ function formatCurrencyVnd(value?: number | null) {
 function invoiceStatusLabel(status?: string) {
   const normalized = String(status || '').toUpperCase()
   if (normalized === 'PAID') return 'Đã thanh toán'
+  if (normalized === 'FAILED') return 'Thanh toán thất bại'
   if (normalized.includes('CANCEL')) return 'Đã hủy'
-  return 'Chờ thanh toán'
+  return 'Chưa thanh toán'
 }
 
 function invoiceStatusClass(status?: string) {
   const normalized = String(status || '').toUpperCase()
   if (normalized === 'PAID') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  if (normalized === 'FAILED') return 'bg-red-50 text-red-700 border-red-200'
   if (normalized.includes('CANCEL')) return 'bg-red-50 text-red-700 border-red-200'
   return 'bg-amber-50 text-amber-700 border-amber-200'
 }
 
 function canShowInvoicePayButton(invoice: PatientInvoice) {
-  const status = String(invoice.status || '').toUpperCase()
-  if (status === 'PAID') return false
-  return Boolean(invoice.canPayOnline)
+  const status = String(invoice.status || '').trim().toUpperCase()
+  const isPendingPayment =
+    status === 'UNPAID' ||
+    status === 'PENDING' ||
+    status === 'PENDING_PAYMENT' ||
+    status === 'WAITING_PAYMENT'
+  const hasAmount = Number(invoice.totalAmount || 0) > 0
+  return Boolean(invoice.canPayOnline) && isPendingPayment && hasAmount
 }
 
 function isCompletedAppointment(appointment: Appointment): boolean {
-  return getAppointmentStatusView(appointment).key === 'completed'
+  return resolveAppointmentStatusView(appointment.status, appointment.statusDisplay).key === 'completed'
 }
 
 export function PatientAppointmentsPage() {
@@ -404,7 +332,7 @@ export function PatientAppointmentsPage() {
   const loadPackageBookingDetail = useCallback(async (bookingId: string) => {
     const normalizedBookingId = String(bookingId || '').trim()
     if (!normalizedBookingId) {
-      setPackageDetailError('Không tìm thấy mã phiếu dịch vụ.')
+      setPackageDetailError('Không tìm thấy mã booking gói dịch vụ.')
       setPackageDetailLoading(false)
       setSelectedPackageBooking(null)
       return
@@ -421,14 +349,14 @@ export function PatientAppointmentsPage() {
       const detail = await api.patients.getServicePackageBookingById(normalizedBookingId)
       if (packageDetailRequestRef.current !== requestId) return
       if (!detail) {
-        throw new Error('Không tìm thấy chi tiết phiếu gói dịch vụ.')
+        throw new Error('Không tìm thấy chi tiết gói dịch vụ.')
       }
       setSelectedPackageBooking(detail)
     } catch (detailError) {
       if (packageDetailRequestRef.current !== requestId) return
       setSelectedPackageBooking(null)
       setPackageDetailError(
-        detailError instanceof Error ? detailError.message : 'Không thể tải chi tiết phiếu gói dịch vụ.'
+        detailError instanceof Error ? detailError.message : 'Không thể tải chi tiết gói dịch vụ.'
       )
     } finally {
       if (packageDetailRequestRef.current === requestId) {
@@ -442,7 +370,7 @@ export function PatientAppointmentsPage() {
     if (!bookingId) {
       toast({
         title: 'Lỗi',
-        description: 'Không tìm thấy mã phiếu dịch vụ.',
+        description: 'Không tìm thấy mã booking gói dịch vụ.',
         variant: 'destructive',
       })
       return
@@ -554,7 +482,7 @@ export function PatientAppointmentsPage() {
             ) : (
               <div className="grid gap-4">
                 {appointments.map((appointment) => {
-                  const statusView = getAppointmentStatusView(appointment)
+                  const statusView = resolveAppointmentStatusView(appointment.status, appointment.statusDisplay)
                   return (
                     <Card key={appointment.id}>
                       <CardContent className="grid gap-4 p-6 md:grid-cols-[1fr_auto] md:items-center">
@@ -626,7 +554,7 @@ export function PatientAppointmentsPage() {
           <TabsContent value="packages">
             {packageBookings.length === 0 ? (
               <div className="rounded-3xl border bg-white p-10 text-center text-muted-foreground">
-                Chưa có phiếu gói dịch vụ nào.
+                Chưa có booking gói dịch vụ nào.
               </div>
             ) : (
               <div className="grid gap-4">
@@ -634,7 +562,7 @@ export function PatientAppointmentsPage() {
                   <Card key={booking.id}>
                     <CardContent className="grid gap-4 p-6 md:grid-cols-[1fr_auto] md:items-center">
                       <div>
-                        <p className="text-sm text-muted-foreground">Mã phiếu dịch vụ</p>
+                        <p className="text-sm text-muted-foreground">Mã booking gói dịch vụ</p>
                         <p className="font-semibold">{booking.bookingCode || `#${booking.id}`}</p>
                         <p className="mt-2 text-sm text-muted-foreground">
                           {booking.packageName || booking.servicePackage?.name || 'Gói dịch vụ'}
@@ -650,7 +578,7 @@ export function PatientAppointmentsPage() {
                             booking.status
                           )}`}
                         >
-                          {servicePackageStatusLabel(booking.status)}
+                          {servicePackageStatusLabel(booking.status, booking.statusDisplay)}
                         </span>
                         {(booking.totalAmount || booking.amount) ? (
                           <p className="text-sm font-semibold text-primary">
@@ -689,7 +617,7 @@ export function PatientAppointmentsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                      <SelectItem value="PENDING">Chờ thanh toán</SelectItem>
+                      <SelectItem value="PENDING">Chưa thanh toán</SelectItem>
                       <SelectItem value="PAID">Đã thanh toán</SelectItem>
                       <SelectItem value="CANCELLED">Đã hủy</SelectItem>
                     </SelectContent>
@@ -825,7 +753,7 @@ export function PatientAppointmentsPage() {
       <Dialog open={packageDetailOpen} onOpenChange={onPackageDetailOpenChange}>
         <DialogContent className="sm:max-w-[640px]">
           <DialogHeader>
-            <DialogTitle>Chi tiết phiếu gói dịch vụ</DialogTitle>
+            <DialogTitle>Chi tiết booking gói dịch vụ</DialogTitle>
             <DialogDescription>Thông tin booking gói dịch vụ của bạn</DialogDescription>
           </DialogHeader>
 
@@ -851,7 +779,7 @@ export function PatientAppointmentsPage() {
               <div className="rounded-2xl border p-4">
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Mã phiếu</p>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Mã booking</p>
                     <p className="text-base font-semibold">
                       {selectedPackageBooking.bookingCode || `#${selectedPackageBooking.id}`}
                     </p>
@@ -862,14 +790,18 @@ export function PatientAppointmentsPage() {
                         selectedPackageBooking.status
                       )}`}
                     >
-                      {servicePackageStatusLabel(selectedPackageBooking.status)}
+                      {servicePackageStatusLabel(selectedPackageBooking.status, selectedPackageBooking.statusDisplay)}
                     </span>
                     <span
                       className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${servicePackagePaymentStatusClass(
-                        selectedPackageBooking.paymentStatus
+                        selectedPackageBooking.paymentStatus,
+                        selectedPackageBooking.paymentStatusDisplay
                       )}`}
                     >
-                      {servicePackagePaymentStatusLabel(selectedPackageBooking.paymentStatus)}
+                      {servicePackagePaymentStatusLabel(
+                        selectedPackageBooking.paymentStatus,
+                        selectedPackageBooking.paymentStatusDisplay
+                      )}
                     </span>
                   </div>
                 </div>

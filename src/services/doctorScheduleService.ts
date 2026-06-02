@@ -19,6 +19,7 @@ export interface DayScheduleItem {
   type?: string
   appointmentType?: string
   status?: string
+  statusDisplay?: string
 }
 
 function normalizeListResponse<T>(raw: any): T[] {
@@ -59,6 +60,7 @@ function normalizeDayScheduleItem(raw: unknown): DayScheduleItem | null {
     type: pickString(source.appointmentType, source.type),
     appointmentType: pickString(source.appointmentType, source.type),
     status: pickString(source.status),
+    statusDisplay: pickString(source.statusDisplay),
   }
 }
 

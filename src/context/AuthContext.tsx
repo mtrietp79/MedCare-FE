@@ -41,6 +41,24 @@ function normalizeAuthUser(user: AuthUser): AuthUser {
   }
 }
 
+function canNavigateToRedirectByRole(redirectTo: string, role: string): boolean {
+  if (!redirectTo.startsWith('/')) return false
+
+  if (redirectTo.startsWith('/admin')) {
+    return role === 'ROLE_ADMIN'
+  }
+
+  if (redirectTo.startsWith('/doctor')) {
+    return role === 'ROLE_DOCTOR'
+  }
+
+  if (redirectTo.startsWith('/patient') || redirectTo.startsWith('/appointments') || redirectTo.startsWith('/profile')) {
+    return role === 'ROLE_PATIENT'
+  }
+
+  return true
+}
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate()
   const [user, setUser] = useState<AuthUser | null>(() => getStoredUser())
@@ -166,6 +184,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     const tokenValue = getResponseToken(response)
+    console.debug('[Auth] Login response', {
+      role: response.role,
+      token: tokenValue,
+    })
+    if (!tokenValue) {
+      clearStoredAuth()
+      validatedTokenRef.current = null
+      setToken(null)
+      setUser(null)
+      navigate('/login', { replace: true })
+      return
+    }
+
+    clearStoredAuth()
     setStoredToken(tokenValue)
     validatedTokenRef.current = null
     setToken(tokenValue)
@@ -180,7 +212,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setStoredUser(userData)
     setUser(userData)
 
-    if (redirectTo && redirectTo.startsWith('/')) {
+    if (redirectTo && canNavigateToRedirectByRole(redirectTo, response.role)) {
       navigate(redirectTo, { replace: true })
       return
     }

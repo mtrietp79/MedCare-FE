@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 import { doctorScheduleService, type DayScheduleItem, type WeekScheduleEntry } from '@/services/doctorScheduleService'
 import { safeString } from '@/lib/admin-normalizers'
+import { getAppointmentStatusClass, getAppointmentStatusLabel } from '@/lib/appointment-status'
 
 type Period = 'morning' | 'afternoon'
 
@@ -52,13 +53,6 @@ function normalizeType(type: string): string {
   const lower = safeString(type).toLowerCase()
   if (lower.includes('tai') || lower.includes('follow') || lower.includes('revisit')) return 'Tái khám'
   return 'Khám bệnh'
-}
-
-function normalizeStatus(status: string): string {
-  const lower = safeString(status).toLowerCase()
-  if (lower.includes('cancel') || lower.includes('huy')) return 'Hủy lịch'
-  if (lower.includes('complete') || lower.includes('da kham')) return 'Đã khám'
-  return 'Chờ khám'
 }
 
 function getCellClass(count?: number): string {
@@ -366,8 +360,13 @@ export function DoctorSchedulePage() {
                     </TableCell>
                     <TableCell>{normalizeType(safeString(appointment.appointmentType) || safeString(appointment.type))}</TableCell>
                     <TableCell>
-                      <Badge className="rounded-full border border-slate-200 bg-slate-50 text-slate-700">
-                        {normalizeStatus(safeString(appointment.status))}
+                      <Badge
+                        className={`rounded-full border ${getAppointmentStatusClass(
+                          appointment.status,
+                          appointment.statusDisplay
+                        )}`}
+                      >
+                        {getAppointmentStatusLabel(appointment.status, appointment.statusDisplay)}
                       </Badge>
                     </TableCell>
                   </TableRow>

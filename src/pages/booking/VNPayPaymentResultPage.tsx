@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/services/api'
 import type { AppointmentReceipt } from '@/types'
+import { getAppointmentStatusLabel, getPaymentStatusLabel } from '@/lib/appointment-status'
 
 function formatCurrency(amount?: number | null) {
   return `${new Intl.NumberFormat('vi-VN').format(Number(amount || 0))} đ`
@@ -17,22 +18,12 @@ function formatDateTime(value?: string | null) {
   return parsed.toLocaleString('vi-VN')
 }
 
-function mapAppointmentStatus(status?: string | null) {
-  const normalized = String(status || '').toUpperCase()
-  if (normalized.includes('PENDING')) return 'Đang chờ'
-  if (normalized.includes('CONFIRM')) return 'Đã xác nhận'
-  if (normalized.includes('COMPLETE')) return 'Hoàn thành'
-  if (normalized.includes('CANCEL')) return 'Đã hủy'
-  return status || '-'
+function mapAppointmentStatus(status?: string | null, statusDisplay?: string | null) {
+  return getAppointmentStatusLabel(status || undefined, statusDisplay || undefined)
 }
 
-function mapPaymentStatus(status?: string | null) {
-  const normalized = String(status || '').toUpperCase()
-  if (normalized.includes('PENDING') || normalized.includes('UNPAID')) return 'Chờ thanh toán'
-  if (normalized.includes('PAID') || normalized.includes('SUCCESS')) return 'Đã thanh toán'
-  if (normalized.includes('CANCEL')) return 'Đã hủy'
-  if (normalized.includes('FAIL')) return 'Thất bại'
-  return status || '-'
+function mapPaymentStatus(status?: string | null, statusDisplay?: string | null) {
+  return getPaymentStatusLabel(status || undefined, statusDisplay || undefined)
 }
 
 function getStatusLabel(status?: string | null) {
@@ -180,11 +171,21 @@ export function VNPayPaymentResultPage() {
                   </p>
                   <p>
                     <span className="text-muted-foreground">Trạng thái lịch hẹn:</span>{' '}
-                    <span className="font-medium">{mapAppointmentStatus(receipt?.booking?.appointmentStatus)}</span>
+                    <span className="font-medium">
+                      {mapAppointmentStatus(
+                        receipt?.booking?.appointmentStatus,
+                        receipt?.booking?.appointmentStatusDisplay
+                      )}
+                    </span>
                   </p>
                   <p>
                     <span className="text-muted-foreground">Trạng thái thanh toán:</span>{' '}
-                    <span className="font-medium">{mapPaymentStatus(receipt?.booking?.paymentStatus)}</span>
+                    <span className="font-medium">
+                      {mapPaymentStatus(
+                        receipt?.booking?.paymentStatus,
+                        receipt?.booking?.paymentStatusDisplay
+                      )}
+                    </span>
                   </p>
                 </div>
               </section>

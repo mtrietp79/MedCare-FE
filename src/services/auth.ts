@@ -62,9 +62,36 @@ function isPublicAuthEndpoint(rawUrl?: string): boolean {
     endpointPath.startsWith('/auth/login') ||
     endpointPath.startsWith('/auth/register') ||
     endpointPath.startsWith('/auth/forgot-password') ||
-    endpointPath.startsWith('/auth/reset-password') ||
-    endpointPath.startsWith('/auth/oauth/')
+    endpointPath.startsWith('/auth/reset-password')
   )
+}
+
+function isAdminDashboardEndpoint(rawUrl?: string): boolean {
+  const endpointPath = normalizeEndpointPath(rawUrl)
+  if (!endpointPath) return false
+  return endpointPath.startsWith('/admin/dashboard')
+}
+
+function isAdminEndpoint(rawUrl?: string): boolean {
+  const endpointPath = normalizeEndpointPath(rawUrl)
+  if (!endpointPath) return false
+  return endpointPath.startsWith('/admin/')
+}
+
+function buildAdminDashboardFallback<T>(rawUrl?: string): T {
+  const endpointPath = normalizeEndpointPath(rawUrl)
+  if (endpointPath.endsWith('/summary')) {
+    return {
+      totalPatients: 0,
+      totalDoctors: 0,
+      totalAppointments: 0,
+      totalRevenue: 0,
+      todayAppointments: 0,
+      pendingAppointments: 0,
+    } as T
+  }
+
+  return [] as T
 }
 
 export function softLogout(options: SoftLogoutOptions = {}) {
@@ -82,7 +109,15 @@ export function handleProtectedApiAuthFailure(status?: number | null, requestUrl
   if (status !== 401 && status !== 403) return false
   if (isPublicAuthEndpoint(requestUrl)) return false
 
-  softLogout({ status, reason: 'protected-api' })
+  if (status === 401) {
+    softLogout({ status, reason: 'protected-api-401' })
+    return true
+  }
+
+  if (isAdminEndpoint(requestUrl)) {
+    queueForbiddenNotice('Bạn không có quyền truy cập')
+  }
+
   return true
 }
 
@@ -129,9 +164,9 @@ export function getRoleHomePath(role: string) {
     case 'ROLE_ADMIN':
       return '/admin/dashboard'
     case 'ROLE_DOCTOR':
-      return '/doctor'
+      return '/doctor/dashboard'
     case 'ROLE_PATIENT':
-      return '/'
+      return '/patient'
     default:
       return '/login'
   }
@@ -150,6 +185,28 @@ export function redirectByRole(role?: string | null) {
 export async function fetchJson<T = any>(url: string, options: RequestInit = {}): Promise<T> {
   try {
     const token = getStoredToken()
+    if (isAdminDashboardEndpoint(url)) {
+      const role = getStoredRole()
+      const isAdmin = role === 'ROLE_ADMIN'
+      const isLoginRoute = typeof window !== 'undefined' && window.location.pathname === '/login'
+      const authHeader = token ? `Bearer ${token}` : null
+
+      console.debug('[fetchJson][AdminDashboard] Request', {
+        url,
+        role,
+        pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+        hasAuthorizationHeader: Boolean(authHeader),
+        authorizationHeader: authHeader,
+      })
+
+      if (!isAdmin || !authHeader || isLoginRoute) {
+        console.debug('[fetchJson][AdminDashboard] Skip request', {
+          reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
+        })
+        return buildAdminDashboardFallback<T>(url)
+      }
+    }
+
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -203,20 +260,122 @@ export interface AuthUser {
   profileCompleted: boolean
 }
 
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+function pickString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed) return trimmed
+    }
+  }
+  return undefined
+}
+
+function normalizeRoleValue(value: unknown): string {
+  const raw = pickString(value)?.toUpperCase() ?? ''
+  if (!raw) return ''
+  if (raw === 'ADMIN') return 'ROLE_ADMIN'
+  if (raw === 'DOCTOR') return 'ROLE_DOCTOR'
+  if (raw === 'PATIENT') return 'ROLE_PATIENT'
+  return raw
+}
+
+function unwrapAuthPayload(input: unknown): Record<string, unknown> {
+  const source = asObject(input)
+  if (!source) return {}
+  const nested = asObject(source.data)
+  return nested ?? source
+}
+
+function normalizeAuthResponse(raw: unknown, fallbackUsername?: string): AuthResponse {
+  const payload = unwrapAuthPayload(raw)
+  const userRecord = asObject(payload.user) ?? asObject(payload.account) ?? asObject(payload.profile)
+
+  const authority = Array.isArray(payload.authorities) ? payload.authorities[0] : undefined
+  const role = normalizeRoleValue(
+    payload.role ?? payload.userRole ?? userRecord?.role ?? authority
+  )
+
+  const tokenValue = pickString(
+    payload.accessToken,
+    payload.token,
+    payload.access_token,
+    payload.jwt,
+    userRecord?.accessToken,
+    userRecord?.token,
+  )
+
+  const username = pickString(
+    payload.username,
+    payload.userName,
+    payload.email,
+    userRecord?.username,
+    userRecord?.userName,
+    userRecord?.email,
+    fallbackUsername,
+  ) ?? ''
+
+  const displayName = pickString(
+    payload.displayName,
+    payload.fullName,
+    userRecord?.displayName,
+    userRecord?.fullName,
+  ) ?? null
+
+  return {
+    accessToken: tokenValue,
+    token: tokenValue,
+    username,
+    displayName,
+    role,
+    profileCompleted:
+      typeof payload.profileCompleted === 'boolean'
+        ? payload.profileCompleted
+        : typeof payload.isProfileCompleted === 'boolean'
+          ? payload.isProfileCompleted
+          : typeof userRecord?.profileCompleted === 'boolean'
+            ? userRecord.profileCompleted
+            : null,
+  }
+}
+
+function normalizeAuthUserPayload(raw: unknown): AuthUser {
+  const payload = unwrapAuthPayload(raw)
+  const username = pickString(payload.username, payload.userName, payload.email) ?? ''
+  const displayName = pickString(payload.displayName, payload.fullName, username) ?? null
+  const role = normalizeRoleValue(payload.role ?? payload.userRole)
+  const profileCompleted =
+    typeof payload.profileCompleted === 'boolean'
+      ? payload.profileCompleted
+      : typeof payload.isProfileCompleted === 'boolean'
+        ? payload.isProfileCompleted
+        : false
+
+  return {
+    username,
+    displayName,
+    role,
+    profileCompleted,
+  }
+}
+
 export async function register(data: { username: string; password: string }) {
   return api.post<AuthResponse>('/auth/register', data)
 }
 
 export async function login(data: { username: string; password: string }) {
-  const { data: response } = await api.post<AuthResponse>('/auth/login', data)
-  return response
+  const { data: response } = await api.post<unknown>('/auth/login', data)
+  return normalizeAuthResponse(response, data.username)
 }
 
 export async function getMe(token: string) {
-  const { data } = await api.get<AuthUser>('/auth/me', {
+  const { data } = await api.get<unknown>('/auth/me', {
     headers: { Authorization: `Bearer ${token}` },
   })
-  return data
+  return normalizeAuthUserPayload(data)
 }
 
 export async function forgotPassword(data: { username: string }) {
@@ -310,19 +469,5 @@ export function consumeForbiddenNotice() {
   sessionStorage.removeItem(FORBIDDEN_NOTICE_KEY)
   return value
 }
-
-export const FACEBOOK_CALLBACK_URL = (typeof window !== 'undefined' && (import.meta.env.VITE_FACEBOOK_CALLBACK_URL || '')) || '/auth/facebook/callback'
-export const GOOGLE_CALLBACK_URL = (typeof window !== 'undefined' && (import.meta.env.VITE_GOOGLE_CALLBACK_URL || '')) || '/auth/google/callback'
-
-export async function loginFacebookByCode(code: string, redirectUri?: string) {
-  const { data } = await api.post('/auth/oauth/facebook/exchange', { code, redirectUri })
-  return data
-}
-
-export async function loginGoogleByCode(code: string, redirectUri?: string) {
-  const { data } = await api.post('/auth/oauth/google/exchange', { code, redirectUri })
-  return data
-}
-
 
 

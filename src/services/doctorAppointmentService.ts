@@ -21,6 +21,7 @@ export interface DoctorAppointment {
   statusColor?: string
   consultationFee?: number
   paymentStatus?: string
+  paymentStatusDisplay?: string
   followUpNote?: string
   parentAppointmentId?: string
   symptoms?: string
@@ -31,6 +32,8 @@ export interface DoctorMedicine {
   id: string
   name: string
   medicineCategory?: string
+  dosage?: string
+  description?: string
   price?: number
   status?: string
   quantity?: number
@@ -82,8 +85,10 @@ export interface CompleteFollowUpAppointment {
   appointmentType?: string
   type?: string
   status?: string
+  statusDisplay?: string
   consultationFee?: number
   paymentStatus?: string
+  paymentStatusDisplay?: string
   note?: string
   parentAppointmentId?: string | number
 }
@@ -93,6 +98,7 @@ export interface CompleteAppointmentResponse {
   appointmentId?: string | number
   appointmentType?: string
   status?: string
+  statusDisplay?: string
   invoice?: CompleteAppointmentInvoice | null
   followUpAppointment?: CompleteFollowUpAppointment | null
   [key: string]: unknown
@@ -117,6 +123,19 @@ function pickString(...values: unknown[]): string | undefined {
     }
   }
   return undefined
+}
+
+function normalizeText(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function shouldOmitCategoryQuery(rawCategory: unknown): boolean {
+  const normalized = normalizeText(rawCategory)
+  return !normalized || normalized === '__all__' || normalized === 'all' || normalized === 'tat ca'
 }
 
 function pickNumber(...values: unknown[]): number | undefined {
@@ -256,6 +275,7 @@ function normalizeDoctorAppointment(raw: unknown): DoctorAppointment | null {
     statusColor: pickString(source.statusColor),
     consultationFee: pickNumber(source.consultationFee),
     paymentStatus: pickString(source.paymentStatus),
+    paymentStatusDisplay: pickString(source.paymentStatusDisplay, source.payment?.statusDisplay),
     followUpNote: pickString(source.followUpNote),
     parentAppointmentId: pickString(source.parentAppointmentId),
     symptoms: pickString(source.symptoms),
@@ -274,6 +294,7 @@ function normalizeCompleteResponse(raw: unknown): CompleteAppointmentResponse {
     appointmentId: source.appointmentId,
     appointmentType: pickString(source.appointmentType, source.type),
     status: pickString(source.status),
+    statusDisplay: pickString(source.statusDisplay),
     invoice: invoice
       ? {
           id: pickString(invoice.id),
@@ -295,8 +316,13 @@ function normalizeCompleteResponse(raw: unknown): CompleteAppointmentResponse {
           appointmentType: pickString(followUpAppointment.appointmentType, followUpAppointment.type),
           type: pickString(followUpAppointment.appointmentType, followUpAppointment.type),
           status: pickString(followUpAppointment.status),
+          statusDisplay: pickString(followUpAppointment.statusDisplay, followUpAppointment.followUpStatusDisplay),
           consultationFee: pickNumber(followUpAppointment.consultationFee),
           paymentStatus: pickString(followUpAppointment.paymentStatus),
+          paymentStatusDisplay: pickString(
+            followUpAppointment.paymentStatusDisplay,
+            followUpAppointment.followUpPaymentStatusDisplay
+          ),
           note: pickString(followUpAppointment.note, followUpAppointment.followUpNote),
           parentAppointmentId: pickString(followUpAppointment.parentAppointmentId),
         }
@@ -315,6 +341,8 @@ function normalizeDoctorMedicine(raw: unknown): DoctorMedicine | null {
     id,
     name: pickString(source.name, source.medicineName) ?? 'Thuốc',
     medicineCategory: pickString(source.medicineCategory, source.category, source.medicine_category),
+    dosage: pickString(source.dosage, source.defaultDosage),
+    description: pickString(source.description, source.note),
     price: pickNumber(source.price, source.unitPrice, source.cost, source.medicinePrice),
     status: pickString(source.status),
     quantity: pickNumber(source.quantity, source.stockQuantity, source.remainingQuantity),
@@ -372,21 +400,82 @@ export const doctorAppointmentService = {
   },
 
   async getMedicineCategories() {
-    const { data } = await doctorApiClient.get('/medicines/categories')
-    return normalizeStringArrayResponse(data)
+    const endpoint = '/medicines/categories'
+    const fullUrl = `${doctorApiClient.defaults.baseURL || ''}${endpoint}`
+    console.debug('[DoctorMedicinesAPI] Request', {
+      method: 'GET',
+      url: fullUrl,
+      params: {},
+    })
+
+    try {
+      const response = await doctorApiClient.get(endpoint)
+      console.debug('[DoctorMedicinesAPI] Response', {
+        method: 'GET',
+        url: fullUrl,
+        status: response.status,
+        body: response.data,
+      })
+
+      return normalizeStringArrayResponse(response.data)
+    } catch (error: any) {
+      console.error('[DoctorMedicinesAPI] Error', {
+        method: 'GET',
+        url: fullUrl,
+        status: error?.response?.status,
+        body: error?.response?.data,
+        message: error?.message,
+      })
+      throw error
+    }
   },
 
   async getMedicines(query?: { keyword?: string; category?: string }) {
-    const params = new URLSearchParams()
+    const endpoint = '/medicines'
     const keyword = pickString(query?.keyword)
     const category = pickString(query?.category)
-    if (keyword) params.append('keyword', keyword)
-    if (category) params.append('category', category)
-    const endpoint = `/doctor/medicines${params.toString() ? `?${params.toString()}` : ''}`
-    const { data } = await doctorApiClient.get(endpoint)
-    return normalizeListResponse<unknown>(data)
-      .map((item) => normalizeDoctorMedicine(item))
-      .filter((item): item is DoctorMedicine => item !== null)
+    const requestParams: Record<string, string> = {}
+
+    if (keyword) {
+      requestParams.keyword = keyword
+    }
+
+    // "Tất cả" chỉ là option UI, không gửi category lên backend.
+    if (category && !shouldOmitCategoryQuery(category)) {
+      requestParams.category = category
+    }
+
+    const fullUrl = `${doctorApiClient.defaults.baseURL || ''}${endpoint}`
+    console.debug('[DoctorMedicinesAPI] Request', {
+      method: 'GET',
+      url: fullUrl,
+      params: requestParams,
+    })
+
+    try {
+      const response = await doctorApiClient.get(endpoint, { params: requestParams })
+      console.debug('[DoctorMedicinesAPI] Response', {
+        method: 'GET',
+        url: fullUrl,
+        status: response.status,
+        body: response.data,
+      })
+
+      const payload = Array.isArray(response.data) ? response.data : normalizeListResponse<unknown>(response.data)
+      return payload
+        .map((item) => normalizeDoctorMedicine(item))
+        .filter((item): item is DoctorMedicine => item !== null)
+    } catch (error: any) {
+      console.error('[DoctorMedicinesAPI] Error', {
+        method: 'GET',
+        url: fullUrl,
+        params: requestParams,
+        status: error?.response?.status,
+        body: error?.response?.data,
+        message: error?.message,
+      })
+      throw error
+    }
   },
 
   async getMedicalServices() {

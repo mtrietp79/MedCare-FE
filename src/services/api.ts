@@ -15,6 +15,7 @@ import type {
 } from '@/types'
 import { mockApi } from './mock-api'
 import {
+  getStoredRole,
   getStoredToken,
   handleProtectedApiAuthFailure,
 } from './auth'
@@ -78,6 +79,8 @@ export interface PatientMedicalRecordInvoice {
   invoiceCode?: string
   status?: string
   consultationFee?: number
+  medicineFee?: number
+  serviceFee?: number
   medicineTotal?: number
   serviceTotal?: number
   totalAmount?: number
@@ -96,7 +99,9 @@ export interface PatientMedicalRecordFollowUp {
 
 export interface PatientMedicalRecord {
   id: string
+  recordId?: string
   recordCode?: string
+  recordCreatedAt?: string
   appointmentId?: string
   appointmentCode?: string
   appointmentDate?: string
@@ -395,6 +400,7 @@ function normalizeAppointment(raw: unknown): Appointment | null {
     statusDisplay: pickString(source.statusDisplay),
     statusColor: pickString(source.statusColor),
     paymentStatus: pickString(source.paymentStatus),
+    paymentStatusDisplay: pickString(source.paymentStatusDisplay, source.payment?.statusDisplay),
     symptoms: pickString(source.symptoms),
     consultationFee: pickNumber(source.consultationFee, source.fee),
     followUpNote: pickString(source.followUpNote),
@@ -510,18 +516,18 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
     const invoiceCode = pickString(invoiceData.invoiceCode, invoiceData.code)
     const invoiceStatus = pickString(invoiceData.status, invoiceData.invoiceStatus)
     const consultationFee = pickNumber(invoiceData.consultationFee)
-    const medicineTotal = pickNumber(invoiceData.medicineTotal)
-    const serviceTotal = pickNumber(invoiceData.serviceTotal)
+    const medicineFee = pickNumber(invoiceData.medicineFee, invoiceData.medicineTotal)
+    const serviceFee = pickNumber(invoiceData.serviceFee, invoiceData.serviceTotal)
     const totalAmount =
       pickNumber(invoiceData.totalAmount) ??
-      (hasPositiveNumber(consultationFee, medicineTotal, serviceTotal)
-        ? (consultationFee ?? 0) + (medicineTotal ?? 0) + (serviceTotal ?? 0)
+      (hasPositiveNumber(consultationFee, medicineFee, serviceFee)
+        ? (consultationFee ?? 0) + (medicineFee ?? 0) + (serviceFee ?? 0)
         : undefined)
     const canPayOnline = toBoolean(invoiceData.canPayOnline)
 
     const hasIdentity = Boolean(invoiceId || invoiceCode)
     const hasStatus = Boolean(invoiceStatus)
-    const hasMoney = hasPositiveNumber(consultationFee, medicineTotal, serviceTotal, totalAmount)
+    const hasMoney = hasPositiveNumber(consultationFee, medicineFee, serviceFee, totalAmount)
     if (!hasIdentity && !hasStatus && !hasMoney) {
       return null
     }
@@ -531,8 +537,10 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
       invoiceCode,
       status: invoiceStatus,
       consultationFee,
-      medicineTotal,
-      serviceTotal,
+      medicineFee,
+      serviceFee,
+      medicineTotal: medicineFee,
+      serviceTotal: serviceFee,
       totalAmount,
       canPayOnline,
     }
@@ -540,7 +548,9 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
 
   return {
     id: pickString(source.id, source.recordId) ?? '',
+    recordId: pickString(source.recordId),
     recordCode: pickString(source.recordCode, source.code),
+    recordCreatedAt: pickString(source.recordCreatedAt, source.createdAt),
     appointmentId: pickString(source.appointmentId, appointment?.id),
     appointmentCode: pickString(source.appointmentCode, appointment?.appointmentCode, appointment?.code),
     appointmentDate,
@@ -592,7 +602,7 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
           statusColor: pickString(followUpData.statusColor, followUpData.followUpStatusColor),
         }
       : undefined,
-    createdAt: pickString(source.createdAt),
+    createdAt: pickString(source.createdAt, source.recordCreatedAt),
     updatedAt: pickString(source.updatedAt),
   }
 }
@@ -822,13 +832,29 @@ function normalizeServicePackageBooking(raw: Record<string, any>): ServicePackag
     totalAmount: normalizedAmount,
     paidAmount: normalizedPaidAmount,
     status: String(raw.status ?? raw.bookingStatus ?? ''),
+    statusDisplay: raw.statusDisplay ?? raw.bookingStatusDisplay ?? undefined,
     paymentStatus: String(raw.paymentStatus ?? raw.payment?.status ?? ''),
+    paymentStatusDisplay: raw.paymentStatusDisplay ?? raw.payment?.statusDisplay ?? undefined,
     note: raw.note ?? undefined,
     paymentId: raw.paymentId ? String(raw.paymentId) : undefined,
     invoiceCode: raw.invoiceCode ?? raw.invoiceNumber ?? undefined,
     createdAt: raw.createdAt ?? undefined,
     updatedAt: raw.updatedAt ?? undefined,
   }
+}
+
+async function apiCallFirstSuccess<T>(endpoints: string[], options: FetchOptions = {}): Promise<T> {
+  let lastError: unknown = null
+
+  for (const endpoint of endpoints) {
+    try {
+      return await apiCall<T>(endpoint, options)
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError ?? new Error('Không thể tải dữ liệu.')
 }
 
 export const servicePackagesApi = {
@@ -1030,15 +1056,24 @@ export const patientApi = {
     message?: string
     id?: string
   }> {
-    return apiCall('/patient/service-package-bookings', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
+    return apiCallFirstSuccess(
+      [
+        '/patient/service-packages/bookings',
+        '/patient/service-package-bookings',
+      ],
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    )
   },
 
   async getServicePackageBookings(): Promise<ServicePackageBooking[]> {
-    const data = await apiCall<Array<Record<string, any>> | { data?: Array<Record<string, any>> }>(
-      '/patient/service-package-bookings'
+    const data = await apiCallFirstSuccess<Array<Record<string, any>> | { data?: Array<Record<string, any>> }>(
+      [
+        '/patient/service-packages/bookings',
+        '/patient/service-package-bookings',
+      ]
     )
 
     const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
@@ -1046,8 +1081,11 @@ export const patientApi = {
   },
 
   async getServicePackageBookingById(id: string): Promise<ServicePackageBooking | null> {
-    const data = await apiCall<Record<string, any> | { data?: Record<string, any> } | null>(
-      `/patient/service-package-bookings/${id}`
+    const data = await apiCallFirstSuccess<Record<string, any> | { data?: Record<string, any> } | null>(
+      [
+        `/patient/service-packages/bookings/${id}`,
+        `/patient/service-package-bookings/${id}`,
+      ]
     )
 
     if (!data || typeof data !== 'object') return null
@@ -1229,15 +1267,46 @@ export const websiteFeedbackApi = {
   },
 
   async approve(id: string) {
-    return apiCall(`/admin/website-feedbacks/${id}/approve`, { method: 'PUT' })
+    return apiCallFirstSuccess(
+      [
+        `/admin/website-feedbacks/${id}/approve`,
+      ],
+      { method: 'PUT' }
+    )
   },
 
   async hide(id: string) {
-    return apiCall(`/admin/website-feedbacks/${id}/hide`, { method: 'PUT' })
+    return apiCallFirstSuccess(
+      [
+        `/admin/website-feedbacks/${id}/hide`,
+        `/admin/website-feedbacks/${id}/archive`,
+        `/admin/website-feedbacks/${id}/reject`,
+      ],
+      { method: 'PUT' }
+    )
+  },
+
+  async unhide(id: string) {
+    return apiCallFirstSuccess(
+      [
+        `/admin/website-feedbacks/${id}/unhide`,
+        `/admin/website-feedbacks/${id}/show`,
+        `/admin/website-feedbacks/${id}/publish`,
+      ],
+      { method: 'PUT' }
+    )
   },
 
   async remove(id: string) {
-    return apiCall(`/admin/website-feedbacks/${id}`, { method: 'DELETE' })
+    return apiCallFirstSuccess(
+      [
+        `/admin/website-feedbacks/${id}`,
+        `/admin/website-feedbacks/${id}/delete`,
+        `/admin/website-feedbacks/${id}/remove`,
+        `/admin/website-feedbacks/${id}/destroy`,
+      ],
+      { method: 'DELETE' }
+    )
   },
 }
 
@@ -1317,7 +1386,35 @@ export const dashboardApi = {
     todayAppointments?: number
     pendingAppointments?: number
   }> {
-    return apiCall('/dashboard/summary')
+    const endpoint = '/admin/dashboard/summary'
+    const token = getStoredToken()
+    const role = getStoredRole()
+    const isAdmin = role === 'ROLE_ADMIN'
+    const isLoginRoute = typeof window !== 'undefined' && window.location.pathname === '/login'
+    const authHeader = token ? `Bearer ${token}` : null
+    console.debug('[DashboardAPI] Request', {
+      url: `${API_BASE_URL}${endpoint}`,
+      role,
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      hasAuthorizationHeader: Boolean(authHeader),
+      authorizationHeader: authHeader,
+    })
+
+    if (!isAdmin || !authHeader || isLoginRoute) {
+      console.debug('[DashboardAPI] Skip request', {
+        reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
+      })
+      return {
+        totalPatients: 0,
+        totalDoctors: 0,
+        totalAppointments: 0,
+        totalRevenue: 0,
+        todayAppointments: 0,
+        pendingAppointments: 0,
+      }
+    }
+
+    return apiCall(endpoint)
   },
 
   async getRecentAppointments(): Promise<Array<{
@@ -1329,11 +1426,53 @@ export const dashboardApi = {
     status: string
     specialty: string
   }>> {
-    return apiCall('/dashboard/recent-appointments')
+    const endpoint = '/admin/dashboard/recent-appointments'
+    const token = getStoredToken()
+    const role = getStoredRole()
+    const isAdmin = role === 'ROLE_ADMIN'
+    const isLoginRoute = typeof window !== 'undefined' && window.location.pathname === '/login'
+    const authHeader = token ? `Bearer ${token}` : null
+    console.debug('[DashboardAPI] Request', {
+      url: `${API_BASE_URL}${endpoint}`,
+      role,
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      hasAuthorizationHeader: Boolean(authHeader),
+      authorizationHeader: authHeader,
+    })
+
+    if (!isAdmin || !authHeader || isLoginRoute) {
+      console.debug('[DashboardAPI] Skip request', {
+        reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
+      })
+      return []
+    }
+
+    return apiCall(endpoint)
   },
 
   async getRevenueChart(): Promise<Array<{ month: string; revenue: number; appointments: number }>> {
-    return apiCall('/dashboard/revenue-chart')
+    const endpoint = '/admin/dashboard/revenue-chart'
+    const token = getStoredToken()
+    const role = getStoredRole()
+    const isAdmin = role === 'ROLE_ADMIN'
+    const isLoginRoute = typeof window !== 'undefined' && window.location.pathname === '/login'
+    const authHeader = token ? `Bearer ${token}` : null
+    console.debug('[DashboardAPI] Request', {
+      url: `${API_BASE_URL}${endpoint}`,
+      role,
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      hasAuthorizationHeader: Boolean(authHeader),
+      authorizationHeader: authHeader,
+    })
+
+    if (!isAdmin || !authHeader || isLoginRoute) {
+      console.debug('[DashboardAPI] Skip request', {
+        reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
+      })
+      return []
+    }
+
+    return apiCall(endpoint)
   },
 }
 

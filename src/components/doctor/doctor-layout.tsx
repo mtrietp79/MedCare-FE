@@ -21,7 +21,7 @@ import {
 import { Button } from '@/components/ui/button'
 
 const doctorMenuItems = [
-  { title: 'Dashboard', href: '/doctor', icon: LayoutDashboard, label: 'Tổng quan' },
+  { title: 'Dashboard', href: '/doctor/dashboard', icon: LayoutDashboard, label: 'Tổng quan' },
   { title: 'Lịch hẹn', href: '/doctor/appointments', icon: Calendar, label: 'Quản lý lịch hẹn' },
   { title: 'Bệnh án', href: '/doctor/medical-records', icon: FileText, label: 'Quản lý bệnh án' },
   { title: 'Lịch làm việc', href: '/doctor/schedule', icon: Clock, label: 'Quản lý lịch làm việc' },
@@ -41,7 +41,7 @@ function DoctorSidebar() {
   return (
     <Sidebar className="border-r border-[#e5e7eb] bg-[#f8fafc]">
       <SidebarFooter className="border-b border-[#e5e7eb] px-4 py-4">
-        <Link to="/doctor" className="flex items-center gap-3 rounded-2xl bg-sky-100/80 p-3">
+        <Link to="/doctor/dashboard" className="flex items-center gap-3 rounded-2xl bg-sky-100/80 p-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0284c7] text-white">
             <LayoutDashboard className="h-5 w-5" />
           </div>
@@ -55,8 +55,8 @@ function DoctorSidebar() {
       <SidebarContent className="px-2 py-3">
         <SidebarMenu>
           {doctorMenuItems.map((item) => {
-            const isActive = item.href === '/doctor'
-              ? location.pathname === '/doctor'
+            const isActive = item.href === '/doctor/dashboard'
+              ? location.pathname === '/doctor' || location.pathname === '/doctor/dashboard'
               : location.pathname === item.href
             const Icon = item.icon
 
@@ -105,4 +105,3 @@ export function DoctorLayoutComponent({ children }: { children: React.ReactNode 
     </SidebarProvider>
   )
 }
-

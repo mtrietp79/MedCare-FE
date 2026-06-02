@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, EyeOff, MessageSquare, Search, Trash2 } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, MessageSquare, Search, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { websiteFeedbackService, type WebsiteFeedback } from '@/services/websiteFeedbackService'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,15 +35,21 @@ function formatDateDDMMYYYY(value?: string | null) {
 }
 
 function getStatusBadge(item: WebsiteFeedback) {
+  const statusLabel = item.statusDisplay || (item.status === 'APPROVED'
+    ? 'Đã duyệt'
+    : item.status === 'HIDDEN'
+      ? 'Đã ẩn'
+      : 'Chưa duyệt')
+
   if (item.status === 'APPROVED') {
-    return <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">Đã duyệt</Badge>
+    return <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">{statusLabel}</Badge>
   }
 
   if (item.status === 'HIDDEN') {
-    return <Badge className="border border-slate-300 bg-slate-100 text-slate-700">Đã ẩn</Badge>
+    return <Badge className="border border-slate-300 bg-slate-100 text-slate-700">{statusLabel}</Badge>
   }
 
-  return <Badge className="border border-amber-200 bg-amber-50 text-amber-700">Chưa duyệt</Badge>
+  return <Badge className="border border-amber-200 bg-amber-50 text-amber-700">{statusLabel}</Badge>
 }
 
 export function AdminWebsiteFeedbacksPage() {
@@ -142,6 +148,26 @@ export function AdminWebsiteFeedbacksPage() {
     }
   }
 
+  const handleUnhide = async (id: string) => {
+    try {
+      setActionLoadingKey(`unhide-${id}`)
+      await websiteFeedbackService.unhide(id)
+      toast({ title: 'Thành công', description: 'Đã hiển thị lại feedback.' })
+      await loadFeedbacks()
+    } catch (actionError: unknown) {
+      const status = getErrorStatus(actionError)
+      const message = getErrorMessage(actionError)
+
+      toast({
+        title: status === 403 ? 'Không có quyền' : 'Lỗi',
+        description: message,
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoadingKey('')
+    }
+  }
+
   const handleDelete = async (id: string) => {
     const confirmed = window.confirm('Bạn có chắc muốn xóa feedback này?')
     if (!confirmed) return
@@ -209,8 +235,15 @@ export function AdminWebsiteFeedbacksPage() {
               </TableHeader>
               <TableBody>
                 {filteredFeedbacks.map((item) => {
-                  const approveDisabled = item.status === 'APPROVED' || isLoadingAction('approve', item.id)
-                  const hideDisabled = item.status !== 'APPROVED' || isLoadingAction('hide', item.id)
+                  const canApprove = item.canApprove ?? item.status !== 'APPROVED'
+                  const canHide = item.canHide ?? item.status === 'APPROVED'
+                  const canDelete = item.canDelete ?? true
+                  const approveDisabled = !canApprove || isLoadingAction('approve', item.id)
+                  const isHidden = item.status === 'HIDDEN' || item.hidden
+                  const hideActionLoading =
+                    isLoadingAction('hide', item.id) || actionLoadingKey === `unhide-${item.id}`
+                  const hideDisabled = !canHide || hideActionLoading
+                  const deleteDisabled = !canDelete || isLoadingAction('delete', item.id)
 
                   return (
                     <TableRow key={item.id}>
@@ -240,11 +273,11 @@ export function AdminWebsiteFeedbacksPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => void handleHide(item.id)}
+                            onClick={() => void (isHidden ? handleUnhide(item.id) : handleHide(item.id))}
                             disabled={hideDisabled}
                           >
-                            <EyeOff className="h-4 w-4" />
-                            Ẩn
+                            {isHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                            {isHidden ? 'Hiện' : 'Ẩn'}
                           </Button>
 
                           <Button
@@ -252,7 +285,7 @@ export function AdminWebsiteFeedbacksPage() {
                             variant="outline"
                             className="border-red-200 text-red-600 hover:bg-red-50"
                             onClick={() => void handleDelete(item.id)}
-                            disabled={isLoadingAction('delete', item.id)}
+                            disabled={deleteDisabled}
                           >
                             <Trash2 className="h-4 w-4" />
                             Xóa

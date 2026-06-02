@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Eye, EyeOff, MessageSquare, Search, Trash2 } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, Eye, EyeOff, MessageSquare, Search, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { websiteFeedbackService, type WebsiteFeedback } from '@/services/websiteFeedbackService'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,6 +13,8 @@ interface HttpError extends Error {
   status?: number
   data?: unknown
 }
+
+const ITEMS_PER_PAGE = 15
 
 function getErrorStatus(error: unknown): number | undefined {
   const status = (error as HttpError)?.status
@@ -34,12 +36,36 @@ function formatDateDDMMYYYY(value?: string | null) {
   return `${day}-${month}-${year}`
 }
 
+function normalizeVietnameseText(value?: string | null): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function getFeedbackStatusLabel(item: WebsiteFeedback): string {
+  const normalizedDisplay = normalizeVietnameseText(item.statusDisplay)
+
+  if (normalizedDisplay === 'cho duyet' || normalizedDisplay === 'chua duyet') {
+    return 'Chờ duyệt'
+  }
+
+  if (normalizedDisplay === 'da duyet') {
+    return 'Đã duyệt'
+  }
+
+  if (normalizedDisplay === 'da an' || normalizedDisplay === 'an') {
+    return 'Đã ẩn'
+  }
+
+  if (item.status === 'APPROVED') return 'Đã duyệt'
+  if (item.status === 'HIDDEN') return 'Đã ẩn'
+  return 'Chờ duyệt'
+}
+
 function getStatusBadge(item: WebsiteFeedback) {
-  const statusLabel = item.statusDisplay || (item.status === 'APPROVED'
-    ? 'Đã duyệt'
-    : item.status === 'HIDDEN'
-      ? 'Đã ẩn'
-      : 'Chưa duyệt')
+  const statusLabel = getFeedbackStatusLabel(item)
 
   if (item.status === 'APPROVED') {
     return <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">{statusLabel}</Badge>
@@ -52,6 +78,14 @@ function getStatusBadge(item: WebsiteFeedback) {
   return <Badge className="border border-amber-200 bg-amber-50 text-amber-700">{statusLabel}</Badge>
 }
 
+function getHomepageBadge(item: WebsiteFeedback) {
+  if (item.visibleOnHomepage) {
+    return <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">Hiển thị</Badge>
+  }
+
+  return <Badge className="border border-slate-300 bg-slate-100 text-slate-700">Đang ẩn</Badge>
+}
+
 export function AdminWebsiteFeedbacksPage() {
   const { toast } = useToast()
 
@@ -60,6 +94,7 @@ export function AdminWebsiteFeedbacksPage() {
   const [error, setError] = useState('')
   const [keyword, setKeyword] = useState('')
   const [actionLoadingKey, setActionLoadingKey] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
 
   const loadFeedbacks = async () => {
     try {
@@ -105,15 +140,44 @@ export function AdminWebsiteFeedbacksPage() {
     )
   }, [feedbacks, keyword])
 
-  const isLoadingAction = (action: 'approve' | 'hide' | 'delete', id: string) =>
+  const totalPages = Math.max(1, Math.ceil(filteredFeedbacks.length / ITEMS_PER_PAGE))
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [keyword])
+
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(prev, totalPages))
+  }, [totalPages])
+
+  const paginatedFeedbacks = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return filteredFeedbacks.slice(start, start + ITEMS_PER_PAGE)
+  }, [filteredFeedbacks, currentPage])
+
+  const isLoadingAction = (action: 'approve' | 'hide' | 'unhide' | 'delete', id: string) =>
     actionLoadingKey === `${action}-${id}`
+
+  const upsertFeedback = (nextFeedback?: WebsiteFeedback | null) => {
+    if (!nextFeedback?.id) return
+
+    setFeedbacks((prev) => {
+      const exists = prev.some((item) => item.id === nextFeedback.id)
+      if (!exists) return prev
+      return prev.map((item) => (item.id === nextFeedback.id ? nextFeedback : item))
+    })
+  }
 
   const handleApprove = async (item: WebsiteFeedback) => {
     try {
       setActionLoadingKey(`approve-${item.id}`)
-      await websiteFeedbackService.approve(item.id)
-      toast({ title: 'Thành công', description: 'Đã duyệt feedback.' })
-      await loadFeedbacks()
+      const response = await websiteFeedbackService.approve(item.id)
+      toast({ title: 'Thành công', description: response.message })
+      if (response.feedback) {
+        upsertFeedback(response.feedback)
+      } else {
+        await loadFeedbacks()
+      }
     } catch (actionError: unknown) {
       const status = getErrorStatus(actionError)
       const message = getErrorMessage(actionError)
@@ -128,12 +192,16 @@ export function AdminWebsiteFeedbacksPage() {
     }
   }
 
-  const handleHide = async (id: string) => {
+  const handleHide = async (item: WebsiteFeedback) => {
     try {
-      setActionLoadingKey(`hide-${id}`)
-      await websiteFeedbackService.hide(id)
-      toast({ title: 'Thành công', description: 'Đã ẩn feedback.' })
-      await loadFeedbacks()
+      setActionLoadingKey(`hide-${item.id}`)
+      const response = await websiteFeedbackService.hide(item.id)
+      toast({ title: 'Thành công', description: response.message })
+      if (response.feedback) {
+        upsertFeedback(response.feedback)
+      } else {
+        await loadFeedbacks()
+      }
     } catch (actionError: unknown) {
       const status = getErrorStatus(actionError)
       const message = getErrorMessage(actionError)
@@ -148,12 +216,16 @@ export function AdminWebsiteFeedbacksPage() {
     }
   }
 
-  const handleUnhide = async (id: string) => {
+  const handleUnhide = async (item: WebsiteFeedback) => {
     try {
-      setActionLoadingKey(`unhide-${id}`)
-      await websiteFeedbackService.unhide(id)
-      toast({ title: 'Thành công', description: 'Đã hiển thị lại feedback.' })
-      await loadFeedbacks()
+      setActionLoadingKey(`unhide-${item.id}`)
+      const response = await websiteFeedbackService.unhide(item.id)
+      toast({ title: 'Thành công', description: response.message })
+      if (response.feedback) {
+        upsertFeedback(response.feedback)
+      } else {
+        await loadFeedbacks()
+      }
     } catch (actionError: unknown) {
       const status = getErrorStatus(actionError)
       const message = getErrorMessage(actionError)
@@ -168,15 +240,15 @@ export function AdminWebsiteFeedbacksPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (feedback: WebsiteFeedback) => {
     const confirmed = window.confirm('Bạn có chắc muốn xóa feedback này?')
     if (!confirmed) return
 
     try {
-      setActionLoadingKey(`delete-${id}`)
-      await websiteFeedbackService.remove(id)
-      toast({ title: 'Thành công', description: 'Đã xóa feedback.' })
-      await loadFeedbacks()
+      setActionLoadingKey(`delete-${feedback.id}`)
+      const response = await websiteFeedbackService.remove(feedback.id)
+      setFeedbacks((prev) => prev.filter((item) => item.id !== feedback.id))
+      toast({ title: 'Thành công', description: response.message })
     } catch (actionError: unknown) {
       const status = getErrorStatus(actionError)
       const message = getErrorMessage(actionError)
@@ -221,82 +293,140 @@ export function AdminWebsiteFeedbacksPage() {
           )}
 
           {!loading && !error && filteredFeedbacks.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Người gửi</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Rating</TableHead>
-                  <TableHead>Nội dung</TableHead>
-                  <TableHead>Ngày gửi</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead className="text-right">Hành động</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredFeedbacks.map((item) => {
-                  const canApprove = item.canApprove ?? item.status !== 'APPROVED'
-                  const canHide = item.canHide ?? item.status === 'APPROVED'
-                  const canDelete = item.canDelete ?? true
-                  const approveDisabled = !canApprove || isLoadingAction('approve', item.id)
-                  const isHidden = item.status === 'HIDDEN' || item.hidden
-                  const hideActionLoading =
-                    isLoadingAction('hide', item.id) || actionLoadingKey === `unhide-${item.id}`
-                  const hideDisabled = !canHide || hideActionLoading
-                  const deleteDisabled = !canDelete || isLoadingAction('delete', item.id)
+            <>
+              <div className="text-sm text-slate-500">Hiển thị {filteredFeedbacks.length} feedback</div>
+              <Table className="min-w-[1380px] table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[170px]">Người gửi</TableHead>
+                    <TableHead className="w-[220px]">Email</TableHead>
+                    <TableHead className="w-[100px]">Rating</TableHead>
+                    <TableHead className="w-[430px]">Nội dung</TableHead>
+                    <TableHead className="w-[130px]">Ngày gửi</TableHead>
+                    <TableHead className="w-[130px]">Trạng thái</TableHead>
+                    <TableHead className="w-[120px]">Trang chủ</TableHead>
+                    <TableHead className="w-[280px] text-right">Hành động</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedFeedbacks.map((feedback) => {
+                    const canApprove = feedback.canApprove ?? feedback.status === 'PENDING'
+                    const canHide = feedback.canHide ?? (feedback.status === 'PENDING' || feedback.status === 'APPROVED')
+                    const canUnhide = feedback.canUnhide ?? feedback.status === 'HIDDEN'
+                    const canDelete = feedback.canDelete ?? true
+                    const approveDisabled = isLoadingAction('approve', feedback.id)
+                    const hideDisabled = isLoadingAction('hide', feedback.id)
+                    const unhideDisabled = isLoadingAction('unhide', feedback.id)
+                    const deleteDisabled = isLoadingAction('delete', feedback.id)
 
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.fullName || '-'}</TableCell>
-                      <TableCell>{item.email || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="gap-1">
-                          <MessageSquare className="h-3.5 w-3.5" />
-                          {item.rating || 0}/5
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[360px]">{item.comment || '-'}</TableCell>
-                      <TableCell>{formatDateDDMMYYYY(item.createdAt)}</TableCell>
-                      <TableCell>{getStatusBadge(item)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void handleApprove(item)}
-                            disabled={approveDisabled}
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                            Duyệt
-                          </Button>
+                    return (
+                      <TableRow key={feedback.id}>
+                        <TableCell className="align-top whitespace-normal break-words font-medium">
+                          {feedback.fullName || '-'}
+                        </TableCell>
+                        <TableCell className="align-top whitespace-normal break-all text-slate-600">
+                          {feedback.email || '-'}
+                        </TableCell>
+                        <TableCell className="align-top whitespace-nowrap">
+                          <Badge variant="outline" className="gap-1">
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            {feedback.rating || 0}/5
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="align-top whitespace-normal break-words leading-6 text-slate-700">
+                          {feedback.comment || '-'}
+                        </TableCell>
+                        <TableCell className="align-top whitespace-nowrap">
+                          {formatDateDDMMYYYY(feedback.createdAt)}
+                        </TableCell>
+                        <TableCell className="align-top whitespace-nowrap">{getStatusBadge(feedback)}</TableCell>
+                        <TableCell className="align-top whitespace-nowrap">{getHomepageBadge(feedback)}</TableCell>
+                        <TableCell className="align-top text-right">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            {canApprove && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleApprove(feedback)}
+                                disabled={approveDisabled}
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                                Duyệt
+                              </Button>
+                            )}
 
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void (isHidden ? handleUnhide(item.id) : handleHide(item.id))}
-                            disabled={hideDisabled}
-                          >
-                            {isHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                            {isHidden ? 'Hiện' : 'Ẩn'}
-                          </Button>
+                            {canHide && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleHide(feedback)}
+                                disabled={hideDisabled}
+                              >
+                                <EyeOff className="h-4 w-4" />
+                                Ẩn
+                              </Button>
+                            )}
 
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-red-200 text-red-600 hover:bg-red-50"
-                            onClick={() => void handleDelete(item.id)}
-                            disabled={deleteDisabled}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Xóa
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+                            {canUnhide && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleUnhide(feedback)}
+                                disabled={unhideDisabled}
+                              >
+                                <Eye className="h-4 w-4" />
+                                Bỏ ẩn
+                              </Button>
+                            )}
+
+                            {canDelete && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-red-200 text-red-600 hover:bg-red-50"
+                                onClick={() => void handleDelete(feedback)}
+                                disabled={deleteDisabled}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Xóa
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+
+              <div className="flex justify-end border-t border-slate-200 px-1 pt-4">
+                <div className="inline-flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-lg border border-slate-200 bg-white hover:bg-slate-100"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+
+                  <span className="min-w-[92px] text-center text-sm font-semibold text-slate-700">
+                    Trang {currentPage}/{totalPages}
+                  </span>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-lg border border-slate-200 bg-white hover:bg-slate-100"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

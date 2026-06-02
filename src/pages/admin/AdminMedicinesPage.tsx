@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, Edit, Plus, Search, Tags, Trash2 } from 'lucide-react'
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Edit, Plus, Search, Tags, Trash2 } from 'lucide-react'
 import {
   adminApi,
   type AdminMedicine,
   type AdminMedicineCategory,
   type AdminMedicineCategoryPayload,
+  type AdminMedicineExpiryStatus,
   type AdminMedicinePayload,
+  type AdminMedicineStockStatus,
   type AdminMedicineSummary,
 } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
@@ -45,9 +47,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 
-type MedicineStatusKey = 'in_stock' | 'low_stock' | 'out_of_stock' | 'expired' | 'other'
+type MedicineStatusFilterKey = typeof FILTER_ALL | AdminMedicineStockStatus | AdminMedicineExpiryStatus
 
 interface MedicineForm {
   name: string
@@ -92,40 +96,6 @@ const initialSummary: AdminMedicineSummary = {
   expiredCount: 0,
 }
 
-function normalizeVietnameseText(value: string): string {
-  return safeString(value)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-}
-
-function statusToKey(status: string, quantity?: number): MedicineStatusKey {
-  const normalized = normalizeVietnameseText(status)
-
-  if (normalized === 'expired' || normalized === 'het han') {
-    return 'expired'
-  }
-
-  const numericQuantity = Number(quantity)
-  if (Number.isFinite(numericQuantity) && numericQuantity <= 0) {
-    return 'out_of_stock'
-  }
-
-  if (normalized === 'con hang' || normalized === 'available' || normalized === 'in_stock') {
-    return 'in_stock'
-  }
-
-  if (normalized === 'sap het' || normalized === 'low_stock') {
-    return 'low_stock'
-  }
-
-  if (normalized === 'het hang' || normalized === 'out_of_stock') {
-    return 'out_of_stock'
-  }
-
-  return 'other'
-}
-
 function formatCurrencyVnd(value: number): string {
   return `${new Intl.NumberFormat('vi-VN').format(value)} đ`
 }
@@ -157,28 +127,77 @@ function formatDateDmy(value?: string | null): string {
   return `${day}-${month}-${year}`
 }
 
-function getQuantityBadgeClass(status: string, quantity?: number): string {
-  const key = statusToKey(status, quantity)
-  if (key === 'out_of_stock') return 'bg-red-50 text-red-700 border-red-200'
-  if (key === 'low_stock') return 'bg-amber-50 text-amber-700 border-amber-200'
-  return 'bg-slate-50 text-slate-800 border-slate-200'
+function formatDateAsYmd(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
-function getStatusBadgeClass(status: string, quantity?: number): string {
-  const key = statusToKey(status, quantity)
-  if (key === 'in_stock') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  if (key === 'low_stock') return 'bg-amber-50 text-amber-700 border-amber-200'
-  if (key === 'out_of_stock' || key === 'expired') return 'bg-red-50 text-red-700 border-red-200'
-  return 'bg-slate-100 text-slate-700 border-slate-200'
+function parseYmdToDate(value?: string | null): Date | undefined {
+  const ymd = normalizeDateToYmd(value)
+  if (!ymd) return undefined
+
+  const [year, month, day] = ymd.split('-').map((part) => Number(part))
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return undefined
+  }
+
+  return new Date(year, month - 1, day)
 }
 
-function getStatusLabel(status: string, quantity?: number): string {
-  const key = statusToKey(status, quantity)
-  if (key === 'expired') return 'Hết hạn'
-  if (key === 'out_of_stock') return 'Hết hàng'
-  if (key === 'low_stock') return 'Sắp hết'
-  if (key === 'in_stock') return 'Còn hàng'
-  return safeString(status) || 'Không xác định'
+function normalizeStockStatus(value?: string | null): AdminMedicineStockStatus | null {
+  const normalized = safeString(value).toUpperCase()
+  if (normalized === 'IN_STOCK' || normalized === 'LOW_STOCK' || normalized === 'OUT_OF_STOCK') {
+    return normalized
+  }
+  return null
+}
+
+function normalizeExpiryStatus(value?: string | null): AdminMedicineExpiryStatus | null {
+  const normalized = safeString(value).toUpperCase()
+  if (normalized === 'VALID' || normalized === 'EXPIRING_SOON' || normalized === 'EXPIRED') {
+    return normalized
+  }
+  return null
+}
+
+function getStockStatusBadgeClass(stockStatus: AdminMedicineStockStatus | null): string {
+  if (stockStatus === 'IN_STOCK') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  if (stockStatus === 'LOW_STOCK') return 'bg-amber-50 text-amber-700 border-amber-200'
+  if (stockStatus === 'OUT_OF_STOCK') return 'bg-red-50 text-red-700 border-red-200'
+  return 'bg-slate-50 text-slate-700 border-slate-200'
+}
+
+function getExpiryStatusBadgeClass(expiryStatus: AdminMedicineExpiryStatus | null): string {
+  if (expiryStatus === 'VALID') return 'bg-sky-50 text-sky-700 border-sky-200'
+  if (expiryStatus === 'EXPIRING_SOON') return 'bg-amber-50 text-amber-700 border-amber-200'
+  if (expiryStatus === 'EXPIRED') return 'bg-red-50 text-red-700 border-red-200'
+  return 'bg-slate-50 text-slate-700 border-slate-200'
+}
+
+function getFallbackStockStatusLabel(stockStatus: AdminMedicineStockStatus | null): string {
+  if (stockStatus === 'IN_STOCK') return 'Còn hàng'
+  if (stockStatus === 'LOW_STOCK') return 'Sắp hết hàng'
+  if (stockStatus === 'OUT_OF_STOCK') return 'Hết hàng'
+  return ''
+}
+
+function getFallbackExpiryStatusLabel(expiryStatus: AdminMedicineExpiryStatus | null): string {
+  if (expiryStatus === 'VALID') return 'Còn HSD'
+  if (expiryStatus === 'EXPIRING_SOON') return 'Sắp hết HSD'
+  if (expiryStatus === 'EXPIRED') return 'Hết HSD'
+  return ''
+}
+
+function getStockStatusLabel(medicine: AdminMedicine): string {
+  const stockStatus = normalizeStockStatus(medicine.stockStatus)
+  return safeString(medicine.stockStatusLabel) || getFallbackStockStatusLabel(stockStatus) || safeString(medicine.status) || '-'
+}
+
+function getExpiryStatusLabel(medicine: AdminMedicine): string {
+  const expiryStatus = normalizeExpiryStatus(medicine.expiryStatus)
+  return safeString(medicine.expiryStatusLabel) || getFallbackExpiryStatusLabel(expiryStatus) || '-'
 }
 
 function getCategoryLabel(category?: AdminMedicineCategory | null): string {
@@ -198,6 +217,7 @@ export function AdminMedicinesPage() {
   const [error, setError] = useState('')
   const [medicineCategoriesLoading, setMedicineCategoriesLoading] = useState(true)
   const [medicineCategoriesError, setMedicineCategoriesError] = useState('')
+  const [summaryWarning, setSummaryWarning] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCategorySubmitting, setIsCategorySubmitting] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
@@ -205,11 +225,12 @@ export function AdminMedicinesPage() {
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, 300)
   const [categoryFilter, setCategoryFilter] = useState(FILTER_ALL)
-  const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
+  const [statusFilter, setStatusFilter] = useState<MedicineStatusFilterKey>(FILTER_ALL)
 
   const [selectedMedicine, setSelectedMedicine] = useState<AdminMedicine | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isExpiryDatePickerOpen, setIsExpiryDatePickerOpen] = useState(false)
   const [formData, setFormData] = useState<MedicineForm>(initialForm)
   const [formError, setFormError] = useState('')
 
@@ -224,23 +245,15 @@ export function AdminMedicinesPage() {
     [medicineCategories]
   )
 
-  const statusOptions = useMemo(() => {
-    const optionMap = new Map<string, string>()
-
-    medicines.forEach((medicine) => {
-      const statusValue = safeString(medicine.status)
-      if (!statusValue) return
-      optionMap.set(statusValue, getStatusLabel(statusValue, safeNumber(medicine.quantity, 0)))
-    })
-
-    if (statusFilter !== FILTER_ALL && !optionMap.has(statusFilter)) {
-      optionMap.set(statusFilter, getStatusLabel(statusFilter))
-    }
-
-    return Array.from(optionMap.entries())
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
-  }, [medicines, statusFilter])
+  const statusOptions: Array<{ value: MedicineStatusFilterKey; label: string }> = [
+    { value: FILTER_ALL, label: 'Tất cả trạng thái' },
+    { value: 'IN_STOCK', label: 'Còn hàng' },
+    { value: 'LOW_STOCK', label: 'Sắp hết hàng' },
+    { value: 'OUT_OF_STOCK', label: 'Hết hàng' },
+    { value: 'VALID', label: 'Còn HSD' },
+    { value: 'EXPIRING_SOON', label: 'Sắp hết HSD' },
+    { value: 'EXPIRED', label: 'Hết HSD' },
+  ]
 
   const fetchSummary = async () => {
     try {
@@ -249,8 +262,10 @@ export function AdminMedicinesPage() {
         lowStockCount: safeNumber(summaryResult.lowStockCount, 0),
         expiredCount: safeNumber(summaryResult.expiredCount, 0),
       })
+      setSummaryWarning('')
     } catch {
       setSummary(initialSummary)
+      setSummaryWarning('Không thể tải thống kê tóm tắt. Danh sách thuốc vẫn hiển thị bình thường.')
     }
   }
 
@@ -272,25 +287,23 @@ export function AdminMedicinesPage() {
     }
   }
 
-  const fetchMedicines = async (
-    query: {
-      keyword?: string
-      categoryId?: string
-      status?: string
-    } = {
-      keyword: debouncedSearch,
-      categoryId: categoryFilter,
-      status: statusFilter,
-    }
-  ) => {
+  const fetchMedicines = async (query?: {
+    keyword?: string
+    categoryId?: string
+    status?: MedicineStatusFilterKey
+  }) => {
+    const keyword = query?.keyword ?? debouncedSearch
+    const selectedCategoryId = query?.categoryId ?? categoryFilter
+    const selectedStatus = query?.status ?? statusFilter
+
     setLoading(true)
     setError('')
 
     try {
       const medicinesData = await adminApi.getMedicines({
-        keyword: query.keyword?.trim() || undefined,
-        categoryId: query.categoryId === FILTER_ALL ? undefined : query.categoryId,
-        status: query.status === FILTER_ALL ? undefined : query.status,
+        keyword: keyword.trim() || undefined,
+        categoryId: selectedCategoryId === FILTER_ALL ? undefined : selectedCategoryId,
+        status: selectedStatus === FILTER_ALL ? undefined : selectedStatus,
       })
       setMedicines(Array.isArray(medicinesData) ? medicinesData : [])
     } catch (fetchError: any) {
@@ -332,6 +345,7 @@ export function AdminMedicinesPage() {
   const resetForm = () => {
     setFormData(initialForm)
     setFormError('')
+    setIsExpiryDatePickerOpen(false)
     setSelectedMedicine(null)
   }
 
@@ -386,6 +400,7 @@ export function AdminMedicinesPage() {
 
   const openEditDialog = (medicine: AdminMedicine) => {
     setSelectedMedicine(medicine)
+    setIsExpiryDatePickerOpen(false)
     const inputDate = normalizeDateToYmd(medicine.expiryDate ?? medicine.expirationDate)
     const matchedCategoryId = safeString(medicine.medicineCategoryId)
       || sortedMedicineCategories.find(
@@ -543,7 +558,6 @@ export function AdminMedicinesPage() {
         fetchMedicines({
           keyword: debouncedSearch,
           categoryId: nextCategoryFilter,
-          status: statusFilter,
         }),
       ])
     } catch (categoryError: any) {
@@ -663,12 +677,52 @@ export function AdminMedicinesPage() {
 
         <div className="grid gap-2">
           <Label htmlFor="medicine-expiry">Hạn sử dụng</Label>
-          <Input
-            id="medicine-expiry"
-            type="date"
-            value={formData.expiryDate}
-            onChange={(event) => setFormData((prev) => ({ ...prev, expiryDate: event.target.value }))}
-          />
+          <Popover open={isExpiryDatePickerOpen} onOpenChange={setIsExpiryDatePickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                id="medicine-expiry"
+                type="button"
+                variant="outline"
+                className="h-10 w-full justify-between rounded-xl border-slate-200 bg-white px-3 text-left font-normal hover:bg-white"
+              >
+                <span className={formData.expiryDate ? 'text-slate-900' : 'text-slate-400'}>
+                  {formData.expiryDate ? formatDateDmy(formData.expiryDate) : 'dd-mm-yyyy'}
+                </span>
+                <CalendarDays className="h-4 w-4 text-slate-400" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={parseYmdToDate(formData.expiryDate)}
+                onSelect={(date) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    expiryDate: date ? formatDateAsYmd(date) : '',
+                  }))
+                  if (date) {
+                    setIsExpiryDatePickerOpen(false)
+                  }
+                }}
+                initialFocus
+              />
+              {formData.expiryDate && (
+                <div className="border-t border-slate-200 p-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-8 w-full justify-center text-sm text-slate-600 hover:bg-slate-100"
+                    onClick={() => {
+                      setFormData((prev) => ({ ...prev, expiryDate: '' }))
+                      setIsExpiryDatePickerOpen(false)
+                    }}
+                  >
+                    Xóa ngày
+                  </Button>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -960,6 +1014,12 @@ export function AdminMedicinesPage() {
         </div>
       </div>
 
+      {summaryWarning && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          {summaryWarning}
+        </p>
+      )}
+
       <Card className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-6 py-5">
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_260px_220px]">
@@ -996,12 +1056,11 @@ export function AdminMedicinesPage() {
 
             <div className="grid gap-2">
               <Label htmlFor="medicine-filter-status">Trạng thái</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as MedicineStatusFilterKey)}>
                 <SelectTrigger id="medicine-filter-status">
                   <SelectValue placeholder="Tất cả trạng thái" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={FILTER_ALL}>Tất cả trạng thái</SelectItem>
                   {statusOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
@@ -1018,14 +1077,7 @@ export function AdminMedicinesPage() {
             </p>
           )}
 
-          <div className="mt-4 flex flex-col gap-2 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              Hiển thị {sortedMedicines.length} thuốc
-            </span>
-            <span>
-              API dùng `keyword`, `categoryId`, `status` theo backend mới
-            </span>
-          </div>
+          <div className="mt-4 text-sm text-slate-500">Hiển thị {sortedMedicines.length} thuốc</div>
         </div>
 
         <CardContent className="p-0">
@@ -1058,15 +1110,16 @@ export function AdminMedicinesPage() {
                     <TableHead className="px-6 py-4">Tồn kho</TableHead>
                     <TableHead className="px-6 py-4">Giá</TableHead>
                     <TableHead className="px-6 py-4">Hạn sử dụng</TableHead>
-                    <TableHead className="px-6 py-4">Trạng thái</TableHead>
                     <TableHead className="px-6 py-4 text-right">Hành động</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedMedicines.map((medicine) => {
-                    const statusText = safeString(medicine.status) || 'Không xác định'
                     const expiryText = formatDateDmy(medicine.expiryDate ?? medicine.expirationDate)
                     const quantity = safeNumber(medicine.quantity, 0)
+                    const stockStatus = normalizeStockStatus(medicine.stockStatus)
+                    const expiryStatus = normalizeExpiryStatus(medicine.expiryStatus)
+                    const quantityText = `${quantity} ${safeString(medicine.unit)}`.trim()
 
                     return (
                       <TableRow key={String(medicine.id)} className="border-b border-slate-100">
@@ -1078,18 +1131,21 @@ export function AdminMedicinesPage() {
                         </TableCell>
                         <TableCell className="px-6 py-4">{safeString(medicine.manufacturer) || '-'}</TableCell>
                         <TableCell className="px-6 py-4">
-                          <Badge className={`rounded-full border font-medium ${getQuantityBadgeClass(statusText, quantity)}`}>
-                            {quantity} {safeString(medicine.unit)}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge className={`w-fit rounded-full border font-medium ${getStockStatusBadgeClass(stockStatus)}`}>
+                              {getStockStatusLabel(medicine)}
+                            </Badge>
+                            <span className="text-xs text-slate-500">{quantityText || '-'}</span>
+                          </div>
                         </TableCell>
                         <TableCell className="px-6 py-4">{formatCurrencyVnd(safeNumber(medicine.price, 0))}</TableCell>
-                        <TableCell className={`px-6 py-4 ${medicine.expired ? 'text-red-600' : ''}`}>
-                          {expiryText}
-                        </TableCell>
                         <TableCell className="px-6 py-4">
-                          <Badge className={`rounded-full border font-medium ${getStatusBadgeClass(statusText, quantity)}`}>
-                            {getStatusLabel(statusText, quantity)}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge className={`w-fit rounded-full border font-medium ${getExpiryStatusBadgeClass(expiryStatus)}`}>
+                              {getExpiryStatusLabel(medicine)}
+                            </Badge>
+                            <span className="text-xs text-slate-500">{expiryText}</span>
+                          </div>
                         </TableCell>
                         <TableCell className="px-6 py-4 text-right">
                           <div className="inline-flex items-center gap-2">

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { API_BASE_URL, getStoredRole, getStoredToken, handleProtectedApiAuthFailure } from './auth'
+import { API_BASE_URL, getStoredRole, getStoredToken, handleProtectedApiAuthFailure, isProtectedStatusCode } from './auth'
 
 export interface DashboardSummaryResponse {
   totalAppointments?: number
@@ -51,7 +51,9 @@ dashboardClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status
-    handleProtectedApiAuthFailure(status, error?.config?.url)
+    if (isProtectedStatusCode(status)) {
+      handleProtectedApiAuthFailure(status, error?.config?.url)
+    }
     return Promise.reject(error)
   }
 )

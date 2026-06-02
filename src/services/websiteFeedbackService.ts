@@ -15,7 +15,14 @@ export interface WebsiteFeedback {
   statusDisplay?: string
   canApprove?: boolean
   canHide?: boolean
+  canUnhide?: boolean
   canDelete?: boolean
+  visibleOnHomepage?: boolean
+}
+
+export interface WebsiteFeedbackActionResponse {
+  message: string
+  feedback?: WebsiteFeedback | null
 }
 
 export interface CreateWebsiteFeedbackPayload {
@@ -26,7 +33,9 @@ export interface CreateWebsiteFeedbackPayload {
 }
 
 function safeString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : ''
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return ''
 }
 
 function safeNumber(value: unknown, fallback = 0): number {
@@ -37,22 +46,49 @@ function safeNumber(value: unknown, fallback = 0): number {
 function toBool(value: unknown): boolean {
   if (typeof value === 'boolean') return value
   if (typeof value === 'string') return value.toLowerCase() === 'true'
+  if (typeof value === 'number') return value === 1
   return false
 }
 
+function asRecord(value: unknown): Record<string, any> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null
+}
+
+function unwrapList(input: unknown): any[] {
+  if (Array.isArray(input)) return input
+  const source = asRecord(input)
+  if (!source) return []
+  if (Array.isArray(source.data)) return source.data
+  if (Array.isArray(source.items)) return source.items
+  if (Array.isArray(source.content)) return source.content
+  const dataRecord = asRecord(source.data)
+  if (dataRecord) {
+    if (Array.isArray(dataRecord.items)) return dataRecord.items
+    if (Array.isArray(dataRecord.content)) return dataRecord.content
+  }
+  return []
+}
+
 function normalizeStatus(item: any): WebsiteFeedbackStatus {
-  const rawStatus = safeString(item?.status || item?.approvalStatus || '').toUpperCase()
+  const rawStatus = safeString(item?.status ?? item?.approvalStatus ?? item?.statusCode).toUpperCase()
   const hidden = toBool(item?.hidden ?? item?.isHidden)
   const approved = toBool(item?.approved ?? item?.isApproved)
 
-  if (hidden || rawStatus.includes('HIDDEN')) return 'HIDDEN'
-  if (approved || rawStatus.includes('APPROVED')) return 'APPROVED'
+  if (rawStatus === 'HIDDEN' || hidden || rawStatus.includes('HIDDEN')) return 'HIDDEN'
+  if (rawStatus === 'APPROVED' || approved || rawStatus.includes('APPROVED')) return 'APPROVED'
   return 'PENDING'
 }
 
 function normalizeWebsiteFeedback(item: any): WebsiteFeedback {
   const status = normalizeStatus(item)
   const statusDisplay = safeString(item?.statusDisplay || item?.displayStatus || '')
+  const hidden = status === 'HIDDEN'
+  const approved = status === 'APPROVED'
+  const visibleOnHomepage = typeof item?.visibleOnHomepage === 'boolean'
+    ? item.visibleOnHomepage
+    : typeof item?.isVisibleOnHomepage === 'boolean'
+      ? item.isVisibleOnHomepage
+      : approved && !hidden
 
   return {
     id: safeString(item?.id || item?.feedbackId || ''),
@@ -61,13 +97,15 @@ function normalizeWebsiteFeedback(item: any): WebsiteFeedback {
     rating: safeNumber(item?.rating, 0),
     comment: safeString(item?.comment || item?.content || ''),
     createdAt: safeString(item?.createdAt || item?.createdDate || item?.date || '') || null,
-    approved: status === 'APPROVED',
-    hidden: status === 'HIDDEN',
+    approved,
+    hidden,
     status,
     statusDisplay: statusDisplay || undefined,
-    canApprove: typeof item?.canApprove === 'boolean' ? item.canApprove : undefined,
-    canHide: typeof item?.canHide === 'boolean' ? item.canHide : undefined,
-    canDelete: typeof item?.canDelete === 'boolean' ? item.canDelete : undefined,
+    canApprove: typeof item?.canApprove === 'boolean' ? item.canApprove : status === 'PENDING',
+    canHide: typeof item?.canHide === 'boolean' ? item.canHide : status === 'PENDING' || status === 'APPROVED',
+    canUnhide: typeof item?.canUnhide === 'boolean' ? item.canUnhide : status === 'HIDDEN',
+    canDelete: typeof item?.canDelete === 'boolean' ? item.canDelete : true,
+    visibleOnHomepage,
   }
 }
 
@@ -75,12 +113,51 @@ interface HttpError extends Error {
   status?: number
 }
 
-async function tryMethods(url: string, methods: Array<'PUT' | 'PATCH' | 'POST' | 'DELETE'>) {
+function unwrapActionFeedback(input: unknown): Record<string, any> | null {
+  const source = asRecord(input)
+  if (!source) return null
+
+  const nested = asRecord(source.data)
+  const candidates = [
+    source.feedback,
+    source.websiteFeedback,
+    source.item,
+    nested?.feedback,
+    nested?.websiteFeedback,
+    nested?.item,
+    nested,
+    source,
+  ]
+
+  for (const candidate of candidates) {
+    const record = asRecord(candidate)
+    if (record && ('id' in record || 'feedbackId' in record || 'status' in record || 'comment' in record)) {
+      return record
+    }
+  }
+
+  return null
+}
+
+function normalizeActionResponse(input: unknown, fallbackMessage: string): WebsiteFeedbackActionResponse {
+  const source = asRecord(input)
+  const nested = asRecord(source?.data)
+  const message = safeString(source?.message ?? nested?.message) || fallbackMessage
+  const feedbackRecord = unwrapActionFeedback(input)
+
+  return {
+    message,
+    feedback: feedbackRecord ? normalizeWebsiteFeedback(feedbackRecord) : null,
+  }
+}
+
+async function tryMethods(url: string, methods: Array<'PUT' | 'PATCH' | 'POST'>, fallbackMessage: string) {
   let lastError: unknown = null
 
   for (const method of methods) {
     try {
-      return await fetchJson(url, { method })
+      const response = await fetchJson(url, { method })
+      return normalizeActionResponse(response, fallbackMessage)
     } catch (error) {
       const status = (error as HttpError)?.status
       if (status === 401 || status === 403) throw error
@@ -91,29 +168,18 @@ async function tryMethods(url: string, methods: Array<'PUT' | 'PATCH' | 'POST' |
   throw lastError ?? new Error('Khong the thuc hien thao tac feedback.')
 }
 
-async function tryDeletePaths(paths: string[]) {
-  let lastError: unknown = null
-
-  for (const path of paths) {
-    try {
-      return await tryMethods(path, ['DELETE', 'POST'])
-    } catch (error) {
-      const status = (error as HttpError)?.status
-      if (status === 401 || status === 403) throw error
-      lastError = error
-    }
-  }
-
-  throw lastError ?? new Error('Khong the xoa feedback.')
+async function deleteFeedback(url: string, fallbackMessage: string) {
+  const response = await fetchJson(url, { method: 'DELETE' })
+  return normalizeActionResponse(response, fallbackMessage)
 }
 
 export const websiteFeedbackService = {
   getPublicFeedbacks: async (): Promise<WebsiteFeedback[]> => {
     const data = await fetchJson<any>(`${API_BASE_URL}/public/website-feedbacks`)
-    const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+    const list = unwrapList(data)
     return list
       .map(normalizeWebsiteFeedback)
-      .filter((item: WebsiteFeedback) => item.status === 'APPROVED' && !item.hidden)
+      .filter((item: WebsiteFeedback) => item.id && item.status === 'APPROVED' && item.visibleOnHomepage)
   },
 
   createPublicFeedback: async (payload: CreateWebsiteFeedbackPayload) => {
@@ -125,48 +191,36 @@ export const websiteFeedbackService = {
 
   getAdminFeedbacks: async (): Promise<WebsiteFeedback[]> => {
     const data = await fetchJson<any>(`${API_BASE_URL}/admin/website-feedbacks`)
-    const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
-    return list.map(normalizeWebsiteFeedback)
+    return unwrapList(data)
+      .map(normalizeWebsiteFeedback)
+      .filter((item) => Boolean(item.id))
   },
 
   approve: async (id: string) => {
-    return tryMethods(`${API_BASE_URL}/admin/website-feedbacks/${id}/approve`, ['PUT', 'PATCH', 'POST'])
+    return tryMethods(
+      `${API_BASE_URL}/admin/website-feedbacks/${id}/approve`,
+      ['PUT', 'PATCH', 'POST'],
+      'Đã duyệt'
+    )
   },
 
   unhide: async (id: string) => {
-    let lastError: unknown = null
-    for (const path of ['unhide', 'show', 'publish']) {
-      try {
-        return await tryMethods(`${API_BASE_URL}/admin/website-feedbacks/${id}/${path}`, ['PUT', 'PATCH', 'POST'])
-      } catch (error) {
-        const status = (error as HttpError)?.status
-        if (status === 401 || status === 403) throw error
-        lastError = error
-      }
-    }
-    throw lastError ?? new Error('Khong the hien feedback.')
+    return tryMethods(
+      `${API_BASE_URL}/admin/website-feedbacks/${id}/unhide`,
+      ['PUT', 'PATCH', 'POST'],
+      'Đã bỏ ẩn'
+    )
   },
 
   hide: async (id: string) => {
-    let lastError: unknown = null
-    for (const path of ['hide', 'archive', 'reject']) {
-      try {
-        return await tryMethods(`${API_BASE_URL}/admin/website-feedbacks/${id}/${path}`, ['PUT', 'PATCH', 'POST'])
-      } catch (error) {
-        const status = (error as HttpError)?.status
-        if (status === 401 || status === 403) throw error
-        lastError = error
-      }
-    }
-    throw lastError ?? new Error('Khong the an feedback.')
+    return tryMethods(
+      `${API_BASE_URL}/admin/website-feedbacks/${id}/hide`,
+      ['PUT', 'PATCH', 'POST'],
+      'Đã ẩn'
+    )
   },
 
   remove: async (id: string) => {
-    return tryDeletePaths([
-      `${API_BASE_URL}/admin/website-feedbacks/${id}`,
-      `${API_BASE_URL}/admin/website-feedbacks/${id}/delete`,
-      `${API_BASE_URL}/admin/website-feedbacks/${id}/remove`,
-      `${API_BASE_URL}/admin/website-feedbacks/${id}/destroy`,
-    ])
+    return deleteFeedback(`${API_BASE_URL}/admin/website-feedbacks/${id}`, 'Đã xóa')
   },
 }

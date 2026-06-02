@@ -87,6 +87,9 @@ export interface AdminMedicineSummary {
   expiredCount: number
 }
 
+export type AdminMedicineStockStatus = 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK'
+export type AdminMedicineExpiryStatus = 'VALID' | 'EXPIRING_SOON' | 'EXPIRED'
+
 export interface AdminMedicineCategory {
   id: string
   name: string
@@ -114,6 +117,10 @@ export interface AdminMedicine {
   description?: string | null
   status?: string | null
   expired?: boolean
+  stockStatus?: AdminMedicineStockStatus | null
+  stockStatusLabel?: string | null
+  expiryStatus?: AdminMedicineExpiryStatus | null
+  expiryStatusLabel?: string | null
 }
 
 export interface AdminMedicinePayload {
@@ -283,6 +290,11 @@ function pickBoolean(...values: unknown[]): boolean | undefined {
   return undefined
 }
 
+function pickUppercaseString(...values: unknown[]): string | undefined {
+  const value = pickString(...values)
+  return value ? value.toUpperCase() : undefined
+}
+
 function normalizeText(value: unknown): string {
   return String(value ?? '')
     .trim()
@@ -353,6 +365,20 @@ function normalizeAdminMedicine(input: unknown): AdminMedicine {
     description: pickString(source.description) ?? null,
     status: pickString(source.status, source.statusDisplay) ?? null,
     expired: pickBoolean(source.expired),
+    stockStatus: (pickUppercaseString(
+      source.stockStatus,
+      source.stock_status,
+      source.stockStatusCode,
+      source.stock_status_code
+    ) as AdminMedicineStockStatus | undefined) ?? null,
+    stockStatusLabel: pickString(source.stockStatusLabel, source.stock_status_label) ?? null,
+    expiryStatus: (pickUppercaseString(
+      source.expiryStatus,
+      source.expiry_status,
+      source.expiryStatusCode,
+      source.expiry_status_code
+    ) as AdminMedicineExpiryStatus | undefined) ?? null,
+    expiryStatusLabel: pickString(source.expiryStatusLabel, source.expiry_status_label) ?? null,
   }
 }
 
@@ -826,11 +852,8 @@ export const adminApi = {
 
     const token = getStoredToken();
     adminMedicinesSummaryInFlight = (async () => {
-      const data = await tryFetchFirstSuccess<any>(
-        [
-          `${API_BASE_URL}/medicines/summary`,
-          `${API_BASE_URL}/admin/medicines/summary`,
-        ],
+      const data = await fetchJson<any>(
+        `${API_BASE_URL}/admin/medicines/summary`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       return {

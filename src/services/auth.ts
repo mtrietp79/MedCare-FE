@@ -30,6 +30,10 @@ interface FetchJsonError extends Error {
 const VALID_ROLES = ['ROLE_ADMIN', 'ROLE_DOCTOR', 'ROLE_PATIENT'] as const
 let isLoggingOut = false
 
+export function isProtectedStatusCode(status?: number | null): status is ProtectedStatusCode {
+  return status === 401 || status === 403
+}
+
 function emitAuthSync() {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new Event('auth-sync'))
@@ -106,7 +110,7 @@ export function softLogout(options: SoftLogoutOptions = {}) {
 }
 
 export function handleProtectedApiAuthFailure(status?: number | null, requestUrl?: string): boolean {
-  if (status !== 401 && status !== 403) return false
+  if (!isProtectedStatusCode(status)) return false
   if (isPublicAuthEndpoint(requestUrl)) return false
 
   if (status === 401) {
@@ -151,7 +155,9 @@ api.interceptors.response.use(
       if (error.response) {
         error.message = message
       }
-      handleProtectedApiAuthFailure(status, error.config?.url)
+      if (isProtectedStatusCode(status)) {
+        handleProtectedApiAuthFailure(status, error.config?.url)
+      }
 
       return Promise.reject(error)
     }
@@ -224,7 +230,9 @@ export async function fetchJson<T = any>(url: string, options: RequestInit = {})
       data = rawText
     }
     if (!response.ok) {
-      handleProtectedApiAuthFailure(response.status, url)
+      if (isProtectedStatusCode(response.status)) {
+        handleProtectedApiAuthFailure(response.status, url)
+      }
 
       const message =
         data && typeof data === 'object' && 'message' in data

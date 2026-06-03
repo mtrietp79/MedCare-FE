@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
+import { ThemeToggle } from '@/components/theme-toggle'
 import {
   Sidebar,
   SidebarContent,
@@ -79,18 +80,18 @@ function AdminSidebar() {
   }
 
   return (
-    <Sidebar className="border-r border-[#e5e7eb] bg-[#f8fafc] shadow-sm">
-      <SidebarFooter className="border-b border-[#e5e7eb] px-4 py-4">
+    <Sidebar className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm">
+      <SidebarFooter className="border-b border-sidebar-border px-4 py-4">
         <Link
           to="/admin/dashboard"
-          className="group flex items-center gap-3 rounded-2xl bg-sky-100/80 p-3 transition hover:bg-sky-100"
+          className="group flex items-center gap-3 rounded-2xl bg-primary/10 p-3 transition hover:bg-primary/15"
         >
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0284c7] text-white shadow-sm">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
             <LayoutDashboard className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-[#111827]">MedCare Admin</p>
-            <p className="text-xs text-[#6b7280]">Quản lý hệ thống</p>
+            <p className="text-sm font-semibold text-sidebar-foreground">MedCare Admin</p>
+            <p className="text-xs text-muted-foreground">Quản lý hệ thống</p>
           </div>
         </Link>
       </SidebarFooter>
@@ -110,7 +111,7 @@ function AdminSidebar() {
                   asChild
                   isActive={isActive}
                   tooltip={item.label}
-                  className={isActive ? 'bg-sky-100 text-sky-700 shadow-sm' : 'hover:bg-slate-100'}
+                  className={isActive ? 'bg-primary/10 text-primary shadow-sm' : 'hover:bg-accent hover:text-accent-foreground'}
                 >
                   <Link to={item.href} className="flex items-center gap-3 rounded-xl px-3 py-3 font-medium transition">
                     <Icon className="h-4 w-4" />
@@ -123,7 +124,7 @@ function AdminSidebar() {
         </SidebarMenu>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-[#e5e7eb] px-4 py-4">
+      <SidebarFooter className="border-t border-sidebar-border px-4 py-4">
         <Button variant="outline" className="w-full justify-center" onClick={handleLogout}>
           <LogOut className="h-4 w-4" />
           Đăng xuất
@@ -138,16 +139,19 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-[#f8fafc] text-[#111827]">
+      <div className="flex min-h-screen w-full bg-background text-foreground">
         <AdminSidebar />
 
         <div className="flex flex-1 flex-col overflow-hidden">
-          <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-[#e5e7eb] bg-white px-6 py-4">
-            <SidebarTrigger className="size-8 rounded-md border border-[#e5e7eb] text-[#6b7280] hover:bg-[#f1f5f9]" />
-            <h1 className="text-2xl font-semibold text-[#111827]">MedCare Admin Panel</h1>
+          <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-border bg-background px-6 py-4">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="size-8 rounded-md border border-border text-muted-foreground hover:bg-accent" />
+              <h1 className="text-2xl font-semibold text-foreground">MedCare Admin Panel</h1>
+            </div>
+            <ThemeToggle />
           </header>
 
-          <main className="flex-1 overflow-auto bg-[#f8fafc] p-6">
+          <main className="flex-1 overflow-auto bg-background p-6">
             <motion.div
               key={location.pathname}
               initial={{ opacity: 0, y: 16 }}

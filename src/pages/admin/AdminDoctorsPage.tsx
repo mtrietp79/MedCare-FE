@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
-import { Plus, Search, Edit, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Search, Edit, Trash2 } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -27,7 +27,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import {
   Select,
@@ -58,6 +57,11 @@ interface FormErrors {
   username?: string
   password?: string
   price?: string
+}
+
+interface RequestErrorWithData extends Error {
+  data?: unknown
+  status?: number
 }
 
 const initialForm: DoctorForm = {
@@ -123,6 +127,8 @@ export function AdminDoctorsPage() {
   const [selectedDoctor, setSelectedDoctor] = useState<NormalizedDoctor | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [doctorPendingDelete, setDoctorPendingDelete] = useState<NormalizedDoctor | null>(null)
+  const [isDeletingDoctor, setIsDeletingDoctor] = useState(false)
   const [formData, setFormData] = useState<DoctorForm>(initialForm)
   const [formErrors, setFormErrors] = useState<FormErrors>({})
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -240,6 +246,31 @@ export function AdminDoctorsPage() {
     return errors
   }
 
+  const getDoctorDeleteErrorMessage = (deleteError: unknown): string => {
+    const responseData = (deleteError as RequestErrorWithData | undefined)?.data
+    const responseStatus = (deleteError as RequestErrorWithData | undefined)?.status
+    const responseRecord =
+      responseData && typeof responseData === 'object' && !Array.isArray(responseData)
+        ? (responseData as Record<string, unknown>)
+        : null
+
+    const errorCode =
+      typeof responseRecord?.code === 'string' ? responseRecord.code.trim().toUpperCase() : ''
+
+    if (
+      responseStatus === 409 &&
+      errorCode === 'DOCTOR_DELETE_HAS_ACTIVE_APPOINTMENTS'
+    ) {
+      return 'Không thể xóa bác sĩ vì đang có lịch hẹn hoặc lịch tái khám. Vui lòng chờ đến khi hết lịch.'
+    }
+
+    const backendMessage =
+      typeof responseRecord?.message === 'string' ? responseRecord.message.trim() : ''
+    if (backendMessage) return backendMessage
+
+    return 'Không thể xóa bác sĩ. Vui lòng thử lại.'
+  }
+
   const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
     setPhotoError('')
     const file = event.target.files?.[0]
@@ -352,17 +383,23 @@ export function AdminDoctorsPage() {
     }
   }
 
-  const handleDelete = async (doctorId: string) => {
+  const handleDelete = async () => {
+    if (!doctorPendingDelete?.id || isDeletingDoctor) return
+
+    setIsDeletingDoctor(true)
     try {
-      await adminApi.deleteDoctor(doctorId)
-      toast({ title: 'Thành công', description: 'Đã xóa bác sĩ.' })
-      await fetchDoctors()
+      await adminApi.deleteDoctor(doctorPendingDelete.id)
+      setDoctors((prev) => prev.filter((doctor) => doctor.id !== doctorPendingDelete.id))
+      setDoctorPendingDelete(null)
+      toast({ title: 'Thành công', description: 'Đã xóa bác sĩ thành công.' })
     } catch (deleteError: any) {
       toast({
         title: 'Lỗi',
-        description: deleteError?.message || 'Không thể xóa bác sĩ.',
+        description: getDoctorDeleteErrorMessage(deleteError),
         variant: 'destructive',
       })
+    } finally {
+      setIsDeletingDoctor(false)
     }
   }
 
@@ -644,25 +681,14 @@ export function AdminDoctorsPage() {
                       <Button variant="ghost" size="sm" onClick={() => openEditDialog(doctor)}>
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Xác nhận xóa</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Bạn có chắc muốn xóa bác sĩ {doctor.fullName || doctor.username || doctor.id}?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Hủy</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => void handleDelete(doctor.id)}>Xóa</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDoctorPendingDelete(doctor)}
+                        disabled={isDeletingDoctor}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -692,6 +718,44 @@ export function AdminDoctorsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(doctorPendingDelete)}
+        onOpenChange={(open) => {
+          if (isDeletingDoctor) return
+          if (!open) {
+            setDoctorPendingDelete(null)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận xóa bác sĩ</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa bác sĩ {doctorPendingDelete?.fullName || doctorPendingDelete?.username || doctorPendingDelete?.id || ''} không? Thao tác này không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingDoctor}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeletingDoctor}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleDelete()
+              }}
+            >
+              {isDeletingDoctor ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang xóa...
+                </>
+              ) : (
+                'Xóa'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

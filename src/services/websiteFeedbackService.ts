@@ -69,13 +69,67 @@ function unwrapList(input: unknown): any[] {
   return []
 }
 
+function hasModerationSignals(item: any): boolean {
+  if (!item || typeof item !== 'object') return false
+
+  return [
+    'status',
+    'approvalStatus',
+    'statusCode',
+    'publicationStatus',
+    'moderationStatus',
+    'approved',
+    'isApproved',
+    'hidden',
+    'isHidden',
+    'visibleOnHomepage',
+    'isVisibleOnHomepage',
+    'published',
+    'isPublished',
+    'visible',
+    'isVisible',
+    'showOnHomepage',
+    'isShownOnHomepage',
+  ].some((key) => key in item)
+}
+
 function normalizeStatus(item: any): WebsiteFeedbackStatus {
-  const rawStatus = safeString(item?.status ?? item?.approvalStatus ?? item?.statusCode).toUpperCase()
+  const rawStatus = safeString(
+    item?.status ??
+      item?.approvalStatus ??
+      item?.statusCode ??
+      item?.publicationStatus ??
+      item?.moderationStatus
+  ).toUpperCase()
   const hidden = toBool(item?.hidden ?? item?.isHidden)
   const approved = toBool(item?.approved ?? item?.isApproved)
+  const published = toBool(item?.published ?? item?.isPublished)
+  const visible = toBool(item?.visible ?? item?.isVisible ?? item?.showOnHomepage ?? item?.isShownOnHomepage)
 
-  if (rawStatus === 'HIDDEN' || hidden || rawStatus.includes('HIDDEN')) return 'HIDDEN'
-  if (rawStatus === 'APPROVED' || approved || rawStatus.includes('APPROVED')) return 'APPROVED'
+  if (
+    rawStatus === 'HIDDEN' ||
+    hidden ||
+    rawStatus.includes('HIDDEN') ||
+    rawStatus.includes('ARCHIV') ||
+    rawStatus.includes('REJECT')
+  ) {
+    return 'HIDDEN'
+  }
+
+  if (
+    rawStatus === 'APPROVED' ||
+    approved ||
+    published ||
+    visible ||
+    rawStatus.includes('APPROVED') ||
+    rawStatus.includes('PUBLISH') ||
+    rawStatus.includes('VISIBLE') ||
+    rawStatus.includes('PUBLIC') ||
+    rawStatus.includes('SHOW')
+  ) {
+    return 'APPROVED'
+  }
+
   return 'PENDING'
 }
 
@@ -84,11 +138,34 @@ function normalizeWebsiteFeedback(item: any): WebsiteFeedback {
   const statusDisplay = safeString(item?.statusDisplay || item?.displayStatus || '')
   const hidden = status === 'HIDDEN'
   const approved = status === 'APPROVED'
+  const hasExplicitVisibility =
+    typeof item?.visibleOnHomepage === 'boolean' ||
+    typeof item?.isVisibleOnHomepage === 'boolean' ||
+    typeof item?.published === 'boolean' ||
+    typeof item?.isPublished === 'boolean' ||
+    typeof item?.visible === 'boolean' ||
+    typeof item?.isVisible === 'boolean' ||
+    typeof item?.showOnHomepage === 'boolean' ||
+    typeof item?.isShownOnHomepage === 'boolean'
   const visibleOnHomepage = typeof item?.visibleOnHomepage === 'boolean'
     ? item.visibleOnHomepage
     : typeof item?.isVisibleOnHomepage === 'boolean'
       ? item.isVisibleOnHomepage
-      : approved && !hidden
+      : typeof item?.published === 'boolean'
+        ? item.published
+        : typeof item?.isPublished === 'boolean'
+          ? item.isPublished
+          : typeof item?.visible === 'boolean'
+            ? item.visible
+            : typeof item?.isVisible === 'boolean'
+              ? item.isVisible
+              : typeof item?.showOnHomepage === 'boolean'
+                ? item.showOnHomepage
+                : typeof item?.isShownOnHomepage === 'boolean'
+                  ? item.isShownOnHomepage
+                  : hasModerationSignals(item)
+                    ? approved && !hidden
+                    : true
 
   return {
     id: safeString(item?.id || item?.feedbackId || ''),
@@ -179,7 +256,7 @@ export const websiteFeedbackService = {
     const list = unwrapList(data)
     return list
       .map(normalizeWebsiteFeedback)
-      .filter((item: WebsiteFeedback) => item.id && item.status === 'APPROVED' && item.visibleOnHomepage)
+      .filter((item: WebsiteFeedback) => item.id && !item.hidden && item.visibleOnHomepage !== false)
   },
 
   createPublicFeedback: async (payload: CreateWebsiteFeedbackPayload) => {

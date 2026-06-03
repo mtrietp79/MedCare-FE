@@ -497,11 +497,16 @@ function normalizeAdminServicePackage(input: unknown): AdminServicePackage {
   const source = unwrapEntity(input) ?? {}
   const items = Array.isArray(source.items) ? source.items.map((item: any) => ({
     id: pickString(item.id),
-    medicalServiceId: pickString(item.medicalServiceId, item.serviceId),
+    medicalServiceId: pickString(item.medicalServiceId, item.serviceId) ?? '',
     medicalService: item.medicalService,
     name: pickString(item.name, item.medicalService?.name),
     price: pickNumber(item.price, item.medicalService?.price),
   })) : []
+  const medicalServiceIds = [
+    ...items.map(item => item.medicalServiceId),
+    ...(Array.isArray(source.medicalServiceIds) ? source.medicalServiceIds : []),
+    ...(Array.isArray(source.serviceIds) ? source.serviceIds : []),
+  ].filter((id): id is string => Boolean(pickString(id)))
   
   return {
     id: pickString(source.id) ?? '',
@@ -510,7 +515,12 @@ function normalizeAdminServicePackage(input: unknown): AdminServicePackage {
     price: pickNumber(source.price) ?? 0,
     durationMinutes: pickNumber(source.durationMinutes, source.duration) ?? 0,
     imageUrl: pickString(source.imageUrl, source.image) ?? null,
-    itemCount: pickNumber(source.itemCount, source.serviceItemCount, Array.isArray(source.items) ? source.items.length : 0) ?? 0,
+    itemCount: pickNumber(
+      source.itemCount,
+      source.serviceItemCount,
+      Array.isArray(source.items) ? source.items.length : 0,
+      medicalServiceIds.length
+    ) ?? 0,
     status: pickString(source.status, source.statusDisplay) ?? null,
     statusDisplay: pickString(source.statusDisplay, source.displayStatus) ?? null,
     isActive: pickBoolean(source.isActive, source.active),
@@ -521,7 +531,7 @@ function normalizeAdminServicePackage(input: unknown): AdminServicePackage {
     totalPaid: pickNumber(source.totalPaid, source.paidCount),
     totalPending: pickNumber(source.totalPending, source.pendingCount),
     items,
-    medicalServiceIds: items.map(item => item.medicalServiceId).filter((id): id is string => Boolean(id)),
+    medicalServiceIds: [...new Set(medicalServiceIds.map((id) => pickString(id) ?? ''))].filter(Boolean),
     createdAt: pickString(source.createdAt),
     updatedAt: pickString(source.updatedAt),
   }

@@ -131,6 +131,16 @@ export function AdminServicePackagesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
 
+  const sortedPackages = useMemo(
+    () =>
+      [...packages].sort((a, b) => {
+        const aTime = new Date(safeString(a.createdAt) || 0).getTime()
+        const bTime = new Date(safeString(b.createdAt) || 0).getTime()
+        return bTime - aTime
+      }),
+    [packages]
+  )
+
   const fetchMedicalServices = async () => {
     if (medicalServices.length > 0) return
 
@@ -329,16 +339,6 @@ export function AdminServicePackagesPage() {
   }
 
   const renderManagementTab = () => {
-    const sortedPackages = useMemo(
-      () =>
-        [...packages].sort((a, b) => {
-          const aTime = new Date(safeString(a.createdAt) || 0).getTime()
-          const bTime = new Date(safeString(b.createdAt) || 0).getTime()
-          return bTime - aTime
-        }),
-      [packages]
-    )
-
     return (
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

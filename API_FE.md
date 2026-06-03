@@ -1,5 +1,8 @@
 # Clinic Backend API for Frontend
 
+> Status/payment mini contract for FE:
+> `API_FE_STATUS_CONTRACT.md`
+
 ## 1) Base setup
 
 - Base URL: `http://localhost:8080`
@@ -15,6 +18,45 @@
   - `/swagger-ui/**`
   - `/v3/api-docs/**`
 - All remaining APIs require JWT.
+
+## 2.1) Admin Hotfix 2026-06-01
+
+- `GET /api/admin/dashboard/**` and `GET /api/dashboard/**`:
+  - now requires `ROLE_ADMIN` (no longer returns fake zero data for non-admin).
+
+- Service package management (`/api/admin/service-packages`):
+  - response now includes package booking counters:
+    - `totalBooked`
+    - `totalCompleted`
+    - `totalPaid`
+    - `totalPending`
+
+- Service package booking admin path aliases:
+  - old: `/api/admin/service-package-bookings`
+  - new alias: `/api/admin/service-packages/bookings`
+
+- Patient service package booking path aliases:
+  - old: `/api/patient/service-package-bookings`
+  - new alias: `/api/patient/service-packages/bookings`
+
+- Admin medicine create/update/quantity now return `AdminMedicineResponse` shape (same as medicine list page), not raw `Medicine` entity.
+
+- Website feedback admin response now includes:
+  - `statusDisplay`
+  - `canApprove`
+  - `canHide`
+  - `canDelete`
+
+- Website feedback action aliases added:
+  - unhide/show/publish:
+    - `PUT|PATCH|POST /api/admin/website-feedbacks/{id}/unhide`
+    - `PUT|PATCH|POST /api/admin/website-feedbacks/{id}/show`
+    - `PUT|PATCH|POST /api/admin/website-feedbacks/{id}/publish`
+  - hide aliases:
+    - `PUT|PATCH|POST /api/admin/website-feedbacks/{id}/archive`
+    - `PUT|PATCH|POST /api/admin/website-feedbacks/{id}/reject`
+  - delete alias:
+    - `PUT|PATCH|POST /api/admin/website-feedbacks/{id}/destroy`
 
 ---
 
@@ -74,13 +116,15 @@
   "accessToken": "jwt_token_here",
   "tokenType": "Bearer ",
   "username": "patient01@gmail.com",
+  "displayName": "Nguyen Van A",
   "role": "ROLE_PATIENT",
   "profileCompleted": false
 }
 ```
 
 - FE rule:
-  - If `role = ROLE_PATIENT` and `profileCompleted = false`, redirect user to first-time profile form.
+  - Do not redirect or show the patient profile form immediately after login.
+  - `profileCompleted` is only a status flag. Use it on `/patient/profile` and inside the booking patient-information step.
 
 ### `GET /api/auth/me`
 
@@ -91,34 +135,11 @@
 ```json
 {
   "username": "patient01@gmail.com",
+  "displayName": "Nguyen Van A",
   "role": "ROLE_PATIENT",
   "profileCompleted": true
 }
 ```
-
-### `POST /api/auth/google`
-
-- Body:
-
-```json
-{
-  "token": "google_id_token"
-}
-```
-
-- Success response shape is the same as `/api/auth/login`.
-
-### `POST /api/auth/facebook`
-
-- Body:
-
-```json
-{
-  "token": "facebook_access_token"
-}
-```
-
-- Success response shape is the same as `/api/auth/login`.
 
 ### `POST /api/auth/forgot-password`
 
@@ -144,15 +165,14 @@
 
 ```json
 {
-  "message": "Che do do an: chua gui SMS that. OTP duoc tra ve de test.",
-  "channel": "PHONE_DEV",
-  "otp": "123456"
+  "message": "Che do do an: chua gui SMS that. OTP khong tra ve response.",
+  "channel": "PHONE_DEV"
 }
 ```
 
 - Notes:
   - Gmail: OTP is sent to email for real.
-  - Phone number: current project keeps dev mode, OTP is returned in response and logged in backend console for testing.
+  - Phone number: in dev mode, backend can return OTP only when `OTP_EXPOSE_DEV_OTP=true`.
 
 ### `POST /api/auth/reset-password`
 
@@ -187,15 +207,21 @@
 
 ---
 
-## 4) Patient first-time profile flow
+## 4) Patient profile completion flow
 
 ### FE flow after patient login
 
 1. Call `/api/auth/login`.
-2. If response has `profileCompleted = false`, redirect to profile form page.
-3. Call `GET /api/patients/me` to get current patient profile.
-4. Submit form to `PUT /api/patients/me`.
-5. Only after profile is complete should FE allow booking UI.
+2. Store auth data as usual.
+3. Do not redirect to profile form and do not open a profile-completion modal on home.
+4. If `role = ROLE_PATIENT` and `profileCompleted = false`, keep the user on the intended page.
+
+### Allowed places to show the incomplete-profile form
+
+1. `/patient/profile`: user opens this page voluntarily. Call `GET /api/patients/me`, render the existing form, and submit to `PUT /api/patients/me`.
+2. Booking flow: when the user reaches the patient-information step, call `GET /api/patients/me`. If `profileCompleted = false`, show the same form inside that booking step and submit to `PUT /api/patients/me`. After success, continue booking.
+
+Do not show this form on home or as a global login guard.
 
 ### Required fields for completed patient profile
 
@@ -316,11 +342,13 @@
 
 ### `GET /api/appointments/doctor/{doctorId}/slots?date=YYYY-MM-DD`
 
-- Role: `ROLE_DOCTOR` or `ROLE_PATIENT`
+- Public.
 
 - Example:
 
 `/api/appointments/doctor/5/slots?date=2026-04-23`
+
+Also accepts non-padded dates like `23/5/2026`.
 
 - Response item example:
 
@@ -340,23 +368,65 @@
   - If `full = true`: slot is full
   - If `disabled = true`: disable click
 
+### `GET /api/appointments/medical-service/{serviceId}/slots?date=YYYY-MM-DD`
+
+- Public.
+- Purpose: slot status when user books directly from a service package.
+- If the service package has `assignedDoctor`, backend checks that doctor only.
+- If the service package has no assigned doctor, backend checks all doctors in the service specialty and marks a slot available when at least one doctor still has capacity.
+
+Example:
+
+`/api/appointments/medical-service/3/slots?date=2026-04-23`
+
+Response item shape is the same as doctor slot API.
+
 ### `POST /api/appointments`
 
 - Role: `ROLE_PATIENT`
 - Important:
   - patient is auto-resolved from current token
   - only allowed when patient profile is completed
+  - if profile is incomplete, backend returns:
+
+```json
+{
+  "message": "Vui long cap nhat day du ho so ca nhan truoc khi dat lich.",
+  "code": "PROFILE_INCOMPLETE"
+}
+```
+
+FE should handle `PROFILE_INCOMPLETE` only inside the booking flow by returning the user to the patient-information step and showing the profile form there.
 
 - Example request:
 
 ```json
 {
   "specialty": { "id": 1 },
+  "medicalService": { "id": 3 },
   "doctor": { "id": 5 },
   "appointmentDate": "2026-04-23T08:00:00",
   "symptoms": "Ho, sot"
 }
 ```
+
+Booking from services page can omit doctor:
+
+```json
+{
+  "medicalService": { "id": 3 },
+  "appointmentDate": "2026-04-23T08:00:00",
+  "symptoms": "Can tu van goi dich vu"
+}
+```
+
+- `medicalService` is optional.
+- If omitted/null, appointment is a normal consultation and FE should display service as `Kham benh`.
+- If provided, backend validates that the service is active and belongs to the selected specialty.
+- If booking from the services page, FE can send `medicalService.id` and `appointmentDate`; `doctor` can be omitted.
+- If the service has `assignedDoctor`, backend uses that doctor and rejects a different requested doctor.
+- If the service has no assigned doctor, backend randomly selects an available doctor in the service specialty for the selected slot.
+- When `medicalService` is selected, `consultationFee` is set from the service package price.
 
 - Example success response:
 
@@ -375,10 +445,20 @@
     "id": 5,
     "fullName": "Bac si Nguyen Van A"
   },
+  "medicalService": {
+    "id": 3,
+    "name": "Dich vu xet nghiem mau",
+    "price": 450000.0,
+    "active": true,
+    "assignedDoctor": {
+      "id": 5,
+      "fullName": "Bac si Nguyen Van A"
+    }
+  },
   "appointmentDate": "2026-04-23T08:00:00",
   "status": "PENDING",
   "symptoms": "Ho, sot",
-  "consultationFee": 300000.0,
+  "consultationFee": 450000.0,
   "paymentStatus": "UNPAID",
   "notes": null
 }
@@ -392,6 +472,12 @@
 ### `PUT /api/appointments/{id}`
 
 - Role: `ROLE_DOCTOR` or `ROLE_PATIENT`
+- Patient chi duoc cap nhat de huy lich (`status = CANCELLED`), khong duoc doi ngay gio/bac si.
+
+### `PATCH /api/appointments/{id}/cancel`
+
+- Role: `ROLE_PATIENT`
+- Dung endpoint nay cho nut `Huy lich kham` o FE patient.
 
 ### `DELETE /api/appointments/{id}`
 
@@ -404,10 +490,77 @@
 ### `GET /api/doctors`
 
 - Role: `ROLE_ADMIN` / `ROLE_DOCTOR` / `ROLE_PATIENT`
+- Query optional:
+  - `specialtyId`
+  - `name`: search by doctor full name, case-insensitive
+- Response bo sung cac truong de FE filter an toan:
+  - `fullName`, `name`
+  - `email`, `phone`
+  - `photoId`, `photoUrl`, `imageUrl`
+  - `specialtyName`, `specialization`
+  - `username`
+  - van giu object `specialty` va `account`
+
+Example:
+
+`GET /api/doctors?name=nguyen`
+
+Response item example:
+
+```json
+{
+  "id": 5,
+  "fullName": "Bac si Nguyen Van A",
+  "name": "Bac si Nguyen Van A",
+  "email": "doctor.a@medcare.vn",
+  "phone": "0901234567",
+  "price": 300000,
+  "rating": 4.8,
+  "experienceYears": 8,
+  "experience": 8,
+  "photoId": 2,
+  "photoUrl": "/api/doctors/5/photo",
+  "imageUrl": "/api/doctors/5/photo",
+  "specialtyId": 1,
+  "specialtyName": "Noi tong quat",
+  "specialization": "Noi tong quat"
+}
+```
+
+FE rule:
+- On `/doctors`, add a search input for doctor name.
+- Debounce the input and call `GET /api/doctors?name=<keyword>`.
+- If specialty filter is also active, call `GET /api/doctors?specialtyId=<id>&name=<keyword>`.
+- Use `photoUrl` or `imageUrl` for doctor avatar. If null, show default avatar.
 
 ### `GET /api/doctors/{id}`
 
 - Role: `ROLE_ADMIN` / `ROLE_DOCTOR` / `ROLE_PATIENT`
+
+### `GET /api/doctors/me`
+
+- Role: `ROLE_DOCTOR`
+- Returns current doctor's profile, including optional `photoUrl`.
+
+### `PUT /api/doctors/me/photo`
+
+- Role: `ROLE_DOCTOR`
+- Purpose: optional upload/update doctor personal photo in doctor's own profile.
+- Content-Type: `multipart/form-data`
+- Form field: `file`
+- Supported file types: JPEG, PNG, WEBP
+- Max size: 2MB
+- Success response: updated `DoctorResponse` with `photoUrl`.
+
+### `DELETE /api/doctors/me/photo`
+
+- Role: `ROLE_DOCTOR`
+- Purpose: remove current doctor's personal photo.
+
+### `GET /api/doctors/{id}/photo`
+
+- Public image endpoint for rendering doctor photo in `<img>`.
+- Returns raw image bytes with image content type.
 
 ### `POST /api/doctors`
 
@@ -432,6 +585,19 @@
 ### `PUT /api/doctors/{id}`
 
 - Role: `ROLE_ADMIN`
+- Admin can set/update personal doctor consultation price with field `price`.
+
+### `PUT /api/doctors/{id}/photo`
+
+- Role: `ROLE_ADMIN`
+- Content-Type: `multipart/form-data`
+- Form field: `file`
+- Upload/update photo for a doctor.
+
+### `DELETE /api/doctors/{id}/photo`
+
+- Role: `ROLE_ADMIN`
+- Remove photo for a doctor.
 
 ### `DELETE /api/doctors/{id}`
 
@@ -505,6 +671,16 @@
 
 - Role: `ROLE_ADMIN` or `ROLE_DOCTOR`
 
+### `GET /api/medical-records/my`
+
+- Role: `ROLE_PATIENT`
+- Lay danh sach ho so benh an cua chinh patient dang dang nhap.
+
+### `GET /api/medical-records/my/{id}`
+
+- Role: `ROLE_PATIENT`
+- Lay chi tiet 1 ho so benh an cua chinh patient dang dang nhap.
+
 ### `GET /api/medical-records/patient/{patientId}`
 
 - Role: `ROLE_ADMIN` or `ROLE_DOCTOR`
@@ -539,7 +715,150 @@
 
 ### `GET /api/medical-services`
 
+- Public.
+- Purpose: service package list for `services` tab/page and home ads.
+- Query optional:
+  - `specialtyId`: only active services of selected specialty.
+  - `q` or `search`: search active service packages by name, case-insensitive.
+
+Example:
+
+`GET /api/medical-services?specialtyId=1`
+
+Search example:
+
+`GET /api/medical-services?q=xet%20nghiem`
+
+Response item example:
+
+```json
+{
+  "id": 3,
+  "name": "Dich vu xet nghiem mau",
+  "description": "Goi xet nghiem cong thuc mau co ban.",
+  "price": 450000.0,
+  "imageUrl": "/api/medical-services/3/photo",
+  "active": true,
+  "advertised": false,
+  "specialty": {
+    "id": 1,
+    "name": "Noi tong quat"
+  },
+  "assignedDoctor": {
+    "id": 5,
+    "fullName": "Bac si Nguyen Van A",
+    "price": 300000,
+    "specialty": {
+      "id": 1,
+      "name": "Noi tong quat"
+    }
+  },
+  "prescriptionItems": [
+    {
+      "id": 10,
+      "medicine": {
+        "id": 2,
+        "name": "Paracetamol"
+      },
+      "quantity": 10,
+      "dosage": "Sang 1 vien, toi 1 vien sau an"
+    }
+  ]
+}
+```
+
+Notes:
+- `imageUrl` is returned by backend when the service has a photo in database.
+- `assignedDoctor` can be null. Null means backend will randomly choose an available doctor in the service specialty at booking time.
+- `prescriptionItems` can be empty. Empty means doctor will prescribe after examination.
+- FE services page: add a search input and call `GET /api/medical-services?q=<keyword>`. If a specialty filter is active, call `GET /api/medical-services?specialtyId=<id>&q=<keyword>`.
+- FE booking flow: remove service package selection from the specialty step. Service packages are booked from the services page/detail page.
+
+### `GET /api/medical-services/{id}`
+
+- Public.
+
+### `GET /api/medical-services/admin`
+
+- Role: `ROLE_ADMIN`
+- Returns all service packages, including inactive/stopped packages.
+- Query optional:
+  - `specialtyId`
+  - `q` or `search`: search all service packages by name, including inactive packages.
+
 ### `POST /api/medical-services`
+
+- Role: `ROLE_ADMIN`
+
+Example request:
+
+```json
+{
+  "name": "Dich vu kham tong quat",
+  "description": "Kham tong quat theo chuyen khoa noi.",
+  "price": 600000,
+  "active": true,
+  "specialty": { "id": 1 },
+  "assignedDoctor": { "id": 5 },
+  "prescriptionItems": []
+}
+```
+
+You may send `assignedDoctorId: 5` instead of nested `assignedDoctor`.
+
+Example with predefined medicines:
+
+```json
+{
+  "name": "Dich vu xet nghiem mau",
+  "description": "Goi xet nghiem va tu van sau ket qua.",
+  "price": 450000,
+  "specialty": { "id": 1 },
+  "assignedDoctor": null,
+  "prescriptionItems": [
+    {
+      "medicine": { "id": 2 },
+      "quantity": 10,
+      "dosage": "Sang 1 vien sau an"
+    }
+  ]
+}
+```
+
+### `PUT /api/medical-services/{id}`
+
+- Role: `ROLE_ADMIN`
+- Full update service package.
+
+### `PATCH /api/medical-services/{id}/active?active=false`
+
+- Role: `ROLE_ADMIN`
+- Stop or reactivate service package without deleting historical appointments.
+
+### `PUT /api/medical-services/{id}/photo`
+
+- Role: `ROLE_ADMIN`
+- Content-Type: `multipart/form-data`
+- Form field: `file`
+- Supported file types: JPEG, PNG, WEBP
+- Max size: 2MB
+- Stores image bytes in database, same style as doctor photo.
+- Success response: updated service package with `imageUrl`.
+
+### `GET /api/medical-services/{id}/photo`
+
+- Public image endpoint for rendering service photo in `<img>`.
+- Returns raw image bytes with image content type.
+
+### `DELETE /api/medical-services/{id}/photo`
+
+- Role: `ROLE_ADMIN`
+- Remove photo for a service package.
+
+FE page suggestions:
+- Add nav tab `services` beside home/doctor/booking.
+- Home service ad can show several active items from `GET /api/medical-services`.
+- Booking appointment info should display `appointment.medicalService.name`; if null display `Kham benh`.
 
 ---
 
@@ -552,6 +871,23 @@
 ### `GET /api/invoices/record/{recordId}`
 
 - Role: `ROLE_ADMIN` or `ROLE_DOCTOR`
+
+### `GET /api/invoices/my`
+
+- Role: `ROLE_PATIENT`
+- Query optional:
+  - `status`
+  - `keyword`
+
+### `GET /api/invoices/my/{id}`
+
+- Role: `ROLE_PATIENT`
+- Lay chi tiet hoa don cua chinh patient.
+
+### `GET /api/invoices/my/record/{recordId}`
+
+- Role: `ROLE_PATIENT`
+- Lay hoa don theo ho so benh an cua chinh patient.
 
 ### `PUT /api/invoices/{id}/pay`
 
@@ -595,13 +931,37 @@
 
 ## 17) Payment APIs
 
-### `GET /api/payment/create-url?amount=<amount>&appointmentId=<id>`
+### `GET /api/payment/create-url?appointmentId=<id>`
 
-- Creates VNPay checkout URL
+- Role: `ROLE_PATIENT`
+- Creates VNPay checkout URL.
+- Amount is resolved from backend by appointment consultation fee (client cannot override).
+- Chi patient so huu lich hen moi tao duoc link thanh toan.
+
+### `GET /api/payment/create-invoice-url?invoiceId=<id>`
+
+- Role: `ROLE_PATIENT`
+- Purpose: patient thanh toan hoa don phat sinh sau kham qua VNPay.
+- Only the owner patient can tao link thanh toan hoa don.
+- Backend returns payment URL string:
+
+```json
+"https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?..."
+```
+
+- FE rule:
+  - Không hiển thị nút `Thanh toán tại phòng khám`.
+  - Hiển thị nút `Thanh toán VNPay` cho hóa đơn có `canPayOnline = true`.
+  - On click, call this endpoint và redirect sang VNPay URL backend trả về.
+  - Ẩn hoặc disable nút thanh toán khi hóa đơn đã `PAID`.
 
 ### `GET /api/payment/vnpay-return?...&appointmentId=<id>`
 
 - Public VNPay callback
+
+### `GET /api/payment/vnpay-return?...&invoiceId=<id>`
+
+- Public VNPay callback cho hoa don sau kham.
 
 ---
 
@@ -625,9 +985,8 @@
 
 1. Call `POST /api/auth/register`.
 2. Call `POST /api/auth/login`.
-3. If `profileCompleted = false`, redirect to profile form page.
-4. Call `PUT /api/patients/me` to complete patient profile.
-5. After success, allow booking flow.
+3. Do not redirect to profile form and do not show a global profile modal on home.
+4. Let the user update the profile voluntarily at `/patient/profile`, or require it only inside the booking patient-information step.
 
 ### Forgot password
 
@@ -640,6 +999,8 @@
 
 1. Call `GET /api/doctors` or doctor detail APIs.
 2. Call `GET /api/appointments/doctor/{doctorId}/slots?date=...`.
-3. Call `POST /api/appointments`.
-4. Show `appointmentCode` as booking ticket code.
-5. Show booking history from `GET /api/appointments`.
+3. At the patient-information step, call `GET /api/patients/me`.
+4. If `profileCompleted = false`, show the profile form in this step and submit `PUT /api/patients/me`.
+5. After profile is complete, call `POST /api/appointments`.
+6. Show `appointmentCode` as booking ticket code.
+7. Show booking history from `GET /api/appointments`.

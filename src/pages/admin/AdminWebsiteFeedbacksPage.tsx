@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, ChevronLeft, ChevronRight, Eye, EyeOff, MessageSquare, Search, Trash2 } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, Eye, EyeOff, MessageSquare, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { websiteFeedbackService, type WebsiteFeedback } from '@/services/websiteFeedbackService'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,6 +7,17 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 
 interface HttpError extends Error {
@@ -15,6 +26,7 @@ interface HttpError extends Error {
 }
 
 const ITEMS_PER_PAGE = 15
+type FeedbackActionType = 'approve' | 'hide' | 'unhide'
 
 function getErrorStatus(error: unknown): number | undefined {
   const status = (error as HttpError)?.status
@@ -158,14 +170,65 @@ export function AdminWebsiteFeedbacksPage() {
   const isLoadingAction = (action: 'approve' | 'hide' | 'unhide' | 'delete', id: string) =>
     actionLoadingKey === `${action}-${id}`
 
-  const upsertFeedback = (nextFeedback?: WebsiteFeedback | null) => {
-    if (!nextFeedback?.id) return
+  const updateFeedbackItem = (
+    feedbackId: string,
+    updater: (item: WebsiteFeedback) => WebsiteFeedback
+  ) => {
+    setFeedbacks((prev) =>
+      prev.map((item) => (item.id === feedbackId ? updater(item) : item))
+    )
+  }
 
-    setFeedbacks((prev) => {
-      const exists = prev.some((item) => item.id === nextFeedback.id)
-      if (!exists) return prev
-      return prev.map((item) => (item.id === nextFeedback.id ? nextFeedback : item))
-    })
+  const buildNextFeedbackState = (
+    currentItem: WebsiteFeedback,
+    action: FeedbackActionType,
+    nextFeedback?: WebsiteFeedback | null
+  ): WebsiteFeedback => {
+    if (nextFeedback?.id) {
+      return {
+        ...currentItem,
+        ...nextFeedback,
+      }
+    }
+
+    if (action === 'approve') {
+      return {
+        ...currentItem,
+        approved: true,
+        hidden: false,
+        status: 'APPROVED',
+        statusDisplay: 'Đã duyệt',
+        visibleOnHomepage: true,
+        canApprove: false,
+        canHide: true,
+        canUnhide: false,
+      }
+    }
+
+    if (action === 'hide') {
+      return {
+        ...currentItem,
+        hidden: true,
+        status: 'HIDDEN',
+        statusDisplay: 'Đã ẩn',
+        visibleOnHomepage: false,
+        canApprove: false,
+        canHide: false,
+        canUnhide: true,
+      }
+    }
+
+    return {
+      ...currentItem,
+      approved: true,
+      hidden: false,
+      status: 'APPROVED',
+      statusDisplay: 'Đã duyệt',
+      visibleOnHomepage: true,
+      canApprove: false,
+      canHide: true,
+      canUnhide: false,
+    }
   }
 
   const handleApprove = async (item: WebsiteFeedback) => {
@@ -173,11 +236,9 @@ export function AdminWebsiteFeedbacksPage() {
       setActionLoadingKey(`approve-${item.id}`)
       const response = await websiteFeedbackService.approve(item.id)
       toast({ title: 'Thành công', description: response.message })
-      if (response.feedback) {
-        upsertFeedback(response.feedback)
-      } else {
-        await loadFeedbacks()
-      }
+      updateFeedbackItem(item.id, (currentItem) =>
+        buildNextFeedbackState(currentItem, 'approve', response.feedback)
+      )
     } catch (actionError: unknown) {
       const status = getErrorStatus(actionError)
       const message = getErrorMessage(actionError)
@@ -197,11 +258,9 @@ export function AdminWebsiteFeedbacksPage() {
       setActionLoadingKey(`hide-${item.id}`)
       const response = await websiteFeedbackService.hide(item.id)
       toast({ title: 'Thành công', description: response.message })
-      if (response.feedback) {
-        upsertFeedback(response.feedback)
-      } else {
-        await loadFeedbacks()
-      }
+      updateFeedbackItem(item.id, (currentItem) =>
+        buildNextFeedbackState(currentItem, 'hide', response.feedback)
+      )
     } catch (actionError: unknown) {
       const status = getErrorStatus(actionError)
       const message = getErrorMessage(actionError)
@@ -221,11 +280,9 @@ export function AdminWebsiteFeedbacksPage() {
       setActionLoadingKey(`unhide-${item.id}`)
       const response = await websiteFeedbackService.unhide(item.id)
       toast({ title: 'Thành công', description: response.message })
-      if (response.feedback) {
-        upsertFeedback(response.feedback)
-      } else {
-        await loadFeedbacks()
-      }
+      updateFeedbackItem(item.id, (currentItem) =>
+        buildNextFeedbackState(currentItem, 'unhide', response.feedback)
+      )
     } catch (actionError: unknown) {
       const status = getErrorStatus(actionError)
       const message = getErrorMessage(actionError)
@@ -241,9 +298,6 @@ export function AdminWebsiteFeedbacksPage() {
   }
 
   const handleDelete = async (feedback: WebsiteFeedback) => {
-    const confirmed = window.confirm('Bạn có chắc muốn xóa feedback này?')
-    if (!confirmed) return
-
     try {
       setActionLoadingKey(`delete-${feedback.id}`)
       const response = await websiteFeedbackService.remove(feedback.id)
@@ -276,14 +330,24 @@ export function AdminWebsiteFeedbacksPage() {
           <CardDescription>Duyệt, ẩn hoặc xóa phản hồi website/cơ sở y tế</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder="Tìm theo tên, email hoặc nội dung..."
-              className="pl-9"
-            />
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative max-w-md flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                placeholder="Tìm theo tên, email hoặc nội dung..."
+                className="pl-9"
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => void loadFeedbacks()}
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Làm mới
+            </Button>
           </div>
 
           {loading && <AdminTableSkeleton rows={8} />}
@@ -380,16 +444,33 @@ export function AdminWebsiteFeedbacksPage() {
                             )}
 
                             {canDelete && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-red-200 text-red-600 hover:bg-red-50"
-                                onClick={() => void handleDelete(feedback)}
-                                disabled={deleteDisabled}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                Xóa
-                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-red-200 text-red-600 hover:bg-red-50"
+                                    disabled={deleteDisabled}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                    Xóa
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Xác nhận xóa</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Bạn có chắc muốn xóa feedback từ {feedback.fullName || feedback.email || feedback.id}?
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Hủy</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => void handleDelete(feedback)}>
+                                      Xóa
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             )}
                           </div>
                         </TableCell>

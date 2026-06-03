@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 type AccountMenuItem = {
   label: string
@@ -93,6 +94,7 @@ export function Header() {
           </div>
 
           <div className="hidden md:flex items-center gap-3">
+            <ThemeToggle />
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -161,6 +163,8 @@ export function Header() {
               </SheetHeader>
 
               <div className="flex flex-col gap-4 mt-6">
+                <ThemeToggle showLabel className="w-full justify-start" />
+
                 <nav className="flex flex-col gap-1">
                   {navigation.map((item) => (
                     <Link

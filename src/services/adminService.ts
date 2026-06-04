@@ -1,4 +1,10 @@
 ﻿import { API_BASE_URL, fetchJson, getStoredRole, getStoredToken } from './auth';
+import {
+  normalizeInvoiceList,
+  shouldOmitInvoiceQueryValue,
+  type InvoiceItem,
+} from '@/lib/invoice-contract'
+
 
 interface AdminDashboardSummary {
   totalPatients: number
@@ -69,7 +75,10 @@ interface UpdateDoctorPayload {
   price?: number
   experienceYears?: number
   specialty?: { id: string } | null
-  status: 'active' | 'inactive'
+  status: string
+  statusCode?: string
+  active?: boolean
+  isActive?: boolean
 }
 
 interface CreateSpecialtyPayload {
@@ -259,15 +268,7 @@ export interface AdminScheduleEntry {
   statusCode?: string
 }
 
-type AdminInvoice = {
-  id: string
-  patientName: string
-  medicalRecordId: string
-  totalAmount: number
-  status: 'pending' | 'paid' | 'cancelled'
-  createdAt: string
-  paidAt?: string
-}
+type AdminInvoice = InvoiceItem
 
 export interface AdminInvoiceSummary {
   totalRevenue?: number
@@ -1209,20 +1210,35 @@ export const adminApi = {
   },
 
   // Invoice Management APIs
-  getInvoices: async (): Promise<AdminInvoice[]> => {
+  getInvoices: async (query?: { keyword?: string; status?: string; category?: string }): Promise<AdminInvoice[]> => {
     const token = getStoredToken();
-    const data = await fetchJson<any>(`${API_BASE_URL}/admin/invoices`, {
+    const params = new URLSearchParams()
+
+    if (query?.keyword) {
+      params.append('keyword', query.keyword)
+    }
+
+    if (query?.status && !shouldOmitInvoiceQueryValue(query.status)) {
+      params.append('status', query.status)
+    }
+
+    if (query?.category && !shouldOmitInvoiceQueryValue(query.category)) {
+      params.append('category', query.category)
+    }
+
+    const endpoint = `${API_BASE_URL}/admin/finance${params.toString() ? `?${params.toString()}` : ''}`
+    const data = await fetchJson<any>(endpoint, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+    return normalizeInvoiceList(data)
   },
 
   getInvoicesSummary: (): Promise<AdminInvoiceSummary> => {
     const token = getStoredToken();
     return tryFetchFirstSuccess<AdminInvoiceSummary>(
       [
-        `${API_BASE_URL}/admin/invoices/summary`,
         `${API_BASE_URL}/admin/finance/summary`,
+        `${API_BASE_URL}/admin/invoices/summary`,
       ],
       { headers: { Authorization: `Bearer ${token}` } }
     );

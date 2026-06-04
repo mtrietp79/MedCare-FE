@@ -23,11 +23,21 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { api, type PatientInvoice } from '@/services/api'
+import { api, type PatientInvoice, type PatientMedicalRecord } from '@/services/api'
 import { doctorFeedbackService } from '@/services/doctorFeedbackService'
 import type { Appointment, ServicePackageBooking } from '@/types'
 import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
 import { resolveAppointmentStatusView, resolvePaymentStatusView } from '@/lib/appointment-status'
+import {
+  canPayInvoiceOnline,
+  getAppointmentTypeDisplay,
+  getInvoiceAmount,
+  getInvoiceCategoryLabel,
+  getInvoiceReferenceCode,
+  getInvoiceSourceLabel,
+  getInvoiceStatusClass,
+  getInvoiceStatusLabel,
+} from '@/lib/invoice-contract'
 
 type ServicePackageStatusKey = 'PENDING_PAYMENT' | 'PAID' | 'RECEIVED' | 'COMPLETED' | 'CANCELLED'
 type DoctorFeedbackEligibility = 'CAN_FEEDBACK' | 'ALREADY_FEEDBACKED' | 'UNKNOWN'
@@ -82,7 +92,7 @@ function servicePackagePaymentStatusClass(status?: string, paymentStatusDisplay?
   return resolvePaymentStatusView(status, paymentStatusDisplay).className
 }
 
-function formatDate(value?: string) {
+function formatDate(value?: string | null) {
   if (!value) return '-'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -113,7 +123,7 @@ function formatAppointmentDateTime(appointment: Appointment): string {
   return `${dateLabel} ${timeLabel}`
 }
 
-function formatServiceBookingTime(value?: string) {
+function formatServiceBookingTime(value?: string | null) {
   if (!value) return '-'
   const time = String(value).trim()
   if (!time) return '-'
@@ -121,7 +131,7 @@ function formatServiceBookingTime(value?: string) {
   return time
 }
 
-function formatServiceBookingDateTime(dateValue?: string, timeValue?: string) {
+function formatServiceBookingDateTime(dateValue?: string | null, timeValue?: string | null) {
   const dateText = formatDate(dateValue)
   const timeText = formatServiceBookingTime(timeValue)
   if (dateText === '-' && timeText === '-') return '-'
@@ -134,36 +144,51 @@ function formatCurrencyVnd(value?: number | null) {
   return `${new Intl.NumberFormat('vi-VN').format(Number(value || 0))} VND`
 }
 
-function invoiceStatusLabel(status?: string) {
-  const normalized = String(status || '').toUpperCase()
-  if (normalized === 'PAID') return 'Đã thanh toán'
-  if (normalized === 'FAILED') return 'Thanh toán thất bại'
-  if (normalized.includes('CANCEL')) return 'Đã hủy'
-  return 'Chưa thanh toán'
+function getAppointmentTypeLabel(appointment: Appointment): string {
+  return getAppointmentTypeDisplay(appointment.appointmentType, appointment.type) || 'Khám bệnh'
 }
 
-function invoiceStatusClass(status?: string) {
-  const normalized = String(status || '').toUpperCase()
-  if (normalized === 'PAID') return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-  if (normalized === 'FAILED') return 'bg-red-50 text-red-700 border-red-200'
-  if (normalized.includes('CANCEL')) return 'bg-red-50 text-red-700 border-red-200'
-  return 'bg-amber-50 text-amber-700 border-amber-200'
+function getInvoiceDetailSubtitle(invoice: PatientInvoice): string {
+  if (invoice.sourceType === 'SERVICE_PACKAGE') {
+    return invoice.servicePackageName || invoice.servicePackageBookingCode || 'Gói dịch vụ'
+  }
+
+  if (invoice.appointmentTypeDisplay) {
+    return invoice.appointmentCode
+      ? `${invoice.appointmentTypeDisplay} • ${invoice.appointmentCode}`
+      : invoice.appointmentTypeDisplay
+  }
+
+  if (invoice.medicalRecordId || invoice.recordId) {
+    return `Bệnh án #${invoice.medicalRecordId || invoice.recordId}`
+  }
+
+  return getInvoiceSourceLabel(invoice)
 }
 
-function canShowInvoicePayButton(invoice: PatientInvoice) {
-  const status = String(invoice.status || '').trim().toUpperCase()
-  const isPendingPayment =
-    status === 'UNPAID' ||
-    status === 'PENDING' ||
-    status === 'PENDING_PAYMENT' ||
-    status === 'WAITING_PAYMENT'
-  const hasAmount = Number(invoice.totalAmount || 0) > 0
-  return Boolean(invoice.canPayOnline) && isPendingPayment && hasAmount
+function mergeInvoiceWithMedicalRecord(invoice: PatientInvoice, record: PatientMedicalRecord | null): PatientInvoice {
+  const recordInvoice = record?.invoice
+  if (!recordInvoice) return invoice
+
+  return {
+    ...invoice,
+    invoiceCode: recordInvoice.invoiceCode ?? invoice.invoiceCode,
+    status: recordInvoice.status ?? invoice.status,
+    consultationFee: recordInvoice.consultationFee ?? invoice.consultationFee,
+    medicineFee: recordInvoice.medicineFee ?? recordInvoice.medicineTotal ?? invoice.medicineFee,
+    serviceFee: recordInvoice.serviceFee ?? recordInvoice.serviceTotal ?? invoice.serviceFee,
+    totalAmount: recordInvoice.totalAmount ?? invoice.totalAmount,
+    canPayOnline: recordInvoice.canPayOnline ?? invoice.canPayOnline,
+    paymentDate: recordInvoice.paymentDate ?? invoice.paymentDate,
+  }
 }
 
 function isCompletedAppointment(appointment: Appointment): boolean {
   return resolveAppointmentStatusView(appointment.status, appointment.statusDisplay).key === 'completed'
 }
+
+type InvoiceStatusFilter = 'all' | 'UNPAID' | 'PAID' | 'FAILED' | 'CANCELLED'
+type InvoiceCategoryFilter = 'all' | 'APPOINTMENT_BOOKING' | 'POST_EXAM' | 'FOLLOW_UP' | 'SERVICE_PACKAGE'
 
 export function PatientAppointmentsPage() {
   const { toast } = useToast()
@@ -178,8 +203,9 @@ export function PatientAppointmentsPage() {
   const [invoiceLoading, setInvoiceLoading] = useState(true)
   const [invoiceError, setInvoiceError] = useState<string | null>(null)
   const [invoiceKeyword, setInvoiceKeyword] = useState('')
-  const [invoiceStatus, setInvoiceStatus] = useState('all')
-  const [invoicePayingId, setInvoicePayingId] = useState<string | null>(null)
+  const [invoiceStatus, setInvoiceStatus] = useState<InvoiceStatusFilter>('all')
+  const [invoiceCategory, setInvoiceCategory] = useState<InvoiceCategoryFilter>('all')
+  const [invoicePayingId, setInvoicePayingId] = useState<number | null>(null)
 
   const [invoiceDetailOpen, setInvoiceDetailOpen] = useState(false)
   const [invoiceDetailLoading, setInvoiceDetailLoading] = useState(false)
@@ -247,17 +273,14 @@ export function PatientAppointmentsPage() {
     try {
       setInvoiceLoading(true)
       setInvoiceError(null)
-      const data = await api.patients.getMyInvoices({
-        keyword: invoiceKeyword.trim() || undefined,
-        status: invoiceStatus === 'all' ? undefined : invoiceStatus,
-      })
+      const data = await api.patients.getMyInvoices()
       setInvoices(Array.isArray(data) ? data : [])
     } catch (fetchError) {
       setInvoiceError(fetchError instanceof Error ? fetchError.message : 'Không thể tải hóa đơn.')
     } finally {
       setInvoiceLoading(false)
     }
-  }, [invoiceKeyword, invoiceStatus])
+  }, [])
 
   useEffect(() => {
     void loadData()
@@ -280,10 +303,37 @@ export function PatientAppointmentsPage() {
     })
   }, [loadData, loadInvoices])
 
-  const visibleInvoices = useMemo(
-    () => invoices.filter((invoice) => Number(invoice.totalAmount || 0) > 0),
-    [invoices]
-  )
+  const visibleInvoices = useMemo(() => {
+    const keyword = invoiceKeyword.trim().toLowerCase()
+
+    return invoices.filter((invoice) => {
+      const hitKeyword =
+        !keyword ||
+        [
+          invoice.invoiceCode,
+          invoice.appointmentCode,
+          invoice.servicePackageBookingCode,
+          invoice.servicePackageName,
+          invoice.patientName,
+          invoice.patientFullName,
+          invoice.doctorName,
+          invoice.doctorFullName,
+          invoice.id,
+          invoice.medicalRecordId,
+          invoice.recordId,
+        ].some((value) => String(value ?? '').toLowerCase().includes(keyword))
+
+      const normalizedStatus = String(invoice.status || '').trim().toUpperCase()
+      const hitStatus =
+        invoiceStatus === 'all' ||
+        (invoiceStatus === 'UNPAID'
+          ? ['UNPAID', 'PENDING', 'PENDING_PAYMENT', 'WAITING_PAYMENT'].includes(normalizedStatus)
+          : normalizedStatus === invoiceStatus)
+
+      const hitCategory = invoiceCategory === 'all' || invoice.invoiceCategory === invoiceCategory
+      return hitKeyword && hitStatus && hitCategory
+    })
+  }, [invoices, invoiceKeyword, invoiceStatus, invoiceCategory])
 
   const selectedDoctorName = useMemo(() => {
     if (!selectedAppointment) return 'Bác sĩ'
@@ -400,14 +450,26 @@ export function PatientAppointmentsPage() {
   const openInvoiceDetail = async (invoice: PatientInvoice) => {
     setInvoiceDetailOpen(true)
     setInvoiceDetailLoading(true)
+    setSelectedInvoice(invoice)
+
+    let detail: PatientInvoice = invoice
+
     try {
-      let detail = await api.patients.getMyInvoiceById(invoice.id)
-      if (!detail && invoice.medicalRecordId) {
-        detail = await api.patients.getMyInvoiceByRecordId(invoice.medicalRecordId)
+      if (invoice.sourceType === 'INVOICE') {
+        const fetchedInvoice = await api.patients.getMyInvoiceById(String(invoice.id))
+        if (fetchedInvoice) {
+          detail = { ...detail, ...fetchedInvoice }
+        }
       }
-      setSelectedInvoice(detail || invoice)
+
+      if (invoice.medicalRecordId) {
+        const record = await api.patients.getMyMedicalRecordById(String(invoice.medicalRecordId))
+        detail = mergeInvoiceWithMedicalRecord(detail, record)
+      }
+
+      setSelectedInvoice(detail)
     } catch {
-      setSelectedInvoice(invoice)
+      setSelectedInvoice(detail)
     } finally {
       setInvoiceDetailLoading(false)
     }
@@ -416,7 +478,7 @@ export function PatientAppointmentsPage() {
   const payInvoiceOnline = async (invoice: PatientInvoice) => {
     try {
       setInvoicePayingId(invoice.id)
-      const redirectUrl = await api.payments.createInvoicePaymentUrl(invoice.id)
+      const redirectUrl = await api.payments.createInvoiceItemPaymentUrl(invoice)
       window.location.href = redirectUrl
     } catch (payError: unknown) {
       toast({
@@ -435,7 +497,7 @@ export function PatientAppointmentsPage() {
           <div>
             <h1 className="text-2xl font-semibold">Lịch hẹn của tôi</h1>
             <p className="text-sm text-muted-foreground">
-              Theo dõi lịch khám, gói dịch vụ, hóa đơn sau khám và hồ sơ bệnh án.
+              Theo dõi lịch khám, gói dịch vụ, hóa đơn và hồ sơ bệnh án.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -471,7 +533,7 @@ export function PatientAppointmentsPage() {
           <TabsList>
             <TabsTrigger value="appointments">Lịch khám</TabsTrigger>
             <TabsTrigger value="packages">Gói dịch vụ</TabsTrigger>
-            <TabsTrigger value="invoices">Hóa đơn sau khám</TabsTrigger>
+            <TabsTrigger value="invoices">Hóa đơn</TabsTrigger>
           </TabsList>
 
           <TabsContent value="appointments">
@@ -483,6 +545,7 @@ export function PatientAppointmentsPage() {
               <div className="grid gap-4">
                 {appointments.map((appointment) => {
                   const statusView = resolveAppointmentStatusView(appointment.status, appointment.statusDisplay)
+                  const appointmentTypeLabel = getAppointmentTypeLabel(appointment)
                   return (
                     <Card key={appointment.id}>
                       <CardContent className="grid gap-4 p-6 md:grid-cols-[1fr_auto] md:items-center">
@@ -492,8 +555,11 @@ export function PatientAppointmentsPage() {
                           <p className="mt-2 text-sm text-muted-foreground">
                             {appointment.doctor?.fullName || appointment.doctorName || 'Bác sĩ'}
                           </p>
+                          <p className="mt-1 text-sm font-medium text-foreground">
+                            Loại khám: {appointmentTypeLabel}
+                          </p>
                           <p className="mt-1 text-sm text-muted-foreground">
-                            {appointment.medicalService?.name ?? 'Khám bệnh'}
+                            {appointment.medicalService?.name ?? 'Khám tổng quát'}
                           </p>
                         </div>
 
@@ -601,25 +667,38 @@ export function PatientAppointmentsPage() {
           <TabsContent value="invoices">
             <Card>
               <CardContent className="space-y-4 p-6">
-                <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+                <div className="grid gap-3 md:grid-cols-[1fr_220px_240px_auto]">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                     <Input
                       value={invoiceKeyword}
                       onChange={(event) => setInvoiceKeyword(event.target.value)}
-                      placeholder="Tìm theo mã hóa đơn..."
+                      placeholder="Tìm theo mã, lịch khám, gói dịch vụ..."
                       className="pl-9"
                     />
                   </div>
-                  <Select value={invoiceStatus} onValueChange={setInvoiceStatus}>
+                  <Select value={invoiceStatus} onValueChange={(value: InvoiceStatusFilter) => setInvoiceStatus(value)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Tất cả trạng thái" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                      <SelectItem value="PENDING">Chưa thanh toán</SelectItem>
+                      <SelectItem value="UNPAID">Chưa thanh toán</SelectItem>
                       <SelectItem value="PAID">Đã thanh toán</SelectItem>
+                      <SelectItem value="FAILED">Thanh toán thất bại</SelectItem>
                       <SelectItem value="CANCELLED">Đã hủy</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={invoiceCategory} onValueChange={(value: InvoiceCategoryFilter) => setInvoiceCategory(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tất cả loại hóa đơn" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả loại hóa đơn</SelectItem>
+                      <SelectItem value="APPOINTMENT_BOOKING">Hóa đơn khám bệnh</SelectItem>
+                      <SelectItem value="POST_EXAM">Hóa đơn sau khám</SelectItem>
+                      <SelectItem value="FOLLOW_UP">Hóa đơn tái khám</SelectItem>
+                      <SelectItem value="SERVICE_PACKAGE">Hóa đơn gói dịch vụ</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button variant="outline" onClick={() => void loadInvoices()} disabled={invoiceLoading}>
@@ -638,7 +717,7 @@ export function PatientAppointmentsPage() {
                   </div>
                 ) : visibleInvoices.length === 0 ? (
                   <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">
-                    Chưa có hóa đơn sau khám.
+                    Chưa có hóa đơn phù hợp.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -646,32 +725,37 @@ export function PatientAppointmentsPage() {
                       <div key={invoice.id} className="rounded-3xl border p-4">
                         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-sm text-muted-foreground">Hóa đơn</p>
-                            <p className="font-semibold">{invoice.invoiceCode || `#${invoice.id}`}</p>
+                            <p className="text-sm text-muted-foreground">{getInvoiceCategoryLabel(invoice)}</p>
+                            <p className="font-semibold">{getInvoiceReferenceCode(invoice)}</p>
                             <p className="text-xs text-muted-foreground">
                               Ngày tạo: {formatDate(invoice.createdAt)}
                             </p>
+                            <p className="text-xs text-muted-foreground">
+                              Nguồn: {getInvoiceSourceLabel(invoice)}
+                            </p>
                           </div>
-                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${invoiceStatusClass(invoice.status)}`}>
-                            {invoiceStatusLabel(invoice.status)}
+                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getInvoiceStatusClass(invoice.status)}`}>
+                            {getInvoiceStatusLabel(invoice.status, invoice.paymentStatusDisplay)}
                           </span>
                         </div>
 
                         <div className="mb-3 text-sm text-muted-foreground">
+                          <p>{getInvoiceDetailSubtitle(invoice)}</p>
                           <p>
                             Tổng tiền:{' '}
                             <span className="font-semibold text-foreground">
-                              {formatCurrencyVnd(invoice.totalAmount)}
+                              {formatCurrencyVnd(getInvoiceAmount(invoice))}
                             </span>
                           </p>
-                          <p>Mã bệnh án: {invoice.medicalRecordId || '-'}</p>
+                          <p>Mã bệnh án: {invoice.medicalRecordId || invoice.recordId || '-'}</p>
+                          {invoice.paymentDate ? <p>Ngày thanh toán: {formatDate(invoice.paymentDate)}</p> : null}
                         </div>
 
                         <div className="flex flex-wrap gap-2">
                           <Button variant="outline" size="sm" onClick={() => void openInvoiceDetail(invoice)}>
                             Xem chi tiết
                           </Button>
-                          {canShowInvoicePayButton(invoice) ? (
+                          {canPayInvoiceOnline(invoice) ? (
                             <Button
                               size="sm"
                               className="gap-2"
@@ -679,7 +763,7 @@ export function PatientAppointmentsPage() {
                               disabled={invoicePayingId === invoice.id}
                             >
                               <CreditCard className="h-4 w-4" />
-                              {invoicePayingId === invoice.id ? 'Đang chuyển hướng...' : 'Thanh toán VNPay'}
+                              {invoicePayingId === invoice.id ? 'Đang chuyển hướng...' : 'Thanh toán lại VNPay'}
                             </Button>
                           ) : (
                             <Button size="sm" variant="secondary" disabled>
@@ -875,19 +959,25 @@ export function PatientAppointmentsPage() {
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>Chi tiết hóa đơn</DialogTitle>
-            <DialogDescription>Thông tin hóa đơn sau khám</DialogDescription>
+            <DialogDescription>Thông tin giao dịch và thanh toán</DialogDescription>
           </DialogHeader>
 
           {invoiceDetailLoading ? (
             <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">Đang tải chi tiết...</div>
           ) : selectedInvoice ? (
             <div className="space-y-2 text-sm">
+              <p><span className="font-semibold">Loại hóa đơn:</span> {getInvoiceCategoryLabel(selectedInvoice)}</p>
+              <p><span className="font-semibold">Nguồn:</span> {getInvoiceSourceLabel(selectedInvoice)}</p>
+              <p><span className="font-semibold">Mã tham chiếu:</span> {getInvoiceReferenceCode(selectedInvoice)}</p>
               <p><span className="font-semibold">Mã hóa đơn:</span> {selectedInvoice.invoiceCode || `#${selectedInvoice.id}`}</p>
-              <p><span className="font-semibold">Mã bệnh án:</span> {selectedInvoice.medicalRecordId || '-'}</p>
-              <p><span className="font-semibold">Tổng tiền:</span> {formatCurrencyVnd(selectedInvoice.totalAmount)}</p>
-              <p><span className="font-semibold">Trạng thái:</span> {invoiceStatusLabel(selectedInvoice.status)}</p>
+              <p><span className="font-semibold">Mã bệnh án:</span> {selectedInvoice.medicalRecordId || selectedInvoice.recordId || '-'}</p>
+              <p><span className="font-semibold">Loại khám:</span> {selectedInvoice.appointmentTypeDisplay || '-'}</p>
+              <p><span className="font-semibold">Booking gói dịch vụ:</span> {selectedInvoice.servicePackageBookingCode || '-'}</p>
+              <p><span className="font-semibold">Tên gói dịch vụ:</span> {selectedInvoice.servicePackageName || '-'}</p>
+              <p><span className="font-semibold">Tổng tiền:</span> {formatCurrencyVnd(getInvoiceAmount(selectedInvoice))}</p>
+              <p><span className="font-semibold">Trạng thái:</span> {getInvoiceStatusLabel(selectedInvoice.status, selectedInvoice.paymentStatusDisplay)}</p>
               <p><span className="font-semibold">Ngày tạo:</span> {formatDate(selectedInvoice.createdAt)}</p>
-              <p><span className="font-semibold">Ngày thanh toán:</span> {formatDate(selectedInvoice.paidAt)}</p>
+              <p><span className="font-semibold">Ngày thanh toán:</span> {formatDate(selectedInvoice.paymentDate)}</p>
               <p><span className="font-semibold">Thanh toán online:</span> {selectedInvoice.canPayOnline ? 'Có' : 'Không'}</p>
             </div>
           ) : (

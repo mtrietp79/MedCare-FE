@@ -1,4 +1,9 @@
-import { API_BASE_URL, fetchJson, getStoredToken } from './auth';
+﻿import { API_BASE_URL, fetchJson, getStoredToken } from './auth';
+import {
+  normalizeInvoiceList,
+  shouldOmitInvoiceQueryValue,
+} from '@/lib/invoice-contract'
+
 
 export const doctorApi = {
   // Appointments Management
@@ -110,12 +115,26 @@ export const doctorApi = {
   },
 
   // Invoices (View Only for Doctors)
-  getInvoices: (params?: { recordId?: string; page?: number; size?: number }) => {
+  getInvoices: async (params?: { keyword?: string; status?: string; category?: string }) => {
     const token = getStoredToken();
-    const query = params ? `?${new URLSearchParams(params as any)}` : '';
-    return fetchJson(`${API_BASE_URL}/invoices${query}`, {
+    const query = new URLSearchParams()
+
+    if (params?.keyword) {
+      query.append('keyword', params.keyword)
+    }
+
+    if (params?.status && !shouldOmitInvoiceQueryValue(params.status)) {
+      query.append('status', params.status)
+    }
+
+    if (params?.category && !shouldOmitInvoiceQueryValue(params.category)) {
+      query.append('category', params.category)
+    }
+
+    const data = await fetchJson(`${API_BASE_URL}/invoices${query.toString() ? `?${query.toString()}` : ''}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
+    return normalizeInvoiceList(data)
   },
 
   getInvoiceByRecord: (recordId: string) => {

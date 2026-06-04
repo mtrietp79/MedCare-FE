@@ -215,6 +215,9 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
               <span className="font-medium">Tổng tiền:</span>{' '}
               {`${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(consultationFee)} + ${formatCurrencyVnd(medicineFee)} + ${formatCurrencyVnd(serviceFee)}`}
             </p>
+            {invoice.paymentDate ? (
+              <p><span className="font-medium">Ngày thanh toán:</span> {formatDate(invoice.paymentDate)}</p>
+            ) : null}
             <p><span className="font-medium">Có thể thanh toán online:</span> {invoice.canPayOnline ? 'Có' : 'Không'}</p>
           </CardContent>
         </Card>

@@ -13,6 +13,12 @@ import type {
   ServicePackage,
   ServicePackageBooking,
 } from '@/types'
+import {
+  normalizeInvoiceItem,
+  normalizeInvoiceList,
+  shouldOmitInvoiceQueryValue,
+  type InvoiceItem,
+} from '@/lib/invoice-contract'
 import { mockApi } from './mock-api'
 import {
   getStoredRole,
@@ -85,6 +91,7 @@ export interface PatientMedicalRecordInvoice {
   serviceTotal?: number
   totalAmount?: number
   canPayOnline?: boolean
+  paymentDate?: string
 }
 
 export interface PatientMedicalRecordFollowUp {
@@ -128,16 +135,7 @@ export interface PatientMedicalRecord {
   updatedAt?: string
 }
 
-export interface PatientInvoice {
-  id: string
-  invoiceCode?: string
-  medicalRecordId?: string
-  totalAmount: number
-  status?: string
-  canPayOnline?: boolean
-  createdAt?: string
-  paidAt?: string
-}
+export type PatientInvoice = InvoiceItem
 
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 const DMY_DATE_REGEX = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
@@ -524,11 +522,12 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
         ? (consultationFee ?? 0) + (medicineFee ?? 0) + (serviceFee ?? 0)
         : undefined)
     const canPayOnline = toBoolean(invoiceData.canPayOnline)
+    const paymentDate = pickString(invoiceData.paymentDate, invoiceData.paidAt)
 
     const hasIdentity = Boolean(invoiceId || invoiceCode)
     const hasStatus = Boolean(invoiceStatus)
     const hasMoney = hasPositiveNumber(consultationFee, medicineFee, serviceFee, totalAmount)
-    if (!hasIdentity && !hasStatus && !hasMoney) {
+    if (!hasIdentity && !hasStatus && !hasMoney && !paymentDate) {
       return null
     }
 
@@ -543,6 +542,7 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
       serviceTotal: serviceFee,
       totalAmount,
       canPayOnline,
+      paymentDate,
     }
   })()
 
@@ -1136,54 +1136,25 @@ export const patientApi = {
     }
   },
 
-  async getMyInvoices(query?: { status?: string; keyword?: string }): Promise<PatientInvoice[]> {
+  async getMyInvoices(query?: { status?: string; keyword?: string; category?: string }): Promise<PatientInvoice[]> {
     const params = new URLSearchParams()
-    if (query?.status) params.append('status', query.status)
+    if (query?.status && !shouldOmitInvoiceQueryValue(query.status)) params.append('status', query.status)
     if (query?.keyword) params.append('keyword', query.keyword)
+    if (query?.category && !shouldOmitInvoiceQueryValue(query.category)) params.append('category', query.category)
     const endpoint = `/invoices/my${params.toString() ? `?${params.toString()}` : ''}`
 
     const data = await apiCall<any>(endpoint)
-    const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
-    return list.map((item: any) => ({
-      id: String(item?.id ?? ''),
-      invoiceCode: item?.invoiceCode ?? item?.code ?? undefined,
-      medicalRecordId: item?.medicalRecordId ? String(item.medicalRecordId) : undefined,
-      totalAmount: Number(item?.totalAmount ?? 0),
-      status: String(item?.status ?? ''),
-      canPayOnline: toBoolean(item?.canPayOnline),
-      createdAt: item?.createdAt ?? undefined,
-      paidAt: item?.paidAt ?? undefined,
-    }))
+    return normalizeInvoiceList(data)
   },
 
   async getMyInvoiceById(id: string): Promise<PatientInvoice | null> {
     const item = await apiCall<any>(`/invoices/my/${id}`)
-    if (!item || typeof item !== 'object') return null
-    return {
-      id: String(item?.id ?? ''),
-      invoiceCode: item?.invoiceCode ?? item?.code ?? undefined,
-      medicalRecordId: item?.medicalRecordId ? String(item.medicalRecordId) : undefined,
-      totalAmount: Number(item?.totalAmount ?? 0),
-      status: String(item?.status ?? ''),
-      canPayOnline: toBoolean(item?.canPayOnline),
-      createdAt: item?.createdAt ?? undefined,
-      paidAt: item?.paidAt ?? undefined,
-    }
+    return normalizeInvoiceItem(item)
   },
 
   async getMyInvoiceByRecordId(recordId: string): Promise<PatientInvoice | null> {
     const item = await apiCall<any>(`/invoices/my/record/${recordId}`)
-    if (!item || typeof item !== 'object') return null
-    return {
-      id: String(item?.id ?? ''),
-      invoiceCode: item?.invoiceCode ?? item?.code ?? undefined,
-      medicalRecordId: item?.medicalRecordId ? String(item.medicalRecordId) : undefined,
-      totalAmount: Number(item?.totalAmount ?? 0),
-      status: String(item?.status ?? ''),
-      canPayOnline: toBoolean(item?.canPayOnline),
-      createdAt: item?.createdAt ?? undefined,
-      paidAt: item?.paidAt ?? undefined,
-    }
+    return normalizeInvoiceItem(item)
   },
 }
 
@@ -1339,6 +1310,37 @@ export const paymentApi = {
   async createInvoicePaymentUrl(invoiceId: string): Promise<string> {
     const params = new URLSearchParams({ invoiceId })
     return apiCallRawText(`/payment/create-invoice-url?${params.toString()}`)
+  },
+
+  async createServicePackagePaymentUrl(bookingId: string): Promise<string> {
+    const params = new URLSearchParams({ bookingId })
+    return apiCallRawText(`/payment/create-service-package-url?${params.toString()}`)
+  },
+
+  async createInvoiceItemPaymentUrl(
+    invoice: Pick<InvoiceItem, 'id' | 'sourceType' | 'sourceId' | 'appointmentId' | 'servicePackageBookingId'>
+  ): Promise<string> {
+    if (invoice.sourceType === 'APPOINTMENT') {
+      const appointmentId = pickString(invoice.appointmentId, invoice.sourceId)
+      if (!appointmentId) {
+        throw new Error('Không tìm thấy appointmentId để tạo link thanh toán.')
+      }
+      return paymentApi.createAppointmentPaymentUrl(appointmentId)
+    }
+
+    if (invoice.sourceType === 'SERVICE_PACKAGE') {
+      const bookingId = pickString(invoice.servicePackageBookingId, invoice.sourceId)
+      if (!bookingId) {
+        throw new Error('Không tìm thấy bookingId để tạo link thanh toán.')
+      }
+      return paymentApi.createServicePackagePaymentUrl(bookingId)
+    }
+
+    const invoiceId = pickString(invoice.id)
+    if (!invoiceId) {
+      throw new Error('Không tìm thấy invoiceId để tạo link thanh toán.')
+    }
+    return paymentApi.createInvoicePaymentUrl(invoiceId)
   },
 
   async getAppointmentReceipt(appointmentId: string): Promise<AppointmentReceipt> {

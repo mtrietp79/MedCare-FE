@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
-import { Loader2, Plus, Search, Edit, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Search, Edit, Trash2, Power, PowerOff } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -129,6 +129,8 @@ export function AdminDoctorsPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [doctorPendingDelete, setDoctorPendingDelete] = useState<NormalizedDoctor | null>(null)
   const [isDeletingDoctor, setIsDeletingDoctor] = useState(false)
+  const [bulkStatusTarget, setBulkStatusTarget] = useState<'active' | 'inactive' | null>(null)
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false)
   const [formData, setFormData] = useState<DoctorForm>(initialForm)
   const [formErrors, setFormErrors] = useState<FormErrors>({})
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -306,15 +308,40 @@ export function AdminDoctorsPage() {
     },
   })
 
-  const getUpdatePayload = (form: DoctorForm) => ({
-    fullName: form.fullName.trim(),
-    email: form.email.trim() || null,
-    phone: form.phone.trim() || null,
-    price: Number(form.price) || 0,
-    ...(form.experience !== '' ? { experienceYears: Number(form.experience) } : {}),
-    specialty: form.specialtyId ? { id: form.specialtyId } : null,
-    status: form.status,
-  })
+  const getUpdatePayload = (form: DoctorForm) => {
+    const isActive = form.status === 'active'
+    return {
+      fullName: form.fullName.trim(),
+      email: form.email.trim() || null,
+      phone: form.phone.trim() || null,
+      price: Number(form.price) || 0,
+      ...(form.experience !== '' ? { experienceYears: Number(form.experience) } : {}),
+      specialty: form.specialtyId ? { id: form.specialtyId } : null,
+      status: form.status,
+      statusCode: isActive ? 'ACTIVE' : 'INACTIVE',
+      active: isActive,
+      isActive,
+    }
+  }
+
+  const getDoctorUpdatePayload = (
+    doctor: NormalizedDoctor,
+    status: 'active' | 'inactive'
+  ) => {
+    const isActive = status === 'active'
+    return {
+      fullName: doctor.fullName.trim(),
+      email: doctor.email.trim() || null,
+      phone: doctor.phone.trim() || null,
+      price: Number(doctor.price) || 0,
+      experienceYears: Number(doctor.experience) || 0,
+      specialty: doctor.specialtyId ? { id: doctor.specialtyId } : null,
+      status,
+      statusCode: isActive ? 'ACTIVE' : 'INACTIVE',
+      active: isActive,
+      isActive,
+    }
+  }
 
   const uploadDoctorPhoto = async (doctorId: string) => {
     if (!photoFile) return
@@ -403,11 +430,78 @@ export function AdminDoctorsPage() {
     }
   }
 
+  const doctorsPendingBulkUpdate = useMemo(() => {
+    if (!bulkStatusTarget) return []
+    return filteredDoctors.filter((doctor) => doctor.status !== bulkStatusTarget)
+  }, [bulkStatusTarget, filteredDoctors])
+
+  const openBulkStatusDialog = (status: 'active' | 'inactive') => {
+    const matchingDoctors = filteredDoctors.filter((doctor) => doctor.status !== status)
+    if (matchingDoctors.length === 0) {
+      toast({
+        title: 'Không có thay đổi',
+        description:
+          status === 'active'
+            ? 'Tất cả bác sĩ đang hiển thị đã ở trạng thái hoạt động.'
+            : 'Tất cả bác sĩ đang hiển thị đã ở trạng thái tắt hoạt động.',
+      })
+      return
+    }
+
+    setBulkStatusTarget(status)
+  }
+
+  const handleBulkStatusUpdate = async () => {
+    if (!bulkStatusTarget || doctorsPendingBulkUpdate.length === 0 || isBulkUpdating) return
+
+    setIsBulkUpdating(true)
+
+    try {
+      const results = await Promise.allSettled(
+        doctorsPendingBulkUpdate.map((doctor) =>
+          adminApi.updateDoctor(doctor.id, getDoctorUpdatePayload(doctor, bulkStatusTarget))
+        )
+      )
+
+      const successCount = results.filter((result) => result.status === 'fulfilled').length
+      const failedCount = results.length - successCount
+
+      if (successCount > 0) {
+        toast({
+          title: 'Thành công',
+          description:
+            bulkStatusTarget === 'active'
+              ? `Đã bật hoạt động cho ${successCount} bác sĩ.`
+              : `Đã tắt hoạt động cho ${successCount} bác sĩ.`,
+        })
+      }
+
+      if (failedCount > 0) {
+        toast({
+          title: 'Cập nhật chưa hoàn tất',
+          description: `${failedCount} bác sĩ chưa cập nhật được trạng thái. Vui lòng thử lại.`,
+          variant: 'destructive',
+        })
+      }
+
+      setBulkStatusTarget(null)
+      await fetchDoctors()
+    } catch (bulkError: any) {
+      toast({
+        title: 'Lỗi',
+        description: bulkError?.message || 'Không thể cập nhật trạng thái hàng loạt.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsBulkUpdating(false)
+    }
+  }
+
   const statusBadge = (status: NormalizedDoctor['status']) => {
     if (status === 'active') {
       return <Badge variant="default">Hoạt động</Badge>
     }
-    return <Badge variant="secondary">Không hoạt động</Badge>
+    return <Badge variant="secondary">Tắt hoạt động</Badge>
   }
 
   const renderForm = (isEdit: boolean) => (
@@ -544,7 +638,7 @@ export function AdminDoctorsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="active">Hoạt động</SelectItem>
-              <SelectItem value="inactive">Không hoạt động</SelectItem>
+              <SelectItem value="inactive">Tắt hoạt động</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -559,38 +653,59 @@ export function AdminDoctorsPage() {
           <h1 className="text-3xl font-bold">Quản lý bác sĩ</h1>
           <p className="text-muted-foreground">CRUD, tìm kiếm, lọc và cập nhật trạng thái bác sĩ</p>
         </div>
-        <Dialog
-          open={isCreateDialogOpen}
-          onOpenChange={(open) => {
-            setIsCreateDialogOpen(open)
-            if (!open) resetForm()
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Thêm bác sĩ
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[560px]">
-            <DialogHeader>
-              <DialogTitle>Tạo bác sĩ mới</DialogTitle>
-              <DialogDescription>Thông tin này sẽ được gửi lên backend theo contract hiện tại.</DialogDescription>
-            </DialogHeader>
-            {renderForm(false)}
-            <DialogFooter>
-              <Button onClick={handleCreate} disabled={isSubmitting}>
-                {isSubmitting ? 'Đang tạo...' : 'Tạo bác sĩ'}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={() => openBulkStatusDialog('active')}
+            disabled={loading || isBulkUpdating || filteredDoctors.length === 0}
+          >
+            <Power className="mr-2 h-4 w-4" />
+            Bật hoạt động tất cả
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => openBulkStatusDialog('inactive')}
+            disabled={loading || isBulkUpdating || filteredDoctors.length === 0}
+          >
+            <PowerOff className="mr-2 h-4 w-4" />
+            Tắt hoạt động tất cả
+          </Button>
+
+          <Dialog
+            open={isCreateDialogOpen}
+            onOpenChange={(open) => {
+              setIsCreateDialogOpen(open)
+              if (!open) resetForm()
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Thêm bác sĩ
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[560px]">
+              <DialogHeader>
+                <DialogTitle>Tạo bác sĩ mới</DialogTitle>
+                <DialogDescription>Thông tin này sẽ được gửi lên backend theo contract hiện tại.</DialogDescription>
+              </DialogHeader>
+              {renderForm(false)}
+              <DialogFooter>
+                <Button onClick={handleCreate} disabled={isSubmitting}>
+                  {isSubmitting ? 'Đang tạo...' : 'Tạo bác sĩ'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Danh sách bác sĩ</CardTitle>
-          <CardDescription>Tổng cộng {doctors.length} bác sĩ</CardDescription>
+          <CardDescription>
+            Tổng cộng {doctors.length} bác sĩ. Đang hiển thị {filteredDoctors.length} bác sĩ theo bộ lọc hiện tại.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -611,7 +726,7 @@ export function AdminDoctorsPage() {
               <SelectContent>
                 <SelectItem value="all">Tất cả trạng thái</SelectItem>
                 <SelectItem value="active">Đang hoạt động</SelectItem>
-                <SelectItem value="inactive">Không hoạt động</SelectItem>
+                <SelectItem value="inactive">Tắt hoạt động</SelectItem>
               </SelectContent>
             </Select>
 
@@ -751,6 +866,51 @@ export function AdminDoctorsPage() {
                 </>
               ) : (
                 'Xóa'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(bulkStatusTarget)}
+        onOpenChange={(open) => {
+          if (isBulkUpdating) return
+          if (!open) {
+            setBulkStatusTarget(null)
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkStatusTarget === 'active' ? 'Bật hoạt động hàng loạt' : 'Tắt hoạt động hàng loạt'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkStatusTarget === 'active'
+                ? `Bạn có chắc chắn muốn bật hoạt động cho ${doctorsPendingBulkUpdate.length} bác sĩ đang hiển thị không?`
+                : `Bạn có chắc chắn muốn tắt hoạt động cho ${doctorsPendingBulkUpdate.length} bác sĩ đang hiển thị không?`}{' '}
+              Thao tác này áp dụng theo danh sách hiện tại sau khi tìm kiếm/lọc.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkUpdating}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isBulkUpdating || doctorsPendingBulkUpdate.length === 0}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleBulkStatusUpdate()
+              }}
+            >
+              {isBulkUpdating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang cập nhật...
+                </>
+              ) : bulkStatusTarget === 'active' ? (
+                'Bật hoạt động'
+              ) : (
+                'Tắt hoạt động'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

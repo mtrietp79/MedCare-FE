@@ -3,7 +3,16 @@ import { Calendar, CreditCard, DollarSign, Eye, TrendingUp } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
-import { normalizeInvoice, safeLower, safeNumber, safeString, type NormalizedInvoice } from '@/lib/admin-normalizers'
+import { safeLower, safeNumber, safeString, type NormalizedInvoice } from '@/lib/admin-normalizers'
+import {
+  getInvoiceAmount,
+  getInvoiceCategoryLabel,
+  getInvoiceReferenceCode,
+  getInvoiceSourceLabel,
+  getInvoiceStatusClass,
+  getInvoiceStatusKey,
+  getInvoiceStatusLabel,
+} from '@/lib/invoice-contract'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -60,11 +69,65 @@ function normalizeSummary(raw: any): FinanceSummary {
   }
 }
 
-function shortId(value: string): string {
+function shortId(value: unknown): string {
   const normalized = safeString(value)
   if (!normalized) return '-'
   return `#${normalized.slice(-8)}`
 }
+
+function formatCurrency(amount?: number | null): string {
+  return `${Number(amount ?? 0).toLocaleString('vi-VN')} VND`
+}
+
+function formatDateTime(value?: string | null): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('vi-VN')
+}
+
+function getPatientDisplayName(invoice: NormalizedInvoice): string {
+  return invoice.patientFullName || invoice.patientName || '-'
+}
+
+function getDoctorDisplayName(invoice: NormalizedInvoice): string {
+  return invoice.doctorFullName || invoice.doctorName || '-'
+}
+
+function getRelatedPrimary(invoice: NormalizedInvoice): string {
+  if (invoice.sourceType === 'SERVICE_PACKAGE') {
+    return invoice.servicePackageName || 'Gói dịch vụ'
+  }
+
+  if (invoice.appointmentTypeDisplay) {
+    return invoice.appointmentTypeDisplay
+  }
+
+  if (invoice.medicalRecordId || invoice.recordId) {
+    return `Bệnh án ${shortId(invoice.medicalRecordId || invoice.recordId)}`
+  }
+
+  return '-'
+}
+
+function getRelatedSecondary(invoice: NormalizedInvoice): string | null {
+  if (invoice.sourceType === 'SERVICE_PACKAGE') {
+    return invoice.servicePackageBookingCode ? `Booking: ${invoice.servicePackageBookingCode}` : null
+  }
+
+  if (invoice.appointmentCode) {
+    return `Lịch: ${invoice.appointmentCode}`
+  }
+
+  if (invoice.invoiceCode && invoice.sourceType !== 'INVOICE') {
+    return `Mã HĐ: ${invoice.invoiceCode}`
+  }
+
+  return null
+}
+
+type InvoiceStatusFilter = 'all' | 'unpaid' | 'paid' | 'failed' | 'cancelled'
+type InvoiceCategoryFilter = 'all' | 'APPOINTMENT_BOOKING' | 'POST_EXAM' | 'FOLLOW_UP' | 'SERVICE_PACKAGE'
 
 export function AdminFinancePage() {
   const { toast } = useToast()
@@ -84,7 +147,8 @@ export function AdminFinancePage() {
 
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, 300)
-  const [statusFilter, setStatusFilter] = useState<'all' | NormalizedInvoice['status']>('all')
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatusFilter>('all')
+  const [categoryFilter, setCategoryFilter] = useState<InvoiceCategoryFilter>('all')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'amount_desc'>('newest')
 
   const fetchFinanceData = async () => {
@@ -97,8 +161,7 @@ export function AdminFinancePage() {
         adminApi.getInvoicesSummary(),
       ])
 
-      const normalizedInvoices = (Array.isArray(invoiceRaw) ? invoiceRaw : []).map(normalizeInvoice)
-      setInvoices(normalizedInvoices)
+      setInvoices(Array.isArray(invoiceRaw) ? invoiceRaw : [])
       setSummary(normalizeSummary(summaryRaw))
     } catch (fetchError: unknown) {
       const status = getErrorStatus(fetchError)
@@ -132,33 +195,54 @@ export function AdminFinancePage() {
     const keyword = safeLower(debouncedSearch)
 
     const list = invoices.filter((invoice) => {
-      const hitSearch = !keyword
-        || safeLower(invoice.patientName).includes(keyword)
-        || safeLower(invoice.id).includes(keyword)
-        || safeLower(invoice.medicalRecordId).includes(keyword)
+      const hitSearch =
+        !keyword ||
+        [
+          invoice.patientName,
+          invoice.patientFullName,
+          invoice.doctorName,
+          invoice.doctorFullName,
+          invoice.invoiceCode,
+          invoice.appointmentCode,
+          invoice.servicePackageBookingCode,
+          invoice.servicePackageName,
+          invoice.id,
+          invoice.medicalRecordId,
+          invoice.recordId,
+        ].some((value) => safeLower(value).includes(keyword))
 
-      const hitStatus = statusFilter === 'all' || invoice.status === statusFilter
-      return hitSearch && hitStatus
+      const hitStatus = statusFilter === 'all' || getInvoiceStatusKey(invoice.status) === statusFilter
+      const hitCategory = categoryFilter === 'all' || invoice.invoiceCategory === categoryFilter
+      return hitSearch && hitStatus && hitCategory
     })
 
     list.sort((a, b) => {
       if (sortBy === 'oldest') {
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
       }
 
       if (sortBy === 'amount_desc') {
-        return b.totalAmount - a.totalAmount
+        return getInvoiceAmount(b) - getInvoiceAmount(a)
       }
 
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
     })
 
     return list
-  }, [invoices, debouncedSearch, statusFilter, sortBy])
+  }, [invoices, debouncedSearch, statusFilter, categoryFilter, sortBy])
 
-  const handlePayInvoice = async (invoiceId: string) => {
+  const handlePayInvoice = async (invoice: NormalizedInvoice) => {
+    if (invoice.sourceType !== 'INVOICE') {
+      toast({
+        title: 'Không hỗ trợ',
+        description: 'Chỉ hóa đơn sau khám mới có thể đánh dấu thanh toán thủ công ở màn admin.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
-      await adminApi.payInvoice(invoiceId)
+      await adminApi.payInvoice(String(invoice.id))
       toast({ title: 'Thành công', description: 'Đã thanh toán hóa đơn.' })
       await fetchFinanceData()
     } catch (payError: unknown) {
@@ -182,13 +266,11 @@ export function AdminFinancePage() {
     }
   }
 
-  const statusBadge = (status: NormalizedInvoice['status']) => {
-    if (status === 'paid') return <Badge variant="default">Đã thanh toán</Badge>
-    if (status === 'pending') return <Badge variant="secondary">Chờ thanh toán</Badge>
-    return <Badge variant="destructive">Đã hủy</Badge>
-  }
-
-  const formatCurrency = (amount: number) => `${amount.toLocaleString('vi-VN')} VND`
+  const statusBadge = (invoice: NormalizedInvoice) => (
+    <Badge className={`rounded-full border ${getInvoiceStatusClass(invoice.status)}`}>
+      {getInvoiceStatusLabel(invoice.status, invoice.paymentStatusDisplay)}
+    </Badge>
+  )
 
   const openInvoiceDetail = (invoice: NormalizedInvoice) => {
     setSelectedInvoice(invoice)
@@ -254,22 +336,39 @@ export function AdminFinancePage() {
       <Card>
         <CardHeader>
           <CardTitle>Danh sách hóa đơn</CardTitle>
-          <CardDescription>Thanh toán, theo dõi và tra cứu hóa đơn</CardDescription>
+          <CardDescription>Theo dõi hóa đơn khám bệnh, sau khám, tái khám và gói dịch vụ</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-[260px] flex-1">
-              <Input placeholder="Tìm theo mã hóa đơn, hồ sơ, tên bệnh nhân" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
+              <Input
+                placeholder="Tìm theo mã, bệnh nhân, bác sĩ, gói dịch vụ..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
             </div>
-            <Select value={statusFilter} onValueChange={(value: 'all' | NormalizedInvoice['status']) => setStatusFilter(value)}>
+            <Select value={statusFilter} onValueChange={(value: InvoiceStatusFilter) => setStatusFilter(value)}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                <SelectItem value="pending">Chờ thanh toán</SelectItem>
+                <SelectItem value="unpaid">Chưa thanh toán</SelectItem>
                 <SelectItem value="paid">Đã thanh toán</SelectItem>
+                <SelectItem value="failed">Thanh toán thất bại</SelectItem>
                 <SelectItem value="cancelled">Đã hủy</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={categoryFilter} onValueChange={(value: InvoiceCategoryFilter) => setCategoryFilter(value)}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả loại hóa đơn</SelectItem>
+                <SelectItem value="APPOINTMENT_BOOKING">Hóa đơn khám bệnh</SelectItem>
+                <SelectItem value="POST_EXAM">Hóa đơn sau khám</SelectItem>
+                <SelectItem value="FOLLOW_UP">Hóa đơn tái khám</SelectItem>
+                <SelectItem value="SERVICE_PACKAGE">Hóa đơn gói dịch vụ</SelectItem>
               </SelectContent>
             </Select>
             <Select value={sortBy} onValueChange={(value: 'newest' | 'oldest' | 'amount_desc') => setSortBy(value)}>
@@ -292,10 +391,11 @@ export function AdminFinancePage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Mã hóa đơn</TableHead>
+                  <TableHead>Loại hóa đơn</TableHead>
+                  <TableHead>Mã tham chiếu</TableHead>
                   <TableHead>Bệnh nhân</TableHead>
                   <TableHead>Bác sĩ</TableHead>
-                  <TableHead>Hồ sơ bệnh án</TableHead>
+                  <TableHead>Liên quan</TableHead>
                   <TableHead>Tổng tiền</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead>Ngày tạo</TableHead>
@@ -305,19 +405,31 @@ export function AdminFinancePage() {
               <TableBody>
                 {filteredInvoices.map((invoice) => (
                   <TableRow key={invoice.id}>
-                    <TableCell className="font-medium">{shortId(invoice.id)}</TableCell>
-                    <TableCell>{invoice.patientName || '-'}</TableCell>
-                    <TableCell>{invoice.doctorName || '-'}</TableCell>
-                    <TableCell>{shortId(invoice.medicalRecordId)}</TableCell>
-                    <TableCell>{formatCurrency(invoice.totalAmount)}</TableCell>
-                    <TableCell>{statusBadge(invoice.status)}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{getInvoiceCategoryLabel(invoice)}</div>
+                      <div className="text-xs text-muted-foreground">{getInvoiceSourceLabel(invoice)}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{getInvoiceReferenceCode(invoice)}</div>
+                      <div className="text-xs text-muted-foreground">#{invoice.id}</div>
+                    </TableCell>
+                    <TableCell>{getPatientDisplayName(invoice)}</TableCell>
+                    <TableCell>{getDoctorDisplayName(invoice)}</TableCell>
+                    <TableCell>
+                      <div>{getRelatedPrimary(invoice)}</div>
+                      {getRelatedSecondary(invoice) ? (
+                        <div className="text-xs text-muted-foreground">{getRelatedSecondary(invoice)}</div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>{formatCurrency(getInvoiceAmount(invoice))}</TableCell>
+                    <TableCell>{statusBadge(invoice)}</TableCell>
                     <TableCell>{invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString('vi-VN') : '-'}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => openInvoiceDetail(invoice)}>
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {invoice.status === 'pending' && (
-                        <Button variant="ghost" size="sm" onClick={() => void handlePayInvoice(invoice.id)}>
+                      {invoice.sourceType === 'INVOICE' && getInvoiceStatusKey(invoice.status) === 'unpaid' && (
+                        <Button variant="ghost" size="sm" onClick={() => void handlePayInvoice(invoice)}>
                           <CreditCard className="h-4 w-4" />
                         </Button>
                       )}
@@ -333,38 +445,66 @@ export function AdminFinancePage() {
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Chi tiết hóa đơn {shortId(selectedInvoice?.id || '')}</DialogTitle>
-            <DialogDescription>Thông tin chi tiết hóa đơn</DialogDescription>
+            <DialogTitle>{selectedInvoice ? getInvoiceCategoryLabel(selectedInvoice) : 'Chi tiết hóa đơn'}</DialogTitle>
+            <DialogDescription>{selectedInvoice ? getInvoiceReferenceCode(selectedInvoice) : 'Thông tin chi tiết hóa đơn'}</DialogDescription>
           </DialogHeader>
           {selectedInvoice && (
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
+                <Label>Nguồn dữ liệu</Label>
+                <p>{getInvoiceSourceLabel(selectedInvoice)}</p>
+              </div>
+              <div>
+                <Label>Mã hóa đơn nội bộ</Label>
+                <p>#{selectedInvoice.id}</p>
+              </div>
+              <div>
+                <Label>Mã hóa đơn</Label>
+                <p>{selectedInvoice.invoiceCode || '-'}</p>
+              </div>
+              <div>
+                <Label>Mã tham chiếu</Label>
+                <p>{getInvoiceReferenceCode(selectedInvoice)}</p>
+              </div>
+              <div>
                 <Label>Bệnh nhân</Label>
-                <p>{selectedInvoice.patientName || '-'}</p>
+                <p>{getPatientDisplayName(selectedInvoice)}</p>
               </div>
               <div>
                 <Label>Bác sĩ</Label>
-                <p>{selectedInvoice.doctorName || '-'}</p>
+                <p>{getDoctorDisplayName(selectedInvoice)}</p>
               </div>
               <div>
                 <Label>Hồ sơ bệnh án</Label>
-                <p>{shortId(selectedInvoice.medicalRecordId)}</p>
+                <p>{shortId(selectedInvoice.medicalRecordId || selectedInvoice.recordId)}</p>
+              </div>
+              <div>
+                <Label>Loại khám</Label>
+                <p>{selectedInvoice.appointmentTypeDisplay || '-'}</p>
+              </div>
+              <div>
+                <Label>Booking gói dịch vụ</Label>
+                <p>{selectedInvoice.servicePackageBookingCode || '-'}</p>
+              </div>
+              <div>
+                <Label>Tên gói dịch vụ</Label>
+                <p>{selectedInvoice.servicePackageName || '-'}</p>
               </div>
               <div>
                 <Label>Tổng tiền</Label>
-                <p className="font-semibold">{formatCurrency(selectedInvoice.totalAmount)}</p>
+                <p className="font-semibold">{formatCurrency(getInvoiceAmount(selectedInvoice))}</p>
               </div>
               <div>
                 <Label>Trạng thái</Label>
-                <div className="mt-1">{statusBadge(selectedInvoice.status)}</div>
+                <div className="mt-1">{statusBadge(selectedInvoice)}</div>
               </div>
               <div>
                 <Label>Ngày tạo</Label>
-                <p>{selectedInvoice.createdAt ? new Date(selectedInvoice.createdAt).toLocaleString('vi-VN') : '-'}</p>
+                <p>{formatDateTime(selectedInvoice.createdAt)}</p>
               </div>
               <div>
                 <Label>Ngày thanh toán</Label>
-                <p>{selectedInvoice.paidAt ? new Date(selectedInvoice.paidAt).toLocaleString('vi-VN') : '-'}</p>
+                <p>{formatDateTime(selectedInvoice.paymentDate)}</p>
               </div>
             </div>
           )}

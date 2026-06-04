@@ -1,4 +1,6 @@
-﻿export type Nullable<T> = T | null | undefined
+﻿import { normalizeInvoiceItem, type InvoiceItem } from '@/lib/invoice-contract'
+
+export type Nullable<T> = T | null | undefined
 
 export function safeString(value: unknown): string {
   if (typeof value === 'string') return value.trim()
@@ -8,6 +10,13 @@ export function safeString(value: unknown): string {
 
 export function safeLower(value: unknown): string {
   return safeString(value).toLowerCase()
+}
+
+function normalizeText(value: unknown): string {
+  return safeString(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
 }
 
 export function safeNumber(value: unknown, fallback = 0): number {
@@ -62,6 +71,26 @@ function normalizeDoctorImageUrl(raw: any): string {
 export function normalizeDoctor(raw: any): NormalizedDoctor {
   const fullName = safeString(raw?.fullName ?? raw?.name)
   const specialtyName = safeString(raw?.specialtyName ?? raw?.specialization ?? raw?.specialty?.name)
+  const rawStatus = normalizeText(raw?.status ?? raw?.statusDisplay)
+  const activeFlag =
+    typeof raw?.isActive === 'boolean'
+      ? raw.isActive
+      : typeof raw?.active === 'boolean'
+        ? raw.active
+        : undefined
+
+  let status: NormalizedDoctor['status'] = 'active'
+  if (activeFlag === false) {
+    status = 'inactive'
+  } else if (
+    rawStatus === 'inactive' ||
+    rawStatus === 'disabled' ||
+    rawStatus.includes('khong hoat dong') ||
+    rawStatus.includes('tat hoat dong') ||
+    rawStatus.includes('ngung hoat dong')
+  ) {
+    status = 'inactive'
+  }
 
   return {
     id: safeString(raw?.id),
@@ -78,7 +107,7 @@ export function normalizeDoctor(raw: any): NormalizedDoctor {
       0
     ),
     price: safeNumber(raw?.price ?? raw?.consultationFee ?? raw?.fee, 0),
-    status: safeString(raw?.status).toLowerCase() === 'inactive' ? 'inactive' : 'active',
+    status,
     imageUrl: normalizeDoctorImageUrl(raw),
     raw,
   }
@@ -155,27 +184,12 @@ export function normalizePatient(raw: any): NormalizedPatient {
   }
 }
 
-export interface NormalizedInvoice {
-  id: string
-  patientName: string
-  doctorName: string
-  medicalRecordId: string
-  totalAmount: number
-  status: 'pending' | 'paid' | 'cancelled'
-  createdAt: string
-  paidAt: string
-}
+export type NormalizedInvoice = InvoiceItem
 
 export function normalizeInvoice(raw: any): NormalizedInvoice {
-  const status = safeLower(raw?.status)
-  return {
-    id: safeString(raw?.id),
-    patientName: safeString(raw?.patientName ?? raw?.patientFullName),
-    doctorName: safeString(raw?.doctorName ?? raw?.doctorFullName),
-    medicalRecordId: safeString(raw?.recordId ?? raw?.medicalRecordId),
-    totalAmount: safeNumber(raw?.totalAmount ?? raw?.amount),
-    status: status === 'paid' || status === 'cancelled' ? status : 'pending',
-    createdAt: safeString(raw?.createdAt),
-    paidAt: safeString(raw?.paidAt),
+  const normalized = normalizeInvoiceItem(raw)
+  if (!normalized) {
+    throw new Error('Không thể chuẩn hóa dữ liệu hóa đơn.')
   }
+  return normalized
 }

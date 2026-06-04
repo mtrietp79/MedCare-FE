@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Clock3, Eye, Search } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar } from '@/components/ui/calendar'
@@ -82,6 +82,11 @@ function formatDateAsIso(value: Date): string {
   return `${year}-${month}-${day}`
 }
 
+const TIME_SLOTS = Array.from({ length: 11 }, (_, index) => {
+  const hour = 7 + index
+  return `${String(hour).padStart(2, '0')}:00`
+})
+
 function formatDateDisplay(value?: string | null): string {
   return formatDateDdMmYyyy(value)
 }
@@ -136,7 +141,44 @@ export function DoctorMedicalRecordsPage() {
   const [followUpSubmitting, setFollowUpSubmitting] = useState(false)
   const [followUpForm, setFollowUpForm] = useState({ date: '', time: '', note: '' })
   const [isFollowUpDatePickerOpen, setIsFollowUpDatePickerOpen] = useState(false)
+  const [currentTime, setCurrentTime] = useState(() => new Date())
   const todayDateOnly = toDateOnly(new Date())
+
+  const minAllowedDateTime = useMemo(() => new Date(currentTime.getTime() + 60 * 60 * 1000), [currentTime])
+  const followUpAvailableTimeSlots = useMemo(() => {
+    const selectedDate = parseDateInput(followUpForm.date)
+    if (!selectedDate) {
+      return TIME_SLOTS.map((value) => ({ value, disabled: true }))
+    }
+
+    return TIME_SLOTS.map((value) => {
+      const [hourRaw, minuteRaw] = value.split(':').map(Number)
+      if (!Number.isFinite(hourRaw) || !Number.isFinite(minuteRaw)) {
+        return { value, disabled: true }
+      }
+
+      const candidateDate = new Date(selectedDate)
+      candidateDate.setHours(hourRaw, minuteRaw, 0, 0)
+      const disabled = candidateDate.getTime() < minAllowedDateTime.getTime()
+      return { value, disabled }
+    })
+  }, [followUpForm.date, minAllowedDateTime])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(new Date())
+    }, 30000)
+
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!followUpForm.time) return
+    const selected = followUpAvailableTimeSlots.find((slot) => slot.value === followUpForm.time)
+    if (selected?.disabled) {
+      setFollowUpForm((prev) => ({ ...prev, time: '' }))
+    }
+  }, [followUpAvailableTimeSlots, followUpForm.time])
 
   const fetchSummary = async () => {
     const data = await doctorMedicalRecordService.getSummary()
@@ -520,29 +562,30 @@ export function DoctorMedicalRecordsPage() {
                             </div>
 
                             <div className="xl:col-span-3">
-                              <Label className="mb-1.5 block">Giờ tái khám (24h)</Label>
-                              <div className="relative">
-                                <Clock3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9ca3af]" />
-                                <Input
-                                  value={followUpForm.time}
-                                  inputMode="numeric"
-                                  maxLength={5}
-                                  placeholder="VD: 14:30"
-                                  className="pl-9"
-                                  onChange={(event) =>
-                                    setFollowUpForm((prev) => ({
-                                      ...prev,
-                                      time: event.target.value.replace(/[^\d:]/g, '').slice(0, 5),
-                                    }))
-                                  }
-                                  onBlur={() => {
-                                    const normalizedTime = normalizeTimeInput(followUpForm.time)
-                                    if (!normalizedTime) return
-                                    setFollowUpForm((prev) => ({ ...prev, time: normalizedTime }))
-                                  }}
-                                />
+                              <Label className="mb-1.5 block">Giờ tái khám</Label>
+                              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                {followUpAvailableTimeSlots.map((slot) => (
+                                  <button
+                                    key={slot.value}
+                                    type="button"
+                                    disabled={slot.disabled}
+                                    onClick={() => setFollowUpForm((prev) => ({ ...prev, time: slot.value }))}
+                                    className={
+                                      `rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                                        followUpForm.time === slot.value
+                                          ? 'border-teal-600 bg-teal-600 text-white'
+                                          : 'border-slate-200 bg-white text-slate-700 hover:border-teal-500 hover:text-teal-700'
+                                      }` + (slot.disabled ? ' cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-100 hover:text-slate-400' : '')
+                                    }
+                                  >
+                                    {slot.value}
+                                  </button>
+                                ))}
                               </div>
-                              <p className="mt-1 text-xs text-[#6b7280]">Ví dụ: 08:30 hoặc 14:30.</p>
+                              <input type="hidden" value={followUpForm.time} />
+                              <p className="mt-1 text-xs text-[#6b7280]">
+                                Chọn giờ giống như khi đặt lịch khám. Nếu chưa chọn ngày, hãy chọn ngày trước.
+                              </p>
                             </div>
 
                             <div className="xl:col-span-5">

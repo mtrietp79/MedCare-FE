@@ -58,6 +58,8 @@ function asRecord(value: unknown): Record<string, any> | null {
   return value as Record<string, any>
 }
 
+const ISO_DATE_PREFIX_REGEX = /^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/
+
 function normalizeListResponse<T>(raw: any): T[] {
   if (Array.isArray(raw)) return raw
   if (Array.isArray(raw?.content)) return raw.content
@@ -90,12 +92,97 @@ function pickNumber(...values: unknown[]): number | undefined {
   return undefined
 }
 
+function parseDateValue(value: unknown): Date | null {
+  const raw = pickString(value)
+  if (!raw) return null
+
+  const normalized = raw.replace(/\u00a0/g, ' ').trim()
+  const isoMatch = normalized.match(ISO_DATE_PREFIX_REGEX)
+  if (isoMatch) {
+    const year = Number(isoMatch[1])
+    const month = Number(isoMatch[2])
+    const day = Number(isoMatch[3])
+    const parsed = new Date(year, month - 1, day, 0, 0, 0, 0)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  const parsed = new Date(normalized)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function getVisitDateCandidate(source?: Record<string, any> | null): string | undefined {
+  if (!source) return undefined
+
+  return pickString(
+    source.lastVisitDate,
+    source.latestVisitDate,
+    source.latestExamDate,
+    source.lastExaminationDate,
+    source.examDate,
+    source.examinationDate,
+    source.visitDate,
+    source.appointmentDate,
+    source.date
+  )
+}
+
+function appendVisitDateCandidate(target: string[], raw: unknown) {
+  const source = asRecord(raw)
+  if (!source) return
+
+  const candidate = getVisitDateCandidate(source)
+  if (candidate) target.push(candidate)
+}
+
+function appendVisitDateCandidatesFromArray(target: string[], raw: unknown) {
+  const rows = Array.isArray(raw) ? raw : []
+  rows.forEach((row) => appendVisitDateCandidate(target, row))
+}
+
+function pickLatestDate(values: string[]): string | undefined {
+  let latestValue: string | undefined
+  let latestTimestamp = -Infinity
+
+  values.forEach((value) => {
+    const parsed = parseDateValue(value)
+    if (!parsed) return
+
+    const timestamp = parsed.getTime()
+    if (timestamp > latestTimestamp) {
+      latestTimestamp = timestamp
+      latestValue = value
+    }
+  })
+
+  return latestValue ?? values.find((value) => value.trim())
+}
+
 function normalizePatient(raw: unknown): MedicalRecordPatient | null {
   const source = asRecord(raw)
   if (!source) return null
   const patient = asRecord(source.patient)
   const id = pickString(source.id, source.patientId, patient?.id)
   if (!id) return null
+
+  const visitDateCandidates: string[] = []
+  ;[
+    source,
+    patient,
+    source.latestVisit,
+    source.lastVisit,
+    source.latestRecord,
+    source.lastRecord,
+    source.latestMedicalRecord,
+    source.lastMedicalRecord,
+    source.latestAppointment,
+    source.lastAppointment,
+  ].forEach((item) => appendVisitDateCandidate(visitDateCandidates, item))
+
+  appendVisitDateCandidatesFromArray(visitDateCandidates, source.records)
+  appendVisitDateCandidatesFromArray(visitDateCandidates, source.medicalRecords)
+  appendVisitDateCandidatesFromArray(visitDateCandidates, source.appointments)
+  appendVisitDateCandidatesFromArray(visitDateCandidates, patient?.records)
+  appendVisitDateCandidatesFromArray(visitDateCandidates, patient?.medicalRecords)
 
   return {
     id,
@@ -105,7 +192,7 @@ function normalizePatient(raw: unknown): MedicalRecordPatient | null {
     gender: pickString(source.gender, patient?.gender),
     revisitCount: pickNumber(source.revisitCount, source.revisitVisits, source.followUpCount),
     totalVisits: pickNumber(source.totalVisits, source.visitCount, source.totalAppointments),
-    lastVisitDate: pickString(source.lastVisitDate, source.latestExamDate, source.lastExaminationDate),
+    lastVisitDate: pickLatestDate(visitDateCandidates),
   }
 }
 

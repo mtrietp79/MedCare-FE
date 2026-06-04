@@ -218,14 +218,27 @@ export interface AppointmentBookingResponse {
   message: string
 }
 
+export interface PaymentReceiptPatient {
+  fullName?: string
+  phone?: string
+  email?: string
+}
+
+export interface PaymentReceiptInfo {
+  method?: string
+  transactionNo?: string
+  bankCode?: string
+  amount?: number
+  paidAt?: string
+  responseCode?: string
+  status?: string
+  statusDisplay?: string
+}
+
 export interface AppointmentReceipt {
-  appointmentId: number
-  appointmentCode: string
-  patient: {
-    fullName?: string
-    phone?: string
-    email?: string
-  }
+  appointmentId?: number | string
+  appointmentCode?: string
+  patient: PaymentReceiptPatient
   booking: {
     doctorName?: string
     specialtyName?: string
@@ -237,14 +250,42 @@ export interface AppointmentReceipt {
     paymentStatusDisplay?: string
     consultationFee?: number
   }
-  payment: {
-    method?: string
-    transactionNo?: string
-    bankCode?: string
-    amount?: number
-    paidAt?: string
-    responseCode?: string
+  payment: PaymentReceiptInfo
+}
+
+export interface ServicePackageReceipt {
+  bookingId?: number | string
+  bookingCode?: string
+  patient: PaymentReceiptPatient
+  booking: {
+    packageName?: string
+    bookingDate?: string
+    bookingTime?: string
+    totalAmount?: number
+    status?: string
+    statusDisplay?: string
+    paymentStatus?: string
+    paymentStatusDisplay?: string
   }
+  payment: PaymentReceiptInfo
+}
+
+export interface InvoiceReceipt {
+  invoiceId?: number | string
+  patient: PaymentReceiptPatient
+  invoice: {
+    invoiceCode?: string
+    invoiceCategoryDisplay?: string
+    doctorName?: string
+    serviceName?: string
+    consultationFee?: number
+    medicineFee?: number
+    serviceFee?: number
+    totalAmount?: number
+    status?: string
+    paymentStatusDisplay?: string
+  }
+  payment: PaymentReceiptInfo
 }
 
 export interface Patient {

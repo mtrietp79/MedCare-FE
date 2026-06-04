@@ -189,6 +189,14 @@ export interface AdminServicePackageStats {
   totalPending: number
 }
 
+const SERVICE_PACKAGE_BOOKING_STATUS_KEYS = [
+  'PENDING_PAYMENT',
+  'PAID',
+  'RECEIVED',
+  'COMPLETED',
+  'CANCELLED',
+] as const
+
 export interface AdminServicePackageSummary {
   totalPackages: number
   activePackages: number
@@ -387,10 +395,16 @@ function unwrapList(input: unknown): any[] {
   if (Array.isArray(source.data)) return source.data
   if (Array.isArray(source.items)) return source.items
   if (Array.isArray(source.content)) return source.content
+  if (Array.isArray(source.bookings)) return source.bookings
+  if (Array.isArray(source.records)) return source.records
+  if (Array.isArray(source.results)) return source.results
   const dataRecord = asRecord(source.data)
   if (dataRecord) {
     if (Array.isArray(dataRecord.items)) return dataRecord.items
     if (Array.isArray(dataRecord.content)) return dataRecord.content
+    if (Array.isArray(dataRecord.bookings)) return dataRecord.bookings
+    if (Array.isArray(dataRecord.records)) return dataRecord.records
+    if (Array.isArray(dataRecord.results)) return dataRecord.results
   }
   return []
 }
@@ -1142,19 +1156,53 @@ export const adminApi = {
 
   getServicePackageBookings: async (query?: { status?: string; keyword?: string }): Promise<AdminServicePackageBooking[]> => {
     const token = getStoredToken();
-    const params = new URLSearchParams();
-    if (query?.status) params.append('status', query.status);
-    if (query?.keyword) params.append('keyword', query.keyword);
-    const suffix = params.toString() ? `?${params.toString()}` : ''
-    const data = await tryFetchFirstSuccess<any>(
-      [
-        `${API_BASE_URL}/admin/service-packages/bookings${suffix}`,
-        `${API_BASE_URL}/admin/service-package-bookings${suffix}`,
-      ],
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
+    const keyword = pickString(query?.keyword)
+    const status = pickString(query?.status)
 
-    return unwrapList(data).map((item) => normalizeAdminServicePackageBooking(item))
+    const fetchBookingList = async (statusValue?: string): Promise<AdminServicePackageBooking[]> => {
+      const params = new URLSearchParams()
+      if (statusValue && !shouldOmitQueryValue(statusValue)) {
+        params.append('status', statusValue)
+      }
+      if (keyword) {
+        params.append('keyword', keyword)
+      }
+
+      const suffix = params.toString() ? `?${params.toString()}` : ''
+      const data = await tryFetchFirstSuccess<any>(
+        [
+          `${API_BASE_URL}/admin/service-packages/bookings${suffix}`,
+          `${API_BASE_URL}/admin/service-package-bookings${suffix}`,
+        ],
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+
+      return unwrapList(data).map((item) => normalizeAdminServicePackageBooking(item))
+    }
+
+    if (status && !shouldOmitQueryValue(status)) {
+      return fetchBookingList(status)
+    }
+
+    const bookingGroups = await Promise.all([
+      fetchBookingList().catch(() => []),
+      ...SERVICE_PACKAGE_BOOKING_STATUS_KEYS.map((statusKey) =>
+        fetchBookingList(statusKey).catch(() => [])
+      ),
+    ])
+
+    const mergedBookings = new Map<string, AdminServicePackageBooking>()
+    for (const items of bookingGroups) {
+      for (const booking of items) {
+        const key =
+          pickString(booking.id, booking.bookingCode) ??
+          `${booking.patientName ?? ''}-${booking.packageName ?? ''}-${booking.createdAt ?? ''}`
+        if (!key) continue
+        mergedBookings.set(key, booking)
+      }
+    }
+
+    return Array.from(mergedBookings.values())
   },
 
   updateServicePackageBookingStatus: (id: string, status: string) => {

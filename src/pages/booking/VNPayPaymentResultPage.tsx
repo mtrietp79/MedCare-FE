@@ -1,14 +1,78 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { AlertCircle, Loader2, Printer, RefreshCw } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, Printer, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { getAppointmentStatusLabel, resolvePaymentStatusView } from '@/lib/appointment-status'
+import { getInvoiceStatusClass, getInvoiceStatusLabel } from '@/lib/invoice-contract'
 import { api } from '@/services/api'
-import type { AppointmentReceipt } from '@/types'
-import { getAppointmentStatusLabel, getPaymentStatusLabel } from '@/lib/appointment-status'
+import type {
+  AppointmentReceipt,
+  InvoiceReceipt,
+  PaymentReceiptInfo,
+  PaymentReceiptPatient,
+  ServicePackageReceipt,
+} from '@/types'
 
-function formatCurrency(amount?: number | null) {
+type PaymentResourceType = 'APPOINTMENT' | 'SERVICE_PACKAGE' | 'INVOICE'
+type PaymentResultStatus = 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'UNKNOWN'
+type ReceiptData = AppointmentReceipt | ServicePackageReceipt | InvoiceReceipt
+
+type DetailRow = {
+  label: string
+  value: string
+  fullWidth?: boolean
+  valueClassName?: string
+}
+
+type StatusBadge = {
+  label: string
+  className: string
+}
+
+type ReceiptViewModel = {
+  referenceValue: string
+  patient: PaymentReceiptPatient
+  subjectRows: DetailRow[]
+  paymentRows: DetailRow[]
+  paymentStatus: StatusBadge
+}
+
+type ResourceConfig = {
+  documentTitle: string
+  referenceLabel: string
+  successDescription: string
+  failureDescription: string
+  backHref: string
+  backLabel: string
+  missingIdMessage: string
+  retryErrorMessage: string
+}
+
+function formatCurrency(amount: number) {
   return `${new Intl.NumberFormat('vi-VN').format(Number(amount || 0))} đ`
+}
+
+function formatCurrencyValue(amount?: number | null) {
+  if (amount == null) return '-'
+  return formatCurrency(amount)
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleDateString('vi-VN')
+}
+
+function formatTime(value?: string | null) {
+  const raw = String(value || '').trim()
+  if (!raw) return '-'
+
+  const match = raw.match(/(\d{1,2}):(\d{2})/)
+  if (!match) return raw
+
+  return `${String(Number(match[1])).padStart(2, '0')}:${match[2]}`
 }
 
 function formatDateTime(value?: string | null) {
@@ -18,61 +82,334 @@ function formatDateTime(value?: string | null) {
   return parsed.toLocaleString('vi-VN')
 }
 
-function mapAppointmentStatus(status?: string | null, statusDisplay?: string | null) {
-  return getAppointmentStatusLabel(status || undefined, statusDisplay || undefined)
+function formatDateAndTime(dateValue?: string | null, timeValue?: string | null) {
+  const dateText = formatDate(dateValue)
+  const timeText = formatTime(timeValue)
+  if (dateText === '-' && timeText === '-') return '-'
+  if (dateText === '-') return timeText
+  if (timeText === '-') return dateText
+  return `${dateText} ${timeText}`
 }
 
-function mapPaymentStatus(status?: string | null, statusDisplay?: string | null) {
-  return getPaymentStatusLabel(status || undefined, statusDisplay || undefined)
+function getReadablePaymentMethod(value?: string | null) {
+  const text = String(value || '').trim()
+  return text || 'VNPay'
 }
 
-function getStatusLabel(status?: string | null) {
-  const normalized = String(status || '').toUpperCase()
-  if (normalized === 'SUCCESS') return 'Thanh toán thành công'
-  if (normalized === 'CANCELLED') return 'Thanh toán đã hủy'
-  if (normalized === 'FAILED') return 'Thanh toán thất bại'
+function normalizeResourceType(value?: string | null): PaymentResourceType | null {
+  const normalized = String(value || '').trim().toUpperCase()
+  if (normalized === 'APPOINTMENT') return 'APPOINTMENT'
+  if (normalized === 'SERVICE_PACKAGE') return 'SERVICE_PACKAGE'
+  if (normalized === 'INVOICE') return 'INVOICE'
+  return null
+}
+
+function inferResourceType(searchParams: URLSearchParams): PaymentResourceType | null {
+  if (searchParams.get('appointmentId')) return 'APPOINTMENT'
+  if (searchParams.get('bookingId')) return 'SERVICE_PACKAGE'
+  if (searchParams.get('invoiceId')) return 'INVOICE'
+  return null
+}
+
+function getResourceId(resourceType: PaymentResourceType | null, searchParams: URLSearchParams) {
+  if (resourceType === 'APPOINTMENT') return searchParams.get('appointmentId')
+  if (resourceType === 'SERVICE_PACKAGE') return searchParams.get('bookingId')
+  if (resourceType === 'INVOICE') return searchParams.get('invoiceId')
+  return searchParams.get('appointmentId') || searchParams.get('bookingId') || searchParams.get('invoiceId')
+}
+
+function normalizeResultStatus(value?: string | null): PaymentResultStatus {
+  const normalized = String(value || '').trim().toUpperCase()
+  if (normalized === 'SUCCESS') return 'SUCCESS'
+  if (normalized === 'FAILED') return 'FAILED'
+  if (normalized === 'CANCELLED') return 'CANCELLED'
+  return 'UNKNOWN'
+}
+
+function getStatusLabel(status: PaymentResultStatus) {
+  if (status === 'SUCCESS') return 'Thanh toán thành công'
+  if (status === 'CANCELLED') return 'Thanh toán đã hủy'
+  if (status === 'FAILED') return 'Thanh toán thất bại'
   return 'Thanh toán chưa thành công'
+}
+
+function buildHistoryHref(tab: 'appointments' | 'packages' | 'invoices') {
+  if (tab === 'appointments') return '/patient/appointments'
+  return `/patient/appointments?tab=${tab}`
+}
+
+function getResourceConfig(resourceType: PaymentResourceType | null): ResourceConfig {
+  if (resourceType === 'SERVICE_PACKAGE') {
+    return {
+      documentTitle: 'Biên lai đặt gói dịch vụ',
+      referenceLabel: 'Mã booking',
+      successDescription: 'Booking gói dịch vụ của bạn đã được thanh toán và ghi nhận thành công.',
+      failureDescription: 'Giao dịch chưa hoàn tất. Bạn có thể thử lại hoặc quay về danh sách gói dịch vụ đã đặt.',
+      backHref: buildHistoryHref('packages'),
+      backLabel: 'Về gói dịch vụ đã đặt',
+      missingIdMessage: 'Không tìm thấy bookingId để tải biên lai gói dịch vụ.',
+      retryErrorMessage: 'Không thể tạo lại link thanh toán VNPay cho gói dịch vụ.',
+    }
+  }
+
+  if (resourceType === 'INVOICE') {
+    return {
+      documentTitle: 'Biên lai thanh toán hóa đơn',
+      referenceLabel: 'Mã hóa đơn',
+      successDescription: 'Hóa đơn của bạn đã được thanh toán thành công qua VNPay.',
+      failureDescription: 'Giao dịch chưa hoàn tất. Bạn có thể thử lại hoặc quay về danh sách hóa đơn của mình.',
+      backHref: buildHistoryHref('invoices'),
+      backLabel: 'Về hóa đơn của tôi',
+      missingIdMessage: 'Không tìm thấy invoiceId để tải biên lai hóa đơn.',
+      retryErrorMessage: 'Không thể tạo lại link thanh toán VNPay cho hóa đơn.',
+    }
+  }
+
+  return {
+    documentTitle: 'Phiếu đặt lịch & Biên lai',
+    referenceLabel: 'Mã lịch hẹn',
+    successDescription: 'Lịch khám của bạn đã được xác nhận và thanh toán thành công.',
+    failureDescription: 'Giao dịch chưa hoàn tất. Bạn có thể thử lại hoặc quay về danh sách lịch khám của mình.',
+    backHref: buildHistoryHref('appointments'),
+    backLabel: 'Về lịch khám của tôi',
+    missingIdMessage: 'Không tìm thấy appointmentId để tải phiếu đặt lịch.',
+    retryErrorMessage: 'Không thể tạo lại link thanh toán VNPay.',
+  }
+}
+
+function normalizeInvoiceStatus(value?: string | null) {
+  const normalized = String(value || '').trim().toUpperCase()
+  if (normalized === 'SUCCESS') return 'PAID'
+  return normalized || 'PAID'
+}
+
+function buildPaymentRows(
+  payment: PaymentReceiptInfo | undefined,
+  amount: number | null | undefined,
+  fallbackResponseCode: string
+): DetailRow[] {
+  return [
+    {
+      label: 'Phương thức',
+      value: getReadablePaymentMethod(payment?.method),
+    },
+    {
+      label: 'Mã giao dịch',
+      value: payment?.transactionNo || '-',
+    },
+    {
+      label: 'Ngân hàng',
+      value: payment?.bankCode || '-',
+    },
+    {
+      label: 'Thời gian thanh toán',
+      value: formatDateTime(payment?.paidAt),
+    },
+    {
+      label: 'Mã phản hồi',
+      value: payment?.responseCode || fallbackResponseCode || '-',
+    },
+    {
+      label: 'Số tiền',
+      value: formatCurrencyValue(amount),
+      valueClassName: 'text-lg font-semibold text-primary',
+    },
+  ]
+}
+
+function buildAppointmentViewModel(
+  receipt: AppointmentReceipt,
+  fallbackId: string | null,
+  fallbackResponseCode: string
+): ReceiptViewModel {
+  const patient = receipt?.patient ?? {}
+  const booking = receipt?.booking ?? {}
+  const payment = receipt?.payment
+  const paymentStatus = resolvePaymentStatusView(
+    booking.paymentStatus ?? payment?.status,
+    booking.paymentStatusDisplay ?? payment?.statusDisplay
+  )
+
+  return {
+    referenceValue: receipt?.appointmentCode || fallbackId || '-',
+    patient,
+    subjectRows: [
+      { label: 'Bác sĩ', value: booking.doctorName || '-' },
+      { label: 'Chuyên khoa', value: booking.specialtyName || '-' },
+      { label: 'Dịch vụ', value: booking.serviceName || '-' },
+      { label: 'Ngày khám', value: formatDateTime(booking.appointmentDate) },
+      {
+        label: 'Trạng thái lịch hẹn',
+        value: getAppointmentStatusLabel(booking.appointmentStatus, booking.appointmentStatusDisplay),
+      },
+    ],
+    paymentRows: buildPaymentRows(payment, payment?.amount ?? booking.consultationFee, fallbackResponseCode),
+    paymentStatus: {
+      label: paymentStatus.label,
+      className: paymentStatus.className,
+    },
+  }
+}
+
+function buildServicePackageViewModel(
+  receipt: ServicePackageReceipt,
+  fallbackId: string | null,
+  fallbackResponseCode: string
+): ReceiptViewModel {
+  const patient = receipt?.patient ?? {}
+  const booking = receipt?.booking ?? {}
+  const payment = receipt?.payment
+  const paymentStatus = resolvePaymentStatusView(
+    booking.paymentStatus ?? payment?.status,
+    booking.paymentStatusDisplay ?? payment?.statusDisplay
+  )
+
+  return {
+    referenceValue: receipt?.bookingCode || fallbackId || '-',
+    patient,
+    subjectRows: [
+      { label: 'Tên gói dịch vụ', value: booking.packageName || '-' },
+      {
+        label: 'Ngày giờ đến cơ sở',
+        value: formatDateAndTime(booking.bookingDate, booking.bookingTime),
+      },
+      {
+        label: 'Tổng giá trị',
+        value: formatCurrencyValue(booking.totalAmount ?? payment?.amount),
+        valueClassName: 'font-semibold text-primary',
+      },
+    ],
+    paymentRows: buildPaymentRows(payment, payment?.amount ?? booking.totalAmount, fallbackResponseCode),
+    paymentStatus: {
+      label: paymentStatus.label,
+      className: paymentStatus.className,
+    },
+  }
+}
+
+function buildInvoiceViewModel(
+  receipt: InvoiceReceipt,
+  fallbackId: string | null,
+  fallbackResponseCode: string
+): ReceiptViewModel {
+  const patient = receipt?.patient ?? {}
+  const invoice = receipt?.invoice ?? {}
+  const payment = receipt?.payment
+  const invoiceStatus = normalizeInvoiceStatus(invoice.status ?? payment?.status)
+
+  return {
+    referenceValue: invoice.invoiceCode || fallbackId || '-',
+    patient,
+    subjectRows: [
+      { label: 'Mã hóa đơn', value: invoice.invoiceCode || fallbackId || '-' },
+      { label: 'Loại hóa đơn', value: invoice.invoiceCategoryDisplay || '-' },
+      { label: 'Bác sĩ', value: invoice.doctorName || '-' },
+      { label: 'Dịch vụ', value: invoice.serviceName || '-' },
+      { label: 'Phí khám', value: formatCurrencyValue(invoice.consultationFee) },
+      { label: 'Tiền thuốc', value: formatCurrencyValue(invoice.medicineFee) },
+      { label: 'Tiền dịch vụ', value: formatCurrencyValue(invoice.serviceFee) },
+      {
+        label: 'Tổng cộng',
+        value: formatCurrencyValue(invoice.totalAmount ?? payment?.amount),
+        valueClassName: 'font-semibold text-primary',
+      },
+    ],
+    paymentRows: buildPaymentRows(payment, payment?.amount ?? invoice.totalAmount, fallbackResponseCode),
+    paymentStatus: {
+      label: getInvoiceStatusLabel(invoiceStatus, invoice.paymentStatusDisplay ?? payment?.statusDisplay),
+      className: getInvoiceStatusClass(invoiceStatus),
+    },
+  }
+}
+
+function buildReceiptViewModel(
+  resourceType: PaymentResourceType | null,
+  receipt: ReceiptData | null,
+  fallbackId: string | null,
+  fallbackResponseCode: string
+): ReceiptViewModel | null {
+  if (!resourceType || !receipt) return null
+
+  if (resourceType === 'SERVICE_PACKAGE') {
+    return buildServicePackageViewModel(receipt as ServicePackageReceipt, fallbackId, fallbackResponseCode)
+  }
+
+  if (resourceType === 'INVOICE') {
+    return buildInvoiceViewModel(receipt as InvoiceReceipt, fallbackId, fallbackResponseCode)
+  }
+
+  return buildAppointmentViewModel(receipt as AppointmentReceipt, fallbackId, fallbackResponseCode)
+}
+
+function renderDetailRows(rows: DetailRow[]) {
+  return rows.map((row) => (
+    <p key={row.label} className={row.fullWidth ? 'md:col-span-2' : undefined}>
+      <span className="text-muted-foreground">{row.label}:</span>{' '}
+      <span className={row.valueClassName || 'font-medium'}>{row.value}</span>
+    </p>
+  ))
 }
 
 export function VNPayPaymentResultPage() {
   const location = useLocation()
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
 
-  const appointmentId = searchParams.get('appointmentId')
-  const status = String(searchParams.get('status') || '').toUpperCase()
+  const resourceType = useMemo(
+    () => normalizeResourceType(searchParams.get('resourceType')) ?? inferResourceType(searchParams),
+    [searchParams]
+  )
+  const resourceConfig = useMemo(() => getResourceConfig(resourceType), [resourceType])
+  const resourceId = useMemo(() => getResourceId(resourceType, searchParams), [resourceType, searchParams])
+  const status = normalizeResultStatus(searchParams.get('status'))
   const responseCode = searchParams.get('responseCode') || ''
   const callbackMessage = searchParams.get('message') || ''
   const isSuccess = status === 'SUCCESS'
 
-  const [receipt, setReceipt] = useState<AppointmentReceipt | null>(null)
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null)
   const [loading, setLoading] = useState(isSuccess)
   const [error, setError] = useState<string | null>(null)
   const [retryLoading, setRetryLoading] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
 
   useEffect(() => {
+    setReceipt(null)
+    setError(null)
+    setRetryError(null)
+
     if (!isSuccess) {
       setLoading(false)
       return
     }
 
-    if (!appointmentId) {
+    if (!resourceType) {
       setLoading(false)
-      setError('Không tìm thấy appointmentId để tải phiếu đặt lịch.')
+      setError('Không xác định được loại giao dịch thanh toán.')
+      return
+    }
+
+    if (!resourceId) {
+      setLoading(false)
+      setError(resourceConfig.missingIdMessage)
       return
     }
 
     const fetchReceipt = async () => {
       try {
         setLoading(true)
-        setError(null)
-        const data = await api.payments.getAppointmentReceipt(String(appointmentId))
+
+        const data =
+          resourceType === 'SERVICE_PACKAGE'
+            ? await api.payments.getServicePackageReceipt(String(resourceId))
+            : resourceType === 'INVOICE'
+              ? await api.payments.getInvoiceReceipt(String(resourceId))
+              : await api.payments.getAppointmentReceipt(String(resourceId))
+
         setReceipt(data)
       } catch (receiptError) {
         setError(
           receiptError instanceof Error
             ? receiptError.message
-            : 'Không thể tải phiếu đặt lịch & biên lai.'
+            : 'Không thể tải biên lai thanh toán.'
         )
       } finally {
         setLoading(false)
@@ -80,27 +417,38 @@ export function VNPayPaymentResultPage() {
     }
 
     void fetchReceipt()
-  }, [appointmentId, isSuccess])
+  }, [isSuccess, resourceConfig.missingIdMessage, resourceId, resourceType])
 
   const handleRetryPayment = async () => {
-    if (!appointmentId) return
+    if (!resourceType || !resourceId) return
 
     try {
       setRetryLoading(true)
       setRetryError(null)
-      const paymentUrl = await api.payments.createAppointmentPaymentUrl(String(appointmentId))
+
+      const paymentUrl =
+        resourceType === 'SERVICE_PACKAGE'
+          ? await api.payments.createServicePackagePaymentUrl(String(resourceId))
+          : resourceType === 'INVOICE'
+            ? await api.payments.createInvoicePaymentUrl(String(resourceId))
+            : await api.payments.createAppointmentPaymentUrl(String(resourceId))
+
       window.location.href = paymentUrl
     } catch (retryPaymentError) {
       setRetryError(
         retryPaymentError instanceof Error
           ? retryPaymentError.message
-          : 'Không thể tạo lại link thanh toán VNPay.'
+          : resourceConfig.retryErrorMessage
       )
+    } finally {
       setRetryLoading(false)
     }
   }
 
-  const totalAmount = receipt?.payment?.amount ?? receipt?.booking?.consultationFee ?? 0
+  const viewModel = useMemo(
+    () => buildReceiptViewModel(resourceType, receipt, resourceId, responseCode),
+    [receipt, resourceId, resourceType, responseCode]
+  )
 
   return (
     <div className="min-h-screen bg-slate-50 py-8">
@@ -109,7 +457,7 @@ export function VNPayPaymentResultPage() {
           <Card className="mx-auto max-w-3xl">
             <CardContent className="flex items-center justify-center gap-3 py-12 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              Đang tải phiếu đặt lịch & biên lai...
+              Đang tải biên lai thanh toán...
             </CardContent>
           </Card>
         ) : isSuccess ? (
@@ -119,9 +467,10 @@ export function VNPayPaymentResultPage() {
                 <p className="text-lg font-semibold text-slate-900">Phòng khám MedCare</p>
                 <p className="text-sm text-muted-foreground">Hotline: 1900 09 99 83 | support@medcare.vn</p>
               </div>
-              <CardTitle className="text-center text-2xl uppercase">Phiếu đặt lịch & Biên lai</CardTitle>
+              <CardTitle className="text-center text-2xl uppercase">{resourceConfig.documentTitle}</CardTitle>
               <div className="text-center text-sm text-muted-foreground">
-                Mã phiếu: <span className="font-semibold text-foreground">{receipt?.appointmentCode || appointmentId || '-'}</span>
+                {resourceConfig.referenceLabel}:{' '}
+                <span className="font-semibold text-foreground">{viewModel?.referenceValue || resourceId || '-'}</span>
               </div>
             </CardHeader>
 
@@ -132,101 +481,70 @@ export function VNPayPaymentResultPage() {
                 </div>
               ) : null}
 
-              <section className="space-y-3">
-                <h2 className="text-base font-semibold text-slate-900">Thông tin bệnh nhân</h2>
-                <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
-                  <p>
-                    <span className="text-muted-foreground">Họ và tên:</span>{' '}
-                    <span className="font-medium">{receipt?.patient?.fullName || '-'}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Số điện thoại:</span>{' '}
-                    <span className="font-medium">{receipt?.patient?.phone || '-'}</span>
-                  </p>
-                  <p className="md:col-span-2">
-                    <span className="text-muted-foreground">Email:</span>{' '}
-                    <span className="font-medium">{receipt?.patient?.email || '-'}</span>
-                  </p>
-                </div>
-              </section>
+              {viewModel ? (
+                <>
+                  <section className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div className="flex items-start gap-3">
+                        <CheckCircle2 className="mt-0.5 h-10 w-10 text-emerald-600" />
+                        <div>
+                          <h2 className="text-xl font-semibold text-emerald-900">Thanh toán thành công</h2>
+                          <p className="mt-1 text-sm text-emerald-800">
+                            {callbackMessage || resourceConfig.successDescription}
+                          </p>
+                        </div>
+                      </div>
+                      <span
+                        className={`inline-flex w-fit rounded-full border px-3 py-1 text-xs font-semibold ${viewModel.paymentStatus.className}`}
+                      >
+                        {viewModel.paymentStatus.label}
+                      </span>
+                    </div>
+                  </section>
 
-              <section className="space-y-3">
-                <h2 className="text-base font-semibold text-slate-900">Chi tiết lịch khám</h2>
-                <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
-                  <p>
-                    <span className="text-muted-foreground">Bác sĩ:</span>{' '}
-                    <span className="font-medium">{receipt?.booking?.doctorName || '-'}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Chuyên khoa:</span>{' '}
-                    <span className="font-medium">{receipt?.booking?.specialtyName || '-'}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Dịch vụ:</span>{' '}
-                    <span className="font-medium">{receipt?.booking?.serviceName || '-'}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Ngày khám:</span>{' '}
-                    <span className="font-medium">{formatDateTime(receipt?.booking?.appointmentDate)}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Trạng thái lịch hẹn:</span>{' '}
-                    <span className="font-medium">
-                      {mapAppointmentStatus(
-                        receipt?.booking?.appointmentStatus,
-                        receipt?.booking?.appointmentStatusDisplay
-                      )}
-                    </span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Trạng thái thanh toán:</span>{' '}
-                    <span className="font-medium">
-                      {mapPaymentStatus(
-                        receipt?.booking?.paymentStatus,
-                        receipt?.booking?.paymentStatusDisplay
-                      )}
-                    </span>
-                  </p>
-                </div>
-              </section>
+                  <section className="space-y-3">
+                    <h2 className="text-base font-semibold text-slate-900">Thông tin bệnh nhân</h2>
+                    <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+                      <p>
+                        <span className="text-muted-foreground">Họ và tên:</span>{' '}
+                        <span className="font-medium">{viewModel.patient.fullName || '-'}</span>
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Số điện thoại:</span>{' '}
+                        <span className="font-medium">{viewModel.patient.phone || '-'}</span>
+                      </p>
+                      <p className="md:col-span-2">
+                        <span className="text-muted-foreground">Email:</span>{' '}
+                        <span className="font-medium">{viewModel.patient.email || '-'}</span>
+                      </p>
+                    </div>
+                  </section>
 
-              <section className="space-y-3">
-                <h2 className="text-base font-semibold text-slate-900">Thanh toán</h2>
-                <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
-                  <p>
-                    <span className="text-muted-foreground">Phương thức:</span>{' '}
-                    <span className="font-medium">VNPay</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Mã giao dịch:</span>{' '}
-                    <span className="font-medium">{receipt?.payment?.transactionNo || '-'}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Ngân hàng:</span>{' '}
-                    <span className="font-medium">{receipt?.payment?.bankCode || '-'}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Thời gian thanh toán:</span>{' '}
-                    <span className="font-medium">{formatDateTime(receipt?.payment?.paidAt)}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Mã phản hồi:</span>{' '}
-                    <span className="font-medium">{receipt?.payment?.responseCode || responseCode || '-'}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Tổng cộng:</span>{' '}
-                    <span className="text-lg font-semibold text-primary">{formatCurrency(totalAmount)}</span>
-                  </p>
-                </div>
-              </section>
+                  <section className="space-y-3">
+                    <h2 className="text-base font-semibold text-slate-900">Thông tin đối tượng thanh toán</h2>
+                    <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+                      {renderDetailRows(viewModel.subjectRows)}
+                    </div>
+                  </section>
+
+                  <section className="space-y-3">
+                    <h2 className="text-base font-semibold text-slate-900">Thông tin giao dịch</h2>
+                    <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+                      {renderDetailRows(viewModel.paymentRows)}
+                    </div>
+                  </section>
+                </>
+              ) : null}
 
               <div className="flex flex-wrap gap-3 border-t pt-4 print:hidden">
-                <Button type="button" onClick={() => window.print()} className="gap-2">
-                  <Printer className="h-4 w-4" />
-                  In phiếu khám
-                </Button>
+                {viewModel ? (
+                  <Button type="button" onClick={() => window.print()} className="gap-2">
+                    <Printer className="h-4 w-4" />
+                    In biên lai
+                  </Button>
+                ) : null}
                 <Button asChild variant="outline">
-                  <Link to="/patient/appointments">Về lịch sử</Link>
+                  <Link to={resourceConfig.backHref}>{resourceConfig.backLabel}</Link>
                 </Button>
               </div>
             </CardContent>
@@ -241,12 +559,12 @@ export function VNPayPaymentResultPage() {
             </CardHeader>
             <CardContent className="space-y-5 text-center">
               <p className="text-sm text-muted-foreground">
-                {callbackMessage || 'Giao dịch chưa hoàn tất. Bạn có thể thử lại thanh toán hoặc quay về lịch sử lịch hẹn.'}
+                {callbackMessage || resourceConfig.failureDescription}
               </p>
 
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-left text-sm text-amber-800">
                 <p>
-                  <span className="font-medium">Mã lịch hẹn:</span> {appointmentId || '-'}
+                  <span className="font-medium">{resourceConfig.referenceLabel}:</span> {resourceId || '-'}
                 </p>
                 <p>
                   <span className="font-medium">Mã phản hồi:</span> {responseCode || '-'}
@@ -260,7 +578,7 @@ export function VNPayPaymentResultPage() {
               ) : null}
 
               <div className="flex flex-wrap justify-center gap-3">
-                {appointmentId ? (
+                {resourceType && resourceId ? (
                   <Button type="button" onClick={() => void handleRetryPayment()} disabled={retryLoading} className="gap-2">
                     {retryLoading ? (
                       <>
@@ -276,7 +594,7 @@ export function VNPayPaymentResultPage() {
                   </Button>
                 ) : null}
                 <Button asChild variant="outline">
-                  <Link to="/patient/appointments">Về lịch sử</Link>
+                  <Link to={resourceConfig.backHref}>{resourceConfig.backLabel}</Link>
                 </Button>
               </div>
             </CardContent>

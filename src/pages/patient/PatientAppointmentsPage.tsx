@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { CheckCircle2, CreditCard, FileText, Search, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -41,6 +41,14 @@ import {
 
 type ServicePackageStatusKey = 'PENDING_PAYMENT' | 'PAID' | 'RECEIVED' | 'COMPLETED' | 'CANCELLED'
 type DoctorFeedbackEligibility = 'CAN_FEEDBACK' | 'ALREADY_FEEDBACKED' | 'UNKNOWN'
+type PatientHistoryTab = 'appointments' | 'packages' | 'invoices'
+
+function normalizeHistoryTab(value?: string | null): PatientHistoryTab {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'packages') return 'packages'
+  if (normalized === 'invoices') return 'invoices'
+  return 'appointments'
+}
 
 function pickDisplayLabel(value?: string): string | undefined {
   const text = String(value || '').trim()
@@ -192,6 +200,8 @@ type InvoiceCategoryFilter = 'all' | 'APPOINTMENT_BOOKING' | 'POST_EXAM' | 'FOLL
 
 export function PatientAppointmentsPage() {
   const { toast } = useToast()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [packageBookings, setPackageBookings] = useState<ServicePackageBooking[]>([])
@@ -339,6 +349,33 @@ export function PatientAppointmentsPage() {
     if (!selectedAppointment) return 'Bác sĩ'
     return selectedAppointment.doctor?.fullName || selectedAppointment.doctorName || 'Bác sĩ'
   }, [selectedAppointment])
+
+  const activeTab = useMemo(() => {
+    const searchParams = new URLSearchParams(location.search)
+    return normalizeHistoryTab(searchParams.get('tab'))
+  }, [location.search])
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      const nextTab = normalizeHistoryTab(value)
+      const searchParams = new URLSearchParams(location.search)
+
+      if (nextTab === 'appointments') {
+        searchParams.delete('tab')
+      } else {
+        searchParams.set('tab', nextTab)
+      }
+
+      navigate(
+        {
+          pathname: location.pathname,
+          search: searchParams.toString() ? `?${searchParams.toString()}` : '',
+        },
+        { replace: true }
+      )
+    },
+    [location.pathname, location.search, navigate]
+  )
 
   const openFeedbackDialog = (appointment: Appointment) => {
     setSelectedAppointment(appointment)
@@ -529,7 +566,7 @@ export function PatientAppointmentsPage() {
           </Button>
         </div>
       ) : (
-        <Tabs defaultValue="appointments" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
           <TabsList>
             <TabsTrigger value="appointments">Lịch khám</TabsTrigger>
             <TabsTrigger value="packages">Gói dịch vụ</TabsTrigger>
@@ -978,7 +1015,6 @@ export function PatientAppointmentsPage() {
               <p><span className="font-semibold">Trạng thái:</span> {getInvoiceStatusLabel(selectedInvoice.status, selectedInvoice.paymentStatusDisplay)}</p>
               <p><span className="font-semibold">Ngày tạo:</span> {formatDate(selectedInvoice.createdAt)}</p>
               <p><span className="font-semibold">Ngày thanh toán:</span> {formatDate(selectedInvoice.paymentDate)}</p>
-              <p><span className="font-semibold">Thanh toán online:</span> {selectedInvoice.canPayOnline ? 'Có' : 'Không'}</p>
             </div>
           ) : (
             <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">

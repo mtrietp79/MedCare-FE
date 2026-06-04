@@ -94,6 +94,26 @@ function getDoctorDisplayName(invoice: NormalizedInvoice): string {
   return invoice.doctorFullName || invoice.doctorName || '-'
 }
 
+function getInvoiceExamTypeLabel(invoice: NormalizedInvoice): string {
+  if (invoice.sourceType === 'SERVICE_PACKAGE' || invoice.invoiceCategory === 'SERVICE_PACKAGE') {
+    return 'Gói dịch vụ'
+  }
+
+  if (invoice.appointmentTypeDisplay) {
+    return invoice.appointmentTypeDisplay
+  }
+
+  if (invoice.invoiceCategory === 'FOLLOW_UP') {
+    return 'Tái khám'
+  }
+
+  if (invoice.invoiceCategory === 'APPOINTMENT_BOOKING' || invoice.invoiceCategory === 'POST_EXAM') {
+    return 'Khám bệnh'
+  }
+
+  return '-'
+}
+
 function getRelatedPrimary(invoice: NormalizedInvoice): string {
   if (invoice.sourceType === 'SERVICE_PACKAGE') {
     return invoice.servicePackageName || 'Gói dịch vụ'
@@ -480,7 +500,7 @@ export function AdminFinancePage() {
               </div>
               <div>
                 <Label>Loại khám</Label>
-                <p>{selectedInvoice.appointmentTypeDisplay || '-'}</p>
+                <p>{getInvoiceExamTypeLabel(selectedInvoice)}</p>
               </div>
               <div>
                 <Label>Booking gói dịch vụ</Label>

@@ -21,7 +21,7 @@ const PAYMENT_STATUS_LABEL_BY_KEY: Record<PaymentStatusKey, string> = {
 }
 
 const PAYMENT_STATUS_CLASS_BY_KEY: Record<PaymentStatusKey, string> = {
-  paid: 'bg-sky-50 text-sky-700 border-sky-200',
+  paid: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   unpaid: 'bg-amber-50 text-amber-700 border-amber-200',
   failed: 'bg-red-50 text-red-700 border-red-200',
   cancelled: 'bg-slate-100 text-slate-700 border-slate-300',
@@ -53,6 +53,7 @@ function normalizeForMatch(value?: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
 }
 
 function normalizeCode(value?: string): string {

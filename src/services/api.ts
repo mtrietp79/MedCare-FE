@@ -5,6 +5,7 @@ import type {
   Appointment,
   AppointmentBookingResponse,
   AppointmentReceipt,
+  InvoiceReceipt,
   BookingRules,
   Patient,
   DoctorSchedule,
@@ -12,6 +13,7 @@ import type {
   MedicalService,
   ServicePackage,
   ServicePackageBooking,
+  ServicePackageReceipt,
 } from '@/types'
 import {
   normalizeInvoiceItem,
@@ -1345,7 +1347,20 @@ export const paymentApi = {
 
   async getAppointmentReceipt(appointmentId: string): Promise<AppointmentReceipt> {
     const params = new URLSearchParams({ appointmentId })
-    return apiCall<AppointmentReceipt>(`/payment/appointment-receipt?${params.toString()}`)
+    const raw = await apiCall<any>(`/payment/appointment-receipt?${params.toString()}`)
+    return ((unwrapDataPayload(raw) ?? raw) as AppointmentReceipt)
+  },
+
+  async getServicePackageReceipt(bookingId: string): Promise<ServicePackageReceipt> {
+    const params = new URLSearchParams({ bookingId })
+    const raw = await apiCall<any>(`/payment/service-package-receipt?${params.toString()}`)
+    return ((unwrapDataPayload(raw) ?? raw) as ServicePackageReceipt)
+  },
+
+  async getInvoiceReceipt(invoiceId: string): Promise<InvoiceReceipt> {
+    const params = new URLSearchParams({ invoiceId })
+    const raw = await apiCall<any>(`/payment/invoice-receipt?${params.toString()}`)
+    return ((unwrapDataPayload(raw) ?? raw) as InvoiceReceipt)
   },
 }
 

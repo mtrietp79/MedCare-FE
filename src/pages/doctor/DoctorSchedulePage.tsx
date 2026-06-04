@@ -13,9 +13,13 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
-import { doctorScheduleService, type DayScheduleItem, type WeekScheduleEntry } from '@/services/doctorScheduleService'
+import { doctorAppointmentService, type DoctorAppointment } from '@/services/doctorAppointmentService'
 import { safeString } from '@/lib/admin-normalizers'
-import { getAppointmentStatusClass, getAppointmentStatusLabel } from '@/lib/appointment-status'
+import {
+  getAppointmentStatusClass,
+  getAppointmentStatusKey,
+  getAppointmentStatusLabel,
+} from '@/lib/appointment-status'
 
 type Period = 'morning' | 'afternoon'
 
@@ -62,22 +66,6 @@ function getCellClass(count?: number): string {
   return 'bg-amber-100 text-amber-800'
 }
 
-function extractWeekEntries(raw: WeekScheduleEntry[] | any): WeekScheduleEntry[] {
-  if (Array.isArray(raw)) return raw
-  if (Array.isArray(raw?.days)) return raw.days
-  if (Array.isArray(raw?.items)) return raw.items
-  if (Array.isArray(raw?.data)) return raw.data
-  return []
-}
-
-function parseCount(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return null
-  if (parsed < 0) return 0
-  return parsed
-}
-
 function parseDateKey(value: string): string | null {
   const raw = safeString(value)
   if (!raw) return null
@@ -106,23 +94,47 @@ function parseDateKey(value: string): string | null {
   return toYmd(parsed)
 }
 
-function getLegacyPeriod(entry: WeekScheduleEntry): Period | null {
-  const raw = safeString(entry.period).toLowerCase()
-  if (raw === 'morning') return 'morning'
-  if (raw === 'afternoon') return 'afternoon'
-  return null
+function parseTimeLabel(value: string): string | null {
+  const raw = safeString(value)
+  if (!raw) return null
+
+  const match = raw.match(/(\d{1,2}):(\d{2})/)
+  if (!match) return null
+
+  return `${String(Number(match[1])).padStart(2, '0')}:${match[2]}`
+}
+
+function getAppointmentDateKey(appointment: DoctorAppointment): string | null {
+  return parseDateKey(safeString(appointment.appointmentDate) || safeString(appointment.date))
+}
+
+function getAppointmentTimeLabel(appointment: DoctorAppointment): string {
+  const time =
+    parseTimeLabel(safeString(appointment.appointmentTime)) ||
+    parseTimeLabel(safeString(appointment.time)) ||
+    parseTimeLabel(safeString(appointment.appointmentTimeLabel))
+
+  return time || '--:--'
+}
+
+function getAppointmentPeriod(appointment: DoctorAppointment): Period | null {
+  const timeLabel = getAppointmentTimeLabel(appointment)
+  const hour = Number(timeLabel.slice(0, 2))
+  if (!Number.isFinite(hour)) return null
+  return hour < 12 ? 'morning' : 'afternoon'
+}
+
+function shouldCountAppointment(appointment: DoctorAppointment): boolean {
+  return getAppointmentStatusKey(appointment.status, appointment.statusDisplay) !== 'cancelled'
 }
 
 export function DoctorSchedulePage() {
   const [weekStart, setWeekStart] = useState<Date>(() => getStartOfWeekMonday(new Date()))
-  const [scheduleMap, setScheduleMap] = useState<Record<string, number>>({})
+  const [appointments, setAppointments] = useState<DoctorAppointment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [detailOpen, setDetailOpen] = useState(false)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [detailError, setDetailError] = useState('')
   const [selectedCell, setSelectedCell] = useState<ScheduleCellData | null>(null)
-  const [dayAppointments, setDayAppointments] = useState<DayScheduleItem[]>([])
 
   const weekDates = useMemo(
     () =>
@@ -140,88 +152,95 @@ export function DoctorSchedulePage() {
     return `${String(first.getDate()).padStart(2, '0')}/${String(first.getMonth() + 1).padStart(2, '0')} - ${String(last.getDate()).padStart(2, '0')}/${String(last.getMonth() + 1).padStart(2, '0')}/${last.getFullYear()}`
   }, [weekDates])
 
-  const fetchWeekSchedule = async () => {
+  const fetchAppointments = async () => {
     setLoading(true)
     setError('')
 
     try {
-      const raw = await doctorScheduleService.getWeekSchedule(toYmd(weekStart))
-      const entries = extractWeekEntries(raw)
-      const nextMap: Record<string, number> = {}
-
-      for (const entry of entries) {
-        const dateKey = parseDateKey(safeString(entry.date))
-        if (!dateKey) continue
-
-        const hasBlockCounts = entry.morningCount !== undefined || entry.afternoonCount !== undefined
-        if (hasBlockCounts) {
-          const morningCount = parseCount(entry.morningCount)
-          const afternoonCount = parseCount(entry.afternoonCount)
-          if (morningCount !== null) nextMap[`${dateKey}-morning`] = morningCount
-          if (afternoonCount !== null) nextMap[`${dateKey}-afternoon`] = afternoonCount
-          continue
-        }
-
-        const legacyPeriod = getLegacyPeriod(entry)
-        const legacyCount = parseCount(entry.patientCount ?? entry.count)
-        if (!legacyPeriod || legacyCount === null) continue
-        nextMap[`${dateKey}-${legacyPeriod}`] = legacyCount
-      }
-
-      setScheduleMap(nextMap)
+      const data = await doctorAppointmentService.getAppointments()
+      setAppointments(Array.isArray(data) ? data : [])
     } catch (fetchError: any) {
-      setError(fetchError?.message || 'Không thể tải lịch làm việc theo tuần.')
+      setAppointments([])
+      setError(fetchError?.message || 'Không thể tải lịch hẹn của bác sĩ.')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    void fetchWeekSchedule()
-  }, [weekStart])
+    void fetchAppointments()
+  }, [])
 
-  const loadDaySchedule = async (date: string, period: Period) => {
-    setDetailLoading(true)
-    setDetailError('')
+  const weekStartKey = useMemo(() => toYmd(weekDates[0]), [weekDates])
+  const weekEndKey = useMemo(() => toYmd(weekDates[6]), [weekDates])
 
-    try {
-      const data = await doctorScheduleService.getDaySchedule(date, period)
-      setDayAppointments(Array.isArray(data) ? data : [])
-    } catch (fetchError: any) {
-      setDayAppointments([])
-      setDetailError(fetchError?.message || 'Không thể tải danh sách lịch hẹn của buổi này.')
-    } finally {
-      setDetailLoading(false)
-    }
-  }
+  const weekAppointments = useMemo(
+    () =>
+      appointments.filter((appointment) => {
+        const dateKey = getAppointmentDateKey(appointment)
+        if (!dateKey) return false
+        return dateKey >= weekStartKey && dateKey <= weekEndKey
+      }),
+    [appointments, weekEndKey, weekStartKey]
+  )
 
-  const openCellDetail = async (date: string, period: Period, count: number | undefined) => {
-    if (typeof count !== 'number' || count <= 0) return
+  const scheduleMap = useMemo(() => {
+    const nextMap: Record<string, number> = {}
+
+    weekDates.forEach((date) => {
+      const dateKey = toYmd(date)
+      nextMap[`${dateKey}-morning`] = 0
+      nextMap[`${dateKey}-afternoon`] = 0
+    })
+
+    weekAppointments.forEach((appointment) => {
+      if (!shouldCountAppointment(appointment)) return
+
+      const dateKey = getAppointmentDateKey(appointment)
+      const period = getAppointmentPeriod(appointment)
+      if (!dateKey || !period) return
+
+      const key = `${dateKey}-${period}`
+      nextMap[key] = (nextMap[key] || 0) + 1
+    })
+
+    return nextMap
+  }, [weekAppointments, weekDates])
+
+  const dayAppointments = useMemo(() => {
+    if (!selectedCell) return []
+
+    return weekAppointments
+      .filter((appointment) => {
+        if (!shouldCountAppointment(appointment)) return false
+        return (
+          getAppointmentDateKey(appointment) === selectedCell.date &&
+          getAppointmentPeriod(appointment) === selectedCell.period
+        )
+      })
+      .sort((left, right) => getAppointmentTimeLabel(left).localeCompare(getAppointmentTimeLabel(right)))
+  }, [selectedCell, weekAppointments])
+
+  const openCellDetail = (date: string, period: Period, count: number) => {
+    if (count <= 0) return
 
     setDetailOpen(true)
     setSelectedCell({ date, period, count })
-    await loadDaySchedule(date, period)
-  }
-
-  const retryLoadDaySchedule = async () => {
-    if (!selectedCell) return
-    await loadDaySchedule(selectedCell.date, selectedCell.period)
   }
 
   const renderCell = (date: Date, period: Period) => {
     const dateKey = toYmd(date)
-    const count = scheduleMap[`${dateKey}-${period}`]
-    const hasValue = typeof count === 'number'
-    const canOpenDetail = hasValue && count > 0
+    const count = scheduleMap[`${dateKey}-${period}`] ?? 0
+    const canOpenDetail = count > 0
 
     return (
       <button
         type="button"
-        onClick={() => void openCellDetail(dateKey, period, count)}
+        onClick={() => openCellDetail(dateKey, period, count)}
         disabled={!canOpenDetail}
         className={`w-full rounded-xl border border-[#e5e7eb] px-3 py-4 text-sm font-semibold transition ${getCellClass(count)} ${canOpenDetail ? 'hover:opacity-90' : ''}`}
       >
-        {hasValue ? `${count} bệnh nhân` : '--'}
+        {`${count} bệnh nhân`}
       </button>
     )
   }
@@ -280,7 +299,7 @@ export function DoctorSchedulePage() {
         </CardHeader>
         <CardContent>
           {loading && <AdminTableSkeleton rows={6} />}
-          {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchWeekSchedule()} />}
+          {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchAppointments()} />}
 
           {!loading && !error && (
             <Table>
@@ -329,58 +348,42 @@ export function DoctorSchedulePage() {
             </DialogDescription>
           </DialogHeader>
 
-          {detailLoading ? (
-            <AdminTableSkeleton rows={5} />
-          ) : detailError ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              <p>Lỗi: {detailError}</p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void retryLoadDaySchedule()}>
-                Thử lại
-              </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tên bệnh nhân</TableHead>
-                  <TableHead>Giờ khám</TableHead>
-                  <TableHead>Loại khám</TableHead>
-                  <TableHead>Trạng thái</TableHead>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tên bệnh nhân</TableHead>
+                <TableHead>Giờ khám</TableHead>
+                <TableHead>Loại khám</TableHead>
+                <TableHead>Trạng thái</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {dayAppointments.map((appointment) => (
+                <TableRow key={appointment.id}>
+                  <TableCell>{safeString(appointment.patient?.fullName) || safeString(appointment.patientName) || '-'}</TableCell>
+                  <TableCell>{getAppointmentTimeLabel(appointment)}</TableCell>
+                  <TableCell>{normalizeType(safeString(appointment.appointmentType) || safeString(appointment.type))}</TableCell>
+                  <TableCell>
+                    <Badge
+                      className={`rounded-full border ${getAppointmentStatusClass(
+                        appointment.status,
+                        appointment.statusDisplay
+                      )}`}
+                    >
+                      {getAppointmentStatusLabel(appointment.status, appointment.statusDisplay)}
+                    </Badge>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dayAppointments.map((appointment) => (
-                  <TableRow key={appointment.id}>
-                    <TableCell>{safeString(appointment.patientName) || '-'}</TableCell>
-                    <TableCell>
-                      {safeString(appointment.timeLabel) ||
-                        safeString(appointment.appointmentTime) ||
-                        safeString(appointment.time) ||
-                        '--:--'}
-                    </TableCell>
-                    <TableCell>{normalizeType(safeString(appointment.appointmentType) || safeString(appointment.type))}</TableCell>
-                    <TableCell>
-                      <Badge
-                        className={`rounded-full border ${getAppointmentStatusClass(
-                          appointment.status,
-                          appointment.statusDisplay
-                        )}`}
-                      >
-                        {getAppointmentStatusLabel(appointment.status, appointment.statusDisplay)}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {dayAppointments.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-[#6b7280]">
-                      Không có lịch hẹn trong buổi này.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
+              ))}
+              {dayAppointments.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-8 text-center text-[#6b7280]">
+                    Không có lịch hẹn trong buổi này.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailOpen(false)}>

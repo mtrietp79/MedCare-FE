@@ -1,7 +1,9 @@
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { isFollowUpAppointmentType } from '@/lib/appointment-type'
 import type { PatientMedicalRecord } from '@/services/api'
 import { getAppointmentStatusClass, getAppointmentStatusLabel } from '@/lib/appointment-status'
+import { shouldShowInvoiceConsultationFee } from '@/lib/invoice-contract'
 
 interface PatientMedicalRecordDetailsProps {
   record: PatientMedicalRecord
@@ -68,8 +70,20 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
   const consultationFee = Number(invoice?.consultationFee ?? 0)
   const medicineFee = Number(invoice?.medicineFee ?? invoice?.medicineTotal ?? 0)
   const serviceFee = Number(invoice?.serviceFee ?? invoice?.serviceTotal ?? 0)
-  const calculatedTotal = consultationFee + medicineFee + serviceFee
+  const showConsultationFee =
+    Boolean(invoice) &&
+    (shouldShowInvoiceConsultationFee(invoice) ||
+      (!invoice?.invoiceCategory &&
+        !invoice?.invoiceCategoryDisplay &&
+        isFollowUpAppointmentType(record.typeCode, record.appointmentTypeCode)))
+  const calculatedTotal = (showConsultationFee ? consultationFee : 0) + medicineFee + serviceFee
   const invoiceTotal = Number(invoice?.totalAmount ?? calculatedTotal)
+  const invoiceFormula = showConsultationFee
+    ? 'Tổng tiền = Phí khám + Tiền thuốc + Tiền dịch vụ'
+    : 'Tổng tiền = Tiền thuốc + Tiền dịch vụ'
+  const invoiceBreakdown = showConsultationFee
+    ? `${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(consultationFee)} + ${formatCurrencyVnd(medicineFee)} + ${formatCurrencyVnd(serviceFee)}`
+    : `${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(medicineFee)} + ${formatCurrencyVnd(serviceFee)}`
 
   return (
     <div className={`space-y-4 ${className || ''}`.trim()}>
@@ -98,10 +112,7 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
         <CardContent className="space-y-3 p-4 text-sm">
           <p><span className="font-semibold">Triệu chứng:</span> {textOrDash(record.symptoms)}</p>
           <p><span className="font-semibold">Chẩn đoán:</span> {textOrDash(record.diagnosis)}</p>
-          <p><span className="font-semibold">Kế hoạch điều trị:</span> {textOrDash(record.treatmentPlan)}</p>
           <p><span className="font-semibold">Lời dặn:</span> {textOrDash(record.advice)}</p>
-          <p><span className="font-semibold">Đơn thuốc (text):</span> {textOrDash(record.prescriptionText)}</p>
-          <p><span className="font-semibold">Ghi chú:</span> {textOrDash(record.note)}</p>
         </CardContent>
       </Card>
 
@@ -201,19 +212,21 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
         <Card>
           <CardContent className="space-y-2 p-4 text-sm">
             <div className="flex items-center justify-between gap-2">
-              <p className="font-semibold">Thông tin hóa đơn sau khám</p>
+              <p className="font-semibold">Thông tin hóa đơn</p>
               <Badge className={`rounded-full border ${invoiceStatusClass(invoice.status)}`}>
                 {invoiceStatusLabel(invoice.status)}
               </Badge>
             </div>
             <p><span className="font-medium">Mã hóa đơn:</span> {textOrDash(invoice.invoiceCode)}</p>
-            <p><span className="font-medium">Phí khám:</span> {formatCurrencyVnd(consultationFee)}</p>
+            {showConsultationFee ? (
+              <p><span className="font-medium">Phí khám:</span> {formatCurrencyVnd(consultationFee)}</p>
+            ) : null}
             <p><span className="font-medium">Tiền thuốc:</span> {formatCurrencyVnd(medicineFee)}</p>
             <p><span className="font-medium">Tiền dịch vụ:</span> {formatCurrencyVnd(serviceFee)}</p>
-            <p><span className="font-medium">Công thức:</span> Tổng tiền = Phí khám + Tiền thuốc + Tiền dịch vụ</p>
+            <p><span className="font-medium">Công thức:</span> {invoiceFormula}</p>
             <p>
               <span className="font-medium">Tổng tiền:</span>{' '}
-              {`${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(consultationFee)} + ${formatCurrencyVnd(medicineFee)} + ${formatCurrencyVnd(serviceFee)}`}
+              {invoiceBreakdown}
             </p>
             {invoice.paymentDate ? (
               <p><span className="font-medium">Ngày thanh toán:</span> {formatDate(invoice.paymentDate)}</p>
@@ -224,7 +237,7 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
       ) : (
         <Card>
           <CardContent className="p-4 text-sm text-muted-foreground">
-            Không phát sinh hóa đơn sau khám.
+            Không phát sinh hóa đơn.
           </CardContent>
         </Card>
       )}

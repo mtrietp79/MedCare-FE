@@ -153,7 +153,12 @@ function formatCurrencyVnd(value?: number | null) {
 }
 
 function getAppointmentTypeLabel(appointment: Appointment): string {
+  if (appointment.parentAppointmentId) return 'Tái khám'
   return getAppointmentTypeDisplay(appointment.appointmentType, appointment.type) || 'Khám bệnh'
+}
+
+function getAppointmentListKey(appointment: Appointment, index: number): string {
+  return String(appointment.id || appointment.appointmentCode || `appointment-${index}`)
 }
 
 function getInvoiceDetailSubtitle(invoice: PatientInvoice): string {
@@ -181,6 +186,8 @@ function mergeInvoiceWithMedicalRecord(invoice: PatientInvoice, record: PatientM
   return {
     ...invoice,
     invoiceCode: recordInvoice.invoiceCode ?? invoice.invoiceCode,
+    invoiceCategory: recordInvoice.invoiceCategory ?? invoice.invoiceCategory,
+    invoiceCategoryDisplay: recordInvoice.invoiceCategoryDisplay ?? invoice.invoiceCategoryDisplay,
     status: recordInvoice.status ?? invoice.status,
     consultationFee: recordInvoice.consultationFee ?? invoice.consultationFee,
     medicineFee: recordInvoice.medicineFee ?? recordInvoice.medicineTotal ?? invoice.medicineFee,
@@ -580,11 +587,12 @@ export function PatientAppointmentsPage() {
               </div>
             ) : (
               <div className="grid gap-4">
-                {appointments.map((appointment) => {
+                {appointments.map((appointment, index) => {
                   const statusView = resolveAppointmentStatusView(appointment.status, appointment.statusDisplay)
                   const appointmentTypeLabel = getAppointmentTypeLabel(appointment)
+                  const isFollowUpAppointment = appointmentTypeLabel === 'Tái khám' || Boolean(appointment.parentAppointmentId)
                   return (
-                    <Card key={appointment.id}>
+                    <Card key={getAppointmentListKey(appointment, index)}>
                       <CardContent className="grid gap-4 p-6 md:grid-cols-[1fr_auto] md:items-center">
                         <div>
                           <p className="text-sm text-muted-foreground">Mã đặt lịch</p>
@@ -596,8 +604,13 @@ export function PatientAppointmentsPage() {
                             Loại khám: {appointmentTypeLabel}
                           </p>
                           <p className="mt-1 text-sm text-muted-foreground">
-                            {appointment.medicalService?.name ?? 'Khám tổng quát'}
+                            {appointment.serviceName || appointment.medicalService?.name || 'Khám tổng quát'}
                           </p>
+                          {isFollowUpAppointment && appointment.followUpNote ? (
+                            <p className="mt-2 text-sm text-muted-foreground">
+                              Ghi chú tái khám: {appointment.followUpNote}
+                            </p>
+                          ) : null}
                         </div>
 
                         <div className="space-y-2 text-right">

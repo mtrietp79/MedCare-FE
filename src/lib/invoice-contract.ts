@@ -208,6 +208,44 @@ function inferInvoiceCategoryDisplay(invoiceCategory: InvoiceCategory): string {
   return String(invoiceCategory || 'Hóa đơn')
 }
 
+function inferInvoiceCategoryFromDisplay(display: unknown): InvoiceCategory | null {
+  const normalized = normalizeText(display)
+  if (!normalized) return null
+
+  if (
+    normalized.includes('tai kham') ||
+    normalized.includes('follow up') ||
+    normalized.includes('follow-up') ||
+    normalized.includes('revisit')
+  ) {
+    return 'FOLLOW_UP'
+  }
+
+  if (normalized.includes('sau kham') || normalized.includes('post exam')) {
+    return 'POST_EXAM'
+  }
+
+  if (
+    normalized.includes('goi dich vu') ||
+    normalized.includes('service package') ||
+    normalized.includes('package')
+  ) {
+    return 'SERVICE_PACKAGE'
+  }
+
+  if (
+    normalized.includes('kham benh') ||
+    normalized.includes('appointment booking') ||
+    normalized.includes('booking') ||
+    normalized.includes('dat lich') ||
+    normalized.includes('dat kham')
+  ) {
+    return 'APPOINTMENT_BOOKING'
+  }
+
+  return null
+}
+
 function sumInvoiceAmount(
   consultationFee: number | null,
   medicineFee: number | null,
@@ -333,6 +371,20 @@ export function getInvoiceCategoryLabel(
   invoice: Pick<InvoiceItem, 'invoiceCategory' | 'invoiceCategoryDisplay'>
 ): string {
   return invoice.invoiceCategoryDisplay || inferInvoiceCategoryDisplay(invoice.invoiceCategory)
+}
+
+export function resolveInvoiceCategory(
+  invoice: Partial<Pick<InvoiceItem, 'invoiceCategory' | 'invoiceCategoryDisplay'>> | null | undefined
+): InvoiceCategory | null {
+  if (!invoice) return null
+  return normalizeCategory(invoice.invoiceCategory) ?? inferInvoiceCategoryFromDisplay(invoice.invoiceCategoryDisplay)
+}
+
+export function shouldShowInvoiceConsultationFee(
+  invoice: Partial<Pick<InvoiceItem, 'invoiceCategory' | 'invoiceCategoryDisplay'>> | null | undefined
+): boolean {
+  const category = resolveInvoiceCategory(invoice)
+  return category === 'APPOINTMENT_BOOKING' || category === 'FOLLOW_UP'
 }
 
 export function getInvoiceSourceLabel(invoice: Pick<InvoiceItem, 'sourceType'>): string {

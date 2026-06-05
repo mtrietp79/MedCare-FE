@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Eye, FilePenLine, Pill, Plus, Stethoscope, Trash2 } from 'lucide-react'
+import { CalendarDays, Check, Eye, FilePenLine, Pill, Plus, Stethoscope, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -33,6 +33,11 @@ import { api, type AppointmentSlot } from '@/services/api'
 import { doctorMedicalRecordService } from '@/services/doctorMedicalRecordService'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { safeString } from '@/lib/admin-normalizers'
+import { cn } from '@/lib/utils'
+import {
+  getAppointmentTypeLabel as getAppointmentTypeDisplayLabel,
+  isFollowUpAppointmentType,
+} from '@/lib/appointment-type'
 import { useToast } from '@/hooks/use-toast'
 import { QUERY_KEYS, invalidateQueries } from '@/lib/query-invalidation'
 import {
@@ -83,6 +88,7 @@ interface FollowUpSlotView {
   value: string
   label: string
   disabled: boolean
+  state: 'available' | 'full' | 'disabled'
   disabledReason?: string
 }
 
@@ -209,12 +215,6 @@ function getStatusBadgeClass(rawStatus?: string, rawStatusDisplay?: string): str
   return getAppointmentStatusClass(rawStatus, rawStatusDisplay)
 }
 
-function getAppointmentTypeLabel(rawType: string): string {
-  const type = normalizeText(rawType)
-  if (type.includes('tai') || type.includes('follow') || type.includes('revisit')) return 'Tái khám'
-  return 'Khám bệnh'
-}
-
 function getPatientName(appointment: DoctorAppointment): string {
   return safeString(appointment.patientName) || safeString(appointment.patient?.fullName) || '-'
 }
@@ -279,6 +279,37 @@ function getPaymentStatusView(rawPaymentStatus?: string, rawPaymentStatusDisplay
   }
 }
 
+function getAppointmentTypeLabel(appointment: Pick<DoctorAppointment, 'type' | 'appointmentType' | 'typeCode' | 'appointmentTypeCode'>): string {
+  return getAppointmentTypeDisplayLabel({
+    type: appointment.type,
+    appointmentType: appointment.appointmentType,
+    typeCode: appointment.typeCode,
+    appointmentTypeCode: appointment.appointmentTypeCode,
+  })
+}
+
+function getFollowUpFieldErrors(error: any): FollowUpValidationErrors {
+  const fieldErrors = error?.response?.data?.fieldErrors
+  return {
+    date: safeString(fieldErrors?.followUpDate) || undefined,
+    time: safeString(fieldErrors?.followUpTime) || undefined,
+  }
+}
+
+function hasFollowUpFieldErrors(errors: FollowUpValidationErrors): boolean {
+  return Boolean(errors.date || errors.time)
+}
+
+function getFollowUpSlotButtonClass(slotState: FollowUpSlotView['state'], selected: boolean): string {
+  return cn(
+    'relative flex h-14 min-w-0 items-center justify-center rounded-2xl border px-3 py-3 text-center text-sm font-semibold transition-colors',
+    selected && 'border-sky-700 bg-sky-100 text-sky-950 shadow-sm',
+    !selected && slotState === 'available' && 'border-slate-200 bg-white text-slate-700 hover:border-sky-400 hover:bg-sky-50 hover:text-sky-900',
+    !selected && slotState === 'full' && 'cursor-not-allowed border-amber-200 bg-amber-50 text-amber-700',
+    !selected && slotState === 'disabled' && 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+  )
+}
+
 function mergeDefinedAppointmentFields(
   base: DoctorAppointment,
   patch: Partial<DoctorAppointment>
@@ -301,14 +332,14 @@ function getBackendErrorMessage(error: any, fallbackMessage: string): string {
 }
 
 function isFollowUpAppointment(appointment: DoctorAppointment): boolean {
-  const typeSource = normalizeText(
-    safeString(appointment.appointmentType) || safeString(appointment.type)
-  )
   return (
-    Boolean(appointment.parentAppointmentId) ||
-    typeSource.includes('tai') ||
-    typeSource.includes('follow') ||
-    typeSource.includes('revisit')
+    isFollowUpAppointmentType(
+      appointment.typeCode,
+      appointment.appointmentTypeCode
+    ) ||
+    (!appointment.typeCode &&
+      !appointment.appointmentTypeCode &&
+      Boolean(appointment.parentAppointmentId))
   )
 }
 
@@ -346,6 +377,7 @@ export function DoctorAppointmentsPage() {
   const [serviceDraftId, setServiceDraftId] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [completeResultSummary, setCompleteResultSummary] = useState<CompleteResultSummary | null>(null)
+  const [currentTime, setCurrentTime] = useState(() => new Date())
   const debouncedMedicinePickerKeyword = useDebouncedValue(medicinePickerKeyword, 300)
 
   const refreshAppointmentsList = async () => {
@@ -411,19 +443,22 @@ export function DoctorAppointmentsPage() {
     void loadData()
   }, [])
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(new Date())
+    }, 30000)
+
+    return () => window.clearInterval(timer)
+  }, [])
+
   const selectedAppointmentTypeLabel = useMemo(
-    () =>
-      selectedAppointment
-        ? getAppointmentTypeLabel(
-            safeString(selectedAppointment.appointmentType) || safeString(selectedAppointment.type)
-          )
-        : 'Khám bệnh',
+    () => (selectedAppointment ? getAppointmentTypeLabel(selectedAppointment) : 'Khám bệnh'),
     [selectedAppointment]
   )
 
   const isCurrentAppointmentFollowUp = useMemo(
-    () => selectedAppointmentTypeLabel === 'Tái khám',
-    [selectedAppointmentTypeLabel]
+    () => (selectedAppointment ? isFollowUpAppointment(selectedAppointment) : false),
+    [selectedAppointment]
   )
 
   const medicinePriceById = useMemo(() => {
@@ -589,15 +624,14 @@ export function DoctorAppointmentsPage() {
     return appointments.filter((appointment) => {
       const patient = normalizeText(getPatientName(appointment))
       const date = normalizeText(getDateLabel(appointment))
-      const type = normalizeText(
-        getAppointmentTypeLabel(safeString(appointment.appointmentType) || safeString(appointment.type))
-      )
+      const type = normalizeText(getAppointmentTypeLabel(appointment))
       const status = normalizeText(getStatusLabel(appointment.status, appointment.statusDisplay))
       return [patient, date, type, status].some((value) => value.includes(keywordLower))
     })
   }, [appointments, keyword])
 
   const followUpSlotViews = useMemo<FollowUpSlotView[]>(() => {
+    const selectedDate = parseDateInput(formState.followUpDate)
     const sorted = [...followUpSlots].sort(
       (slotA, slotB) => new Date(slotA.startTime).getTime() - new Date(slotB.startTime).getTime()
     )
@@ -608,11 +642,25 @@ export function DoctorAppointmentsPage() {
       if (!value) return
 
       const disabledReason = String(slot.disabledReason || '').trim().toUpperCase()
-      const disabled = Boolean(slot.disabled) || Boolean(slot.full) || SLOT_DISABLED_REASONS.has(disabledReason)
+      const [hourRaw, minuteRaw] = value.split(':').map(Number)
+      const candidateDate = selectedDate ? new Date(selectedDate) : null
+      if (candidateDate && Number.isFinite(hourRaw) && Number.isFinite(minuteRaw)) {
+        candidateDate.setHours(hourRaw, minuteRaw, 0, 0)
+      }
+
+      const disabledByTime = candidateDate ? candidateDate.getTime() <= currentTime.getTime() : false
+      const state: FollowUpSlotView['state'] =
+        Boolean(slot.full) || disabledReason === 'FULL'
+          ? 'full'
+          : Boolean(slot.disabled) || SLOT_DISABLED_REASONS.has(disabledReason) || disabledByTime
+            ? 'disabled'
+            : 'available'
+      const disabled = state === 'full' || state === 'disabled'
       mapped.push({
         value,
         label: value,
         disabled,
+        state,
         disabledReason,
       })
     })
@@ -625,7 +673,12 @@ export function DoctorAppointmentsPage() {
     })
 
     return Array.from(uniqueByValue.values())
-  }, [followUpSlots])
+  }, [currentTime, followUpSlots, formState.followUpDate])
+
+  const hasAvailableFollowUpSlots = useMemo(
+    () => followUpSlotViews.some((slot) => slot.state === 'available'),
+    [followUpSlotViews]
+  )
 
   useEffect(() => {
     if (!formState.followUpEnabled || !formState.followUpDate || !selectedAppointment?.doctorId) {
@@ -663,6 +716,14 @@ export function DoctorAppointmentsPage() {
       active = false
     }
   }, [formState.followUpDate, formState.followUpEnabled, selectedAppointment?.doctorId])
+
+  useEffect(() => {
+    if (!formState.followUpTime) return
+    const selected = followUpSlotViews.find((slot) => slot.value === formState.followUpTime)
+    if (!selected || selected.disabled) {
+      setFormState((prev) => ({ ...prev, followUpTime: '' }))
+    }
+  }, [followUpSlotViews, formState.followUpTime])
 
   useEffect(() => {
     if (!completeOpen) {
@@ -960,6 +1021,8 @@ export function DoctorAppointmentsPage() {
         statusDisplay: safeString(result.statusDisplay) || appointment.statusDisplay,
         type: result.appointmentType || appointment.appointmentType || appointment.type,
         appointmentType: result.appointmentType || appointment.appointmentType || appointment.type,
+        typeCode: appointment.typeCode,
+        appointmentTypeCode: appointment.appointmentTypeCode,
         consultationFee:
           result.invoice?.consultationFee ??
           result.followUpAppointment?.consultationFee ??
@@ -975,12 +1038,15 @@ export function DoctorAppointmentsPage() {
       if (!exists) {
         nextList.push({
           id: followUpId,
+          appointmentCode: followUp.appointmentCode,
           appointmentDate: followUp.appointmentDate,
           appointmentTime: followUp.appointmentTime,
           appointmentTimeLabel: followUp.appointmentTime,
           time: followUp.appointmentTime,
-          type: followUp.appointmentType || followUp.type || 'Tái khám',
-          appointmentType: followUp.appointmentType || followUp.type || 'Tái khám',
+          type: followUp.type || followUp.appointmentType || 'Tái khám',
+          appointmentType: followUp.type || followUp.appointmentType || 'Tái khám',
+          typeCode: followUp.typeCode,
+          appointmentTypeCode: followUp.appointmentTypeCode,
           status: followUp.status || 'PENDING',
           statusDisplay: followUp.statusDisplay,
           consultationFee: followUp.consultationFee,
@@ -1073,6 +1139,8 @@ export function DoctorAppointmentsPage() {
               status: completeResult.status || 'COMPLETED',
               type: completeResult.appointmentType || prev.appointmentType || prev.type,
               appointmentType: completeResult.appointmentType || prev.appointmentType || prev.type,
+              typeCode: prev.typeCode,
+              appointmentTypeCode: prev.appointmentTypeCode,
               symptoms: shouldSendSymptoms ? normalizedCurrentSymptoms : prev.symptoms,
             }
           : prev
@@ -1114,19 +1182,27 @@ export function DoctorAppointmentsPage() {
       const consultationFee = Number(completeResult.invoice?.consultationFee ?? 0)
       const medicineTotal = Number(completeResult.invoice?.medicineTotal ?? 0)
       const serviceTotal = Number(completeResult.invoice?.serviceTotal ?? 0)
-      const calculatedTotal = consultationFee + medicineTotal + serviceTotal
+      const consultationFeeApplied = isCurrentAppointmentFollowUp ? consultationFee : 0
+      const calculatedTotal = consultationFeeApplied + medicineTotal + serviceTotal
       const invoiceTotal = Number(completeResult.invoice?.totalAmount ?? calculatedTotal)
 
       const invoiceTitle = completeResult.invoice
         ? `Hóa đơn #${completeResult.invoice.id || '-'}`
         : undefined
       const invoiceFormula = completeResult.invoice
-        ? `Tổng tiền = Phí khám + Tiền thuốc + Tiền dịch vụ: ${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(
-            consultationFee
-          )} + ${formatCurrencyVnd(medicineTotal)} + ${formatCurrencyVnd(serviceTotal)}`
+        ? isCurrentAppointmentFollowUp
+          ? `Tổng tiền = Phí khám + Tiền thuốc + Tiền dịch vụ: ${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(
+              consultationFeeApplied
+            )} + ${formatCurrencyVnd(medicineTotal)} + ${formatCurrencyVnd(serviceTotal)}`
+          : `Tổng tiền = Tiền thuốc + Tiền dịch vụ: ${formatCurrencyVnd(invoiceTotal)} = ${formatCurrencyVnd(
+              medicineTotal
+            )} + ${formatCurrencyVnd(serviceTotal)}`
         : undefined
-      const followUpText = completeResult.followUpAppointment?.id
-        ? `Đã tạo lịch tái khám #${completeResult.followUpAppointment.id}.`
+      const followUpReference = safeString(
+        completeResult.followUpAppointment?.appointmentCode ?? completeResult.followUpAppointment?.id
+      )
+      const followUpText = followUpReference
+        ? `Đã tạo lịch tái khám ${followUpReference}.`
         : undefined
       setCompleteResultSummary({ invoiceTitle, invoiceFormula, followUpText })
 
@@ -1137,11 +1213,21 @@ export function DoctorAppointmentsPage() {
       setFollowUpErrors({})
       setSubmitError('')
     } catch (submitError: any) {
-      const errorMessage = getBackendErrorMessage(submitError, 'Không thể hoàn tất lịch khám.')
+      const fieldErrors = getFollowUpFieldErrors(submitError)
+      const hasFieldErrors = submitError?.response?.status === 400 && hasFollowUpFieldErrors(fieldErrors)
+      if (hasFieldErrors) {
+        setFollowUpErrors(fieldErrors)
+      } else if (formState.followUpEnabled) {
+        setFollowUpErrors({})
+      }
+
+      const errorMessage = hasFieldErrors
+        ? ''
+        : getBackendErrorMessage(submitError, 'Không thể hoàn tất lịch khám.')
       setSubmitError(errorMessage)
       toast({
         title: 'Lỗi',
-        description: errorMessage,
+        description: errorMessage || 'Vui lòng kiểm tra lại thông tin lịch tái khám.',
         variant: 'destructive',
       })
     } finally {
@@ -1247,9 +1333,7 @@ export function DoctorAppointmentsPage() {
                 {filteredAppointments.map((appointment) => {
                   const statusLabel = getStatusLabel(appointment.status, appointment.statusDisplay)
                   const statusKey = getStatusKey(appointment.status, appointment.statusDisplay)
-                  const appointmentType = getAppointmentTypeLabel(
-                    safeString(appointment.appointmentType) || safeString(appointment.type)
-                  )
+                  const appointmentType = getAppointmentTypeLabel(appointment)
 
                   return (
                     <TableRow key={appointment.id}>
@@ -1264,7 +1348,7 @@ export function DoctorAppointmentsPage() {
                           <div className="text-xs text-[#6b7280]">Lịch gốc: #{appointment.parentAppointmentId}</div>
                         )}
                         {safeString(appointment.followUpNote) && (
-                          <div className="text-xs text-[#6b7280]">Ghi chú: {safeString(appointment.followUpNote)}</div>
+                          <div className="text-xs text-[#6b7280]">Ghi chú tái khám: {safeString(appointment.followUpNote)}</div>
                         )}
                       </TableCell>
                       <TableCell>
@@ -1322,9 +1406,7 @@ export function DoctorAppointmentsPage() {
               <div><span className="font-semibold">Giờ khám:</span> {getTimeLabel(selectedAppointment)}</div>
               <div>
                 <span className="font-semibold">Loại khám:</span>{' '}
-                {getAppointmentTypeLabel(
-                  safeString(selectedAppointment.appointmentType) || safeString(selectedAppointment.type)
-                )}
+                {getAppointmentTypeLabel(selectedAppointment)}
               </div>
               <div><span className="font-semibold">Trạng thái:</span> {getStatusLabel(selectedAppointment.status, selectedAppointment.statusDisplay)}</div>
               <div>
@@ -1347,18 +1429,15 @@ export function DoctorAppointmentsPage() {
               {selectedAppointment.parentAppointmentId && (
                 <div><span className="font-semibold">Lịch gốc:</span> #{selectedAppointment.parentAppointmentId}</div>
               )}
-              {safeString(selectedAppointment.followUpNote) && (
+              {isFollowUpAppointment(selectedAppointment) ? (
+                <div><span className="font-semibold">Ghi chú tái khám:</span> {safeString(selectedAppointment.followUpNote) || '-'}</div>
+              ) : safeString(selectedAppointment.followUpNote) ? (
                 <div><span className="font-semibold">Ghi chú tái khám:</span> {safeString(selectedAppointment.followUpNote)}</div>
+              ) : null}
+              <div><span className="font-semibold">Triệu chứng:</span> {safeString(selectedAppointment.symptoms) || '-'}</div>
+              {!isFollowUpAppointment(selectedAppointment) && safeString(selectedAppointment.notes) && (
+                <div><span className="font-semibold">Ghi chú:</span> {safeString(selectedAppointment.notes)}</div>
               )}
-              <div>
-                <span className="font-semibold">Triệu chứng/ Ghi chú:</span>{' '}
-                {(() => {
-                  const symptomsText = safeString(selectedAppointment.symptoms)
-                  const notesText = safeString(selectedAppointment.notes)
-                  if (symptomsText && notesText) return `${symptomsText} | ${notesText}`
-                  return symptomsText || notesText || '-'
-                })()}
-              </div>
             </div>
           )}
         </DialogContent>
@@ -1747,34 +1826,47 @@ export function DoctorAppointmentsPage() {
                                     Đang tải khung giờ...
                                   </div>
                                 ) : followUpSlotViews.length > 0 ? (
-                                  <div className="grid grid-cols-2 gap-2">
-                                    {followUpSlotViews.map((slot) => (
-                                      <button
-                                        key={slot.value}
-                                        type="button"
-                                        disabled={slot.disabled}
-                                        onClick={() => {
-                                          setFormState((prev) => ({ ...prev, followUpTime: slot.value }))
-                                          setSubmitError('')
-                                          if (followUpErrors.time) {
-                                            setFollowUpErrors((prev) => ({ ...prev, time: undefined }))
-                                          }
-                                        }}
-                                        className={`h-10 rounded-md border text-sm font-medium transition ${
-                                          formState.followUpTime === slot.value
-                                            ? 'border-sky-500 bg-sky-50 text-sky-700'
-                                            : slot.disabled
-                                              ? 'border-slate-200 bg-slate-100 text-slate-400'
-                                              : 'border-slate-200 bg-white text-slate-700 hover:border-sky-300'
-                                        }`}
-                                      >
-                                        {slot.label}
-                                      </button>
-                                    ))}
+                                  <div className="space-y-3">
+                                    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        Ngày đang chọn
+                                      </p>
+                                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                                        {formatDateDisplay(formState.followUpDate)}
+                                      </p>
+                                    </div>
+                                    {!hasAvailableFollowUpSlots ? (
+                                      <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                                        Ngày này hiện không còn khung giờ khả dụng. Vui lòng chọn ngày khác.
+                                      </div>
+                                    ) : null}
+                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                                      {followUpSlotViews.map((slot) => {
+                                        const isSelected = formState.followUpTime === slot.value
+                                        return (
+                                          <button
+                                            key={slot.value}
+                                            type="button"
+                                            disabled={slot.disabled}
+                                            onClick={() => {
+                                              setFormState((prev) => ({ ...prev, followUpTime: slot.value }))
+                                              setSubmitError('')
+                                              if (followUpErrors.time) {
+                                                setFollowUpErrors((prev) => ({ ...prev, time: undefined }))
+                                              }
+                                            }}
+                                            className={getFollowUpSlotButtonClass(slot.state, isSelected)}
+                                          >
+                                            {isSelected ? <Check className="absolute right-2 top-2 h-3.5 w-3.5" /> : null}
+                                            <span className="w-full text-center">{slot.label}</span>
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
                                   </div>
                                 ) : (
-                                  <div className="rounded-lg border border-dashed border-slate-200 p-3 text-sm text-slate-600">
-                                    Không có khung giờ phù hợp cho ngày này.
+                                  <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-sm text-slate-600">
+                                    Không có khung giờ nào được trả về cho ngày này. Vui lòng thử ngày khác.
                                   </div>
                                 )}
 

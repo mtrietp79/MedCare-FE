@@ -22,6 +22,7 @@ import {
   isPaymentSettled,
   resolveAppointmentStatusView,
 } from '@/lib/appointment-status'
+import { getAppointmentTypeDisplay } from '@/lib/invoice-contract'
 
 function normalizeStatusText(value?: string): string {
   return String(value || '').trim().toUpperCase()
@@ -65,12 +66,8 @@ function getAppointmentTimeLabel(appointment: Appointment) {
 }
 
 function getAppointmentTypeLabel(appointment: Appointment): string {
-  const rawType = String(appointment.appointmentType || appointment.type || '').trim()
-  const normalizedType = rawType.toLowerCase()
-  if (normalizedType.includes('tai') || normalizedType.includes('follow') || normalizedType.includes('revisit')) {
-    return 'Tái khám'
-  }
-  return rawType || 'Khám bệnh'
+  if (appointment.parentAppointmentId) return 'Tái khám'
+  return getAppointmentTypeDisplay(appointment.appointmentType, appointment.type) || 'Khám bệnh'
 }
 
 function getErrorStatusCode(error: any): number | null {
@@ -112,24 +109,54 @@ export function PatientAppointmentDetailPage() {
   const [recordError, setRecordError] = useState<string | null>(null)
   const [record, setRecord] = useState<PatientMedicalRecord | null>(null)
 
-  const loadAppointment = useCallback(async () => {
-    if (!appointmentId) return
-
+  const fetchAppointmentDetail = useCallback(async (id: string) => {
     try {
       setLoading(true)
       setError(null)
-      const data = await api.appointments.getById(appointmentId)
+      const data = await api.appointments.getById(id)
       setAppointment(data)
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : 'Không thể tải thông tin lịch khám.')
+      setAppointment(null)
+      setError(getErrorMessage(fetchError, 'Không thể tải thông tin lịch khám.'))
     } finally {
       setLoading(false)
     }
-  }, [appointmentId])
+  }, [])
 
   useEffect(() => {
-    void loadAppointment()
-  }, [loadAppointment])
+    if (!appointmentId) {
+      setAppointment(null)
+      setError('Không tìm thấy mã lịch hẹn.')
+      setLoading(false)
+      return
+    }
+
+    let active = true
+
+    const loadAppointmentFromRoute = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const data = await api.appointments.getById(appointmentId)
+        if (!active) return
+        setAppointment(data)
+      } catch (fetchError) {
+        if (!active) return
+        setAppointment(null)
+        setError(getErrorMessage(fetchError, 'Không thể tải thông tin lịch khám.'))
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadAppointmentFromRoute()
+
+    return () => {
+      active = false
+    }
+  }, [appointmentId])
 
   const handleCancelSuccess = () => {
     navigate('/patient/appointments', {
@@ -202,15 +229,11 @@ export function PatientAppointmentDetailPage() {
     return onQueryInvalidation((payload) => {
       const sameAppointment = !payload.appointmentId || payload.appointmentId === String(appointmentId)
 
-      if (payload.keys.includes(QUERY_KEYS.doctorAppointmentList) && sameAppointment) {
-        void loadAppointment()
-      }
-
       if (payload.keys.includes(QUERY_KEYS.patientMedicalRecordByAppointment) && sameAppointment) {
         void loadRecordByAppointment()
       }
     })
-  }, [appointmentId, loadAppointment, loadRecordByAppointment])
+  }, [appointmentId, loadRecordByAppointment])
 
   useEffect(() => {
     if (!appointment?.id) return
@@ -242,7 +265,13 @@ export function PatientAppointmentDetailPage() {
     return (
       <div className="container mx-auto space-y-3 px-4 py-16 text-center text-destructive">
         <p>Lỗi: {error}</p>
-        <Button variant="outline" onClick={() => void loadAppointment()}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            if (!appointmentId) return
+            void fetchAppointmentDetail(appointmentId)
+          }}
+        >
           Thử lại
         </Button>
       </div>
@@ -261,6 +290,12 @@ export function PatientAppointmentDetailPage() {
   const followUpAppointment = isFollowUpAppointment(appointment)
   const appointmentTypeLabel = getAppointmentTypeLabel(appointment)
   const isConsultationAppointment = appointmentTypeLabel === 'Khám bệnh'
+  const doctorLabel = appointment.doctorName || appointment.doctor?.fullName || 'Đang chờ hệ thống gán'
+  const specialtyLabel =
+    appointment.specialtyName ||
+    (typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name) ||
+    '-'
+  const serviceLabel = appointment.serviceName || appointment.medicalService?.name || '-'
   const canPayAppointmentNow =
     isConsultationAppointment && !isCancelled && !isCompleted && !isPaymentFinalized && paymentStatusKey === 'unpaid'
   const invoiceTotalAmount = Number(record?.invoice?.totalAmount ?? 0)
@@ -281,7 +316,14 @@ export function PatientAppointmentDetailPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Mã đặt lịch</p>
-              <h1 className="text-2xl font-semibold">{appointment.appointmentCode || `#${appointment.id}`}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold">{appointment.appointmentCode || `#${appointment.id}`}</h1>
+                {followUpAppointment ? (
+                  <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
+                    Tái khám
+                  </span>
+                ) : null}
+              </div>
             </div>
             <div className="flex flex-col gap-2 text-right">
               <span className="text-sm text-muted-foreground">Trạng thái</span>
@@ -294,12 +336,8 @@ export function PatientAppointmentDetailPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-3xl border p-5">
               <p className="text-sm text-muted-foreground">Loại khám</p>
-              <p className="mt-2 font-medium">{getAppointmentTypeLabel(appointment)}</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {appointment.medicalService?.name ||
-                  (typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name) ||
-                  ''}
-              </p>
+              <p className="mt-2 font-medium">{appointmentTypeLabel}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{serviceLabel}</p>
             </div>
             <div className="rounded-3xl border p-5">
               <p className="text-sm text-muted-foreground">Thời gian khám</p>
@@ -311,9 +349,7 @@ export function PatientAppointmentDetailPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-3xl border p-5">
               <p className="text-sm text-muted-foreground">Bác sĩ phụ trách</p>
-              <p className="mt-2 font-medium">
-                {appointment.doctor?.fullName || appointment.doctorName || 'Đang chờ hệ thống gán'}
-              </p>
+              <p className="mt-2 font-medium">{doctorLabel}</p>
             </div>
             <div className="rounded-3xl border p-5">
               <p className="text-sm text-muted-foreground">Phí khám</p>
@@ -328,9 +364,39 @@ export function PatientAppointmentDetailPage() {
               </p>
             </div>
             <div className="rounded-3xl border p-5">
+              <p className="text-sm text-muted-foreground">Chuyên khoa</p>
+              <p className="mt-2 text-sm text-muted-foreground">{specialtyLabel}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-3xl border p-5">
               <p className="text-sm text-muted-foreground">Triệu chứng</p>
               <p className="mt-2 text-sm text-muted-foreground">{appointment.symptoms || 'Không có'}</p>
             </div>
+            <div className="rounded-3xl border p-5">
+              <p className="text-sm text-muted-foreground">Ghi chú</p>
+              <p className="mt-2 text-sm text-muted-foreground">{appointment.notes || 'Không có'}</p>
+            </div>
+            {followUpAppointment ? (
+              <div className="rounded-3xl border p-5 md:col-span-2">
+                <p className="text-sm text-muted-foreground">Thông tin tái khám</p>
+                <div className="mt-2 space-y-2 text-sm text-muted-foreground">
+                  <p>Ghi chú tái khám: {appointment.followUpNote || 'Không có'}</p>
+                  {appointment.parentAppointmentId ? (
+                    <p>
+                      Lịch gốc:{' '}
+                      <Link
+                        to={`/patient/appointments/${appointment.parentAppointmentId}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        #{appointment.parentAppointmentId}
+                      </Link>
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">

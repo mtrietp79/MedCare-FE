@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Clock3, Eye, Search } from 'lucide-react'
+import { CalendarDays, Check, Eye, Search } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Calendar } from '@/components/ui/calendar'
 import { Input } from '@/components/ui/input'
@@ -18,12 +18,21 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import { api, type AppointmentSlot } from '@/services/api'
+import { doctorAppointmentService } from '@/services/doctorAppointmentService'
 import {
   doctorMedicalRecordService,
   type MedicalRecordDetail,
   type MedicalRecordPatient,
 } from '@/services/doctorMedicalRecordService'
 import { safeString } from '@/lib/admin-normalizers'
+import { cn } from '@/lib/utils'
+import { getAppointmentTypeLabel as getAppointmentTypeDisplayLabel } from '@/lib/appointment-type'
+import {
+  getAppointmentStatusClass,
+  getAppointmentStatusLabel,
+  resolvePaymentStatusView,
+} from '@/lib/appointment-status'
 import { useToast } from '@/hooks/use-toast'
 import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
 
@@ -38,6 +47,20 @@ interface PatientDetailState {
     address?: string
   }
   records: MedicalRecordDetail[]
+}
+
+interface FollowUpSlotView {
+  value: string
+  label: string
+  disabled: boolean
+  state: 'available' | 'full' | 'disabled'
+}
+
+const SLOT_DISABLED_REASONS = new Set(['PAST', 'LESS_THAN_2H', 'FULL', 'TOO_FAR'])
+
+interface FollowUpValidationErrors {
+  followUpDate?: string
+  followUpTime?: string
 }
 
 function formatDateDdMmYyyy(value?: string | null): string {
@@ -82,11 +105,6 @@ function formatDateAsIso(value: Date): string {
   return `${year}-${month}-${day}`
 }
 
-const TIME_SLOTS = Array.from({ length: 11 }, (_, index) => {
-  const hour = 7 + index
-  return `${String(hour).padStart(2, '0')}:00`
-})
-
 function formatDateDisplay(value?: string | null): string {
   return formatDateDdMmYyyy(value)
 }
@@ -107,6 +125,87 @@ function normalizeTimeInput(value?: string | null): string {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
 }
 
+function extractTimeLabelFromDateTime(value?: string | null): string {
+  const source = safeString(value)
+  if (!source) return ''
+
+  const parsed = new Date(source)
+  if (!Number.isNaN(parsed.getTime())) {
+    const hour = String(parsed.getHours()).padStart(2, '0')
+    const minute = String(parsed.getMinutes()).padStart(2, '0')
+    return `${hour}:${minute}`
+  }
+
+  const match = source.match(/(\d{1,2}):(\d{2})/)
+  if (!match) return ''
+  return `${String(Number(match[1])).padStart(2, '0')}:${String(Number(match[2])).padStart(2, '0')}`
+}
+
+function getBackendErrorMessage(error: any, fallbackMessage: string): string {
+  const backendMessage = safeString(error?.response?.data?.message)
+  if (backendMessage) return backendMessage
+
+  const directMessage = safeString(error?.message)
+  if (directMessage) return directMessage
+
+  return fallbackMessage
+}
+
+function formatCurrencyVnd(value?: number): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-'
+  return `${new Intl.NumberFormat('vi-VN').format(value)} VND`
+}
+
+function formatDateTimeDisplay(dateTime?: string | null, date?: string | null, time?: string | null): string {
+  const normalizedDate = formatDateDisplay(date)
+  const normalizedTime = normalizeTimeInput(time)
+
+  if (normalizedDate !== '-') {
+    return normalizedTime ? `${normalizedDate}, lúc ${normalizedTime}` : normalizedDate
+  }
+
+  const source = safeString(dateTime)
+  if (!source) return '-'
+
+  const parsed = new Date(source)
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${formatDateDisplay(source)}, lúc ${extractTimeLabelFromDateTime(source)}`
+  }
+
+  return source
+}
+
+function getRecordTypeLabel(record: MedicalRecordDetail): string {
+  return getAppointmentTypeDisplayLabel({
+    type: record.appointmentType,
+    appointmentType: record.appointmentType,
+    typeCode: record.typeCode,
+    appointmentTypeCode: record.appointmentTypeCode,
+  })
+}
+
+function getFollowUpFieldErrors(error: any): FollowUpValidationErrors {
+  const fieldErrors = error?.response?.data?.fieldErrors
+  return {
+    followUpDate: safeString(fieldErrors?.followUpDate) || undefined,
+    followUpTime: safeString(fieldErrors?.followUpTime) || undefined,
+  }
+}
+
+function hasFollowUpFieldErrors(errors: FollowUpValidationErrors): boolean {
+  return Boolean(errors.followUpDate || errors.followUpTime)
+}
+
+function getFollowUpSlotButtonClass(slotState: FollowUpSlotView['state'], selected: boolean): string {
+  return cn(
+    'relative flex h-14 min-w-0 items-center justify-center rounded-2xl border px-3 py-3 text-center text-sm font-semibold transition-colors',
+    selected && 'border-teal-700 bg-teal-100 text-teal-950 shadow-sm',
+    !selected && slotState === 'available' && 'border-slate-200 bg-white text-slate-700 hover:border-teal-400 hover:bg-teal-50 hover:text-teal-900',
+    !selected && slotState === 'full' && 'cursor-not-allowed border-amber-200 bg-amber-50 text-amber-700',
+    !selected && slotState === 'disabled' && 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+  )
+}
+
 function getRecordSortTimestamp(record: MedicalRecordDetail): number {
   return (
     parseDateInput(record.visitDate)?.getTime() ??
@@ -119,15 +218,9 @@ function sortMedicalRecords(records: MedicalRecordDetail[]): MedicalRecordDetail
   return [...records].sort((left, right) => getRecordSortTimestamp(right) - getRecordSortTimestamp(left))
 }
 
-function normalizeTypeLabel(value?: string): string {
-  const type = safeString(value).toLowerCase()
-  if (type.includes('tai') || type.includes('follow') || type.includes('revisit')) return 'Tái khám'
-  return 'Khám bệnh'
-}
-
 export function DoctorMedicalRecordsPage() {
   const { toast } = useToast()
-  const [summary, setSummary] = useState({ totalPatients: 0, newPatients: 0, revisitPatients: 0 })
+  const [summary, setSummary] = useState({ totalPatients: 0, newPatients: 0, followUpPatients: 0 })
   const [patients, setPatients] = useState<MedicalRecordPatient[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -140,29 +233,74 @@ export function DoctorMedicalRecordsPage() {
   const [followUpRecordId, setFollowUpRecordId] = useState<string | null>(null)
   const [followUpSubmitting, setFollowUpSubmitting] = useState(false)
   const [followUpForm, setFollowUpForm] = useState({ date: '', time: '', note: '' })
+  const [followUpErrors, setFollowUpErrors] = useState<FollowUpValidationErrors>({})
+  const [followUpSubmitError, setFollowUpSubmitError] = useState('')
   const [isFollowUpDatePickerOpen, setIsFollowUpDatePickerOpen] = useState(false)
+  const [followUpDoctorId, setFollowUpDoctorId] = useState('')
+  const [followUpDoctorLoading, setFollowUpDoctorLoading] = useState(false)
+  const [followUpDoctorError, setFollowUpDoctorError] = useState('')
+  const [followUpSlots, setFollowUpSlots] = useState<AppointmentSlot[]>([])
+  const [followUpSlotsLoading, setFollowUpSlotsLoading] = useState(false)
+  const [followUpSlotsError, setFollowUpSlotsError] = useState('')
   const [currentTime, setCurrentTime] = useState(() => new Date())
   const todayDateOnly = toDateOnly(new Date())
+  const selectedFollowUpRecord = useMemo(
+    () => patientDetail.records.find((record) => record.id === followUpRecordId) ?? null,
+    [followUpRecordId, patientDetail.records]
+  )
 
   const minAllowedDateTime = useMemo(() => new Date(currentTime.getTime() + 60 * 60 * 1000), [currentTime])
-  const followUpAvailableTimeSlots = useMemo(() => {
+  const followUpSlotViews = useMemo<FollowUpSlotView[]>(() => {
     const selectedDate = parseDateInput(followUpForm.date)
-    if (!selectedDate) {
-      return TIME_SLOTS.map((value) => ({ value, disabled: true }))
-    }
+    const sorted = [...followUpSlots].sort(
+      (slotA, slotB) => new Date(slotA.startTime).getTime() - new Date(slotB.startTime).getTime()
+    )
 
-    return TIME_SLOTS.map((value) => {
+    const mapped: FollowUpSlotView[] = []
+    sorted.forEach((slot) => {
+      const value = extractTimeLabelFromDateTime(slot.startTime)
+      if (!value) return
+
       const [hourRaw, minuteRaw] = value.split(':').map(Number)
-      if (!Number.isFinite(hourRaw) || !Number.isFinite(minuteRaw)) {
-        return { value, disabled: true }
+      const candidateDate = selectedDate ? new Date(selectedDate) : null
+      if (candidateDate && Number.isFinite(hourRaw) && Number.isFinite(minuteRaw)) {
+        candidateDate.setHours(hourRaw, minuteRaw, 0, 0)
       }
 
-      const candidateDate = new Date(selectedDate)
-      candidateDate.setHours(hourRaw, minuteRaw, 0, 0)
-      const disabled = candidateDate.getTime() < minAllowedDateTime.getTime()
-      return { value, disabled }
+      const disabledReason = safeString(slot.disabledReason).toUpperCase()
+      const disabledByTime = candidateDate ? candidateDate.getTime() < minAllowedDateTime.getTime() : false
+      const state: FollowUpSlotView['state'] =
+        Boolean(slot.full) || disabledReason === 'FULL'
+          ? 'full'
+          : Boolean(slot.disabled) || SLOT_DISABLED_REASONS.has(disabledReason) || disabledByTime
+            ? 'disabled'
+            : 'available'
+      const disabled =
+        state === 'full' ||
+        state === 'disabled'
+
+      mapped.push({
+        value,
+        label: value,
+        disabled,
+        state,
+      })
     })
-  }, [followUpForm.date, minAllowedDateTime])
+
+    const uniqueByValue = new Map<string, FollowUpSlotView>()
+    mapped.forEach((slot) => {
+      if (!uniqueByValue.has(slot.value)) {
+        uniqueByValue.set(slot.value, slot)
+      }
+    })
+
+    return Array.from(uniqueByValue.values())
+  }, [followUpForm.date, followUpSlots, minAllowedDateTime])
+
+  const hasAvailableFollowUpSlots = useMemo(
+    () => followUpSlotViews.some((slot) => slot.state === 'available'),
+    [followUpSlotViews]
+  )
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -173,19 +311,147 @@ export function DoctorMedicalRecordsPage() {
   }, [])
 
   useEffect(() => {
+    if (!selectedFollowUpRecord) {
+      setFollowUpDoctorId('')
+      setFollowUpDoctorLoading(false)
+      setFollowUpDoctorError('')
+      setFollowUpSlots([])
+      setFollowUpSlotsError('')
+      return
+    }
+
+    if (selectedFollowUpRecord.doctorId) {
+      setFollowUpDoctorId(selectedFollowUpRecord.doctorId)
+      setFollowUpDoctorLoading(false)
+      setFollowUpDoctorError('')
+      return
+    }
+
+    if (!selectedFollowUpRecord.appointmentId) {
+      setFollowUpDoctorId('')
+      setFollowUpDoctorLoading(false)
+      setFollowUpDoctorError('Không xác định được bác sĩ của lần khám trước nên chưa thể tải khung giờ tái khám.')
+      setFollowUpSlots([])
+      setFollowUpSlotsError('')
+      return
+    }
+
+    let active = true
+
+    const loadDoctorContext = async () => {
+      try {
+        setFollowUpDoctorLoading(true)
+        setFollowUpDoctorError('')
+        const appointment = await doctorAppointmentService.getAppointmentById(selectedFollowUpRecord.appointmentId || '')
+        if (!active) return
+
+        const doctorId = safeString(appointment.doctorId)
+        setFollowUpDoctorId(doctorId)
+        if (!doctorId) {
+          setFollowUpDoctorError('Không xác định được bác sĩ của lần khám trước nên chưa thể tải khung giờ tái khám.')
+          setFollowUpSlots([])
+        }
+      } catch (error: any) {
+        if (!active) return
+        setFollowUpDoctorId('')
+        setFollowUpDoctorError(
+          getBackendErrorMessage(error, 'Không thể xác định lịch làm việc của bác sĩ cho lần tái khám.')
+        )
+        setFollowUpSlots([])
+        setFollowUpSlotsError('')
+      } finally {
+        if (active) {
+          setFollowUpDoctorLoading(false)
+        }
+      }
+    }
+
+    void loadDoctorContext()
+
+    return () => {
+      active = false
+    }
+  }, [selectedFollowUpRecord])
+
+  useEffect(() => {
+    if (!selectedFollowUpRecord) {
+      setFollowUpSlots([])
+      setFollowUpSlotsLoading(false)
+      setFollowUpSlotsError('')
+      return
+    }
+
+    if (!followUpForm.date) {
+      setFollowUpSlots([])
+      setFollowUpSlotsLoading(false)
+      setFollowUpSlotsError('')
+      return
+    }
+
+    if (!followUpDoctorId) {
+      setFollowUpSlots([])
+      setFollowUpSlotsLoading(false)
+      return
+    }
+
+    let active = true
+
+    const loadFollowUpSlots = async () => {
+      try {
+        setFollowUpSlotsLoading(true)
+        setFollowUpSlotsError('')
+        const slotsResult = await api.appointments.getDoctorSlots(followUpDoctorId, followUpForm.date)
+        if (!active) return
+        setFollowUpSlots(Array.isArray(slotsResult) ? slotsResult : [])
+      } catch (error: any) {
+        if (!active) return
+        setFollowUpSlots([])
+        setFollowUpSlotsError(getBackendErrorMessage(error, 'Không thể tải khung giờ tái khám khả dụng.'))
+      } finally {
+        if (active) {
+          setFollowUpSlotsLoading(false)
+        }
+      }
+    }
+
+    void loadFollowUpSlots()
+
+    return () => {
+      active = false
+    }
+  }, [followUpDoctorId, followUpForm.date, selectedFollowUpRecord])
+
+  useEffect(() => {
     if (!followUpForm.time) return
-    const selected = followUpAvailableTimeSlots.find((slot) => slot.value === followUpForm.time)
-    if (selected?.disabled) {
+    const selected = followUpSlotViews.find((slot) => slot.value === followUpForm.time)
+    if (!selected || selected.disabled) {
       setFollowUpForm((prev) => ({ ...prev, time: '' }))
     }
-  }, [followUpAvailableTimeSlots, followUpForm.time])
+  }, [followUpForm.time, followUpSlotViews])
+
+  const resetFollowUpAsyncState = () => {
+    setFollowUpDoctorId('')
+    setFollowUpDoctorLoading(false)
+    setFollowUpDoctorError('')
+    setFollowUpSlots([])
+    setFollowUpSlotsError('')
+  }
+
+  const resetFollowUpDraft = (nextRecordId: string | null = null) => {
+    setFollowUpRecordId(nextRecordId)
+    setFollowUpForm({ date: '', time: '', note: '' })
+    setFollowUpErrors({})
+    setFollowUpSubmitError('')
+    setIsFollowUpDatePickerOpen(false)
+    resetFollowUpAsyncState()
+  }
 
   const fetchSummary = async () => {
     const data = await doctorMedicalRecordService.getSummary()
     setSummary({
       totalPatients: Number(data.totalPatients ?? 0),
       newPatients: Number(data.newPatients ?? 0),
-      revisitPatients: Number(data.revisitPatients ?? 0),
+      followUpPatients: Number(data.followUpPatients ?? 0),
     })
   }
 
@@ -199,7 +465,17 @@ export function DoctorMedicalRecordsPage() {
     setError('')
 
     try {
-      await Promise.all([fetchSummary(), fetchPatients(searchKeyword)])
+      const [summaryData, tablePatients] = await Promise.all([
+        doctorMedicalRecordService.getSummary(),
+        doctorMedicalRecordService.getPatients(searchKeyword),
+      ])
+
+      setSummary({
+        totalPatients: Number(summaryData.totalPatients ?? 0),
+        newPatients: Number(summaryData.newPatients ?? 0),
+        followUpPatients: Number(summaryData.followUpPatients ?? 0),
+      })
+      setPatients(Array.isArray(tablePatients) ? tablePatients : [])
     } catch (fetchError: any) {
       setError(fetchError?.message || 'Không thể tải dữ liệu bệnh án.')
     } finally {
@@ -244,9 +520,7 @@ export function DoctorMedicalRecordsPage() {
     setDetailOpen(true)
     setDetailLoading(true)
     setSelectedPatientId(patientId)
-    setFollowUpRecordId(null)
-    setFollowUpForm({ date: '', time: '', note: '' })
-    setIsFollowUpDatePickerOpen(false)
+    resetFollowUpDraft()
 
     try {
       const data = await doctorMedicalRecordService.getPatientRecords(patientId)
@@ -265,15 +539,17 @@ export function DoctorMedicalRecordsPage() {
     }
   }
 
-  const refreshPatientDetail = async (patientId: string) => {
+  const refreshPatientDetail = async (patientId: string): Promise<boolean> => {
     try {
       const data = await doctorMedicalRecordService.getPatientRecords(patientId)
       setPatientDetail({
         patient: data.patient,
         records: sortMedicalRecords(Array.isArray(data.records) ? data.records : []),
       })
+      return true
     } catch {
       // Keep current detail view if refresh fails.
+      return false
     }
   }
 
@@ -281,51 +557,47 @@ export function DoctorMedicalRecordsPage() {
     if (!followUpRecordId) return
     const normalizedDate = parseDateInput(followUpForm.date)
     const normalizedTime = normalizeTimeInput(followUpForm.time)
+    const nextErrors: FollowUpValidationErrors = {}
 
-    if (!normalizedDate || !followUpForm.time) {
-      toast({
-        title: 'Thiếu thông tin',
-        description: 'Vui lòng chọn ngày và giờ tái khám.',
-        variant: 'destructive',
-      })
-      return
+    if (!followUpForm.date || !normalizedDate) {
+      nextErrors.followUpDate = 'Vui lòng chọn ngày tái khám.'
+    } else if (toDateOnly(normalizedDate).getTime() < todayDateOnly.getTime()) {
+      nextErrors.followUpDate = 'Ngày tái khám phải từ hôm nay trở đi.'
     }
 
-    if (toDateOnly(normalizedDate).getTime() < todayDateOnly.getTime()) {
-      toast({
-        title: 'Ngày không hợp lệ',
-        description: 'Ngày tái khám phải từ hôm nay trở đi.',
-        variant: 'destructive',
-      })
-      return
+    if (!followUpForm.time) {
+      nextErrors.followUpTime = 'Vui lòng chọn giờ tái khám.'
+    } else if (!normalizedTime) {
+      nextErrors.followUpTime = 'Vui lòng nhập giờ tái khám theo định dạng 24h, ví dụ 08:30 hoặc 14:30.'
     }
 
-    if (!normalizedTime) {
-      toast({
-        title: 'Giờ không hợp lệ',
-        description: 'Vui lòng nhập giờ tái khám theo định dạng 24h, ví dụ 08:30 hoặc 14:30.',
-        variant: 'destructive',
-      })
-      return
-    }
+    setFollowUpErrors(nextErrors)
+    setFollowUpSubmitError('')
+    if (hasFollowUpFieldErrors(nextErrors)) return
 
     setFollowUpSubmitting(true)
     try {
       await doctorMedicalRecordService.createFollowUp(followUpRecordId, {
-        date: formatDateAsIso(toDateOnly(normalizedDate)),
-        time: normalizedTime,
+        followUpDate: formatDateAsIso(toDateOnly(normalizedDate as Date)),
+        followUpTime: normalizedTime,
         note: safeString(followUpForm.note) || undefined,
       })
+      await Promise.allSettled([
+        selectedPatientId ? refreshPatientDetail(selectedPatientId) : Promise.resolve(true),
+        fetchSummary(),
+        fetchPatients(keyword),
+      ])
+      resetFollowUpDraft()
       toast({ title: 'Thành công', description: 'Đã tạo lịch tái khám' })
-      setFollowUpRecordId(null)
-      setFollowUpForm({ date: '', time: '', note: '' })
-      setIsFollowUpDatePickerOpen(false)
     } catch (submitError: any) {
-      toast({
-        title: 'Lỗi',
-        description: submitError?.message || 'Không thể tạo lịch tái khám.',
-        variant: 'destructive',
-      })
+      const fieldErrors = getFollowUpFieldErrors(submitError)
+      if (submitError?.response?.status === 400 && hasFollowUpFieldErrors(fieldErrors)) {
+        setFollowUpErrors(fieldErrors)
+        setFollowUpSubmitError('')
+      } else {
+        setFollowUpErrors({})
+        setFollowUpSubmitError(getBackendErrorMessage(submitError, 'Không thể tạo lịch tái khám.'))
+      }
     } finally {
       setFollowUpSubmitting(false)
     }
@@ -364,7 +636,7 @@ export function DoctorMedicalRecordsPage() {
         <Card className="rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
           <CardContent className="p-5">
             <p className="text-sm text-[#6b7280]">Bệnh nhân tái khám</p>
-            <p className="mt-2 text-3xl font-bold text-[#111827]">{summary.revisitPatients}</p>
+            <p className="mt-2 text-3xl font-bold text-[#111827]">{summary.followUpPatients}</p>
           </CardContent>
         </Card>
       </div>
@@ -398,9 +670,9 @@ export function DoctorMedicalRecordsPage() {
                     <TableCell>{safeString(patient.email) || '-'}</TableCell>
                     <TableCell>{safeString(patient.gender) || '-'}</TableCell>
                     <TableCell>
-                      {Number(patient.revisitCount ?? 0)} / {Number(patient.totalVisits ?? 0)}
+                      {Number(patient.followUpCount ?? 0)} / {Number(patient.newExamCount ?? 0)}
                     </TableCell>
-                    <TableCell>{formatDateDdMmYyyy(patient.lastVisitDate)}</TableCell>
+                    <TableCell>{formatDateDdMmYyyy(patient.latestVisitDate)}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => void openPatientDetail(patient.id)}>
                         <Eye className="h-4 w-4" />
@@ -428,9 +700,7 @@ export function DoctorMedicalRecordsPage() {
           setDetailOpen(open)
           if (!open) {
             setSelectedPatientId(null)
-            setFollowUpRecordId(null)
-            setFollowUpForm({ date: '', time: '', note: '' })
-            setIsFollowUpDatePickerOpen(false)
+            resetFollowUpDraft()
           }
         }}
       >
@@ -454,73 +724,128 @@ export function DoctorMedicalRecordsPage() {
               </div>
 
               <div className="space-y-4">
-                {patientDetail.records.map((record) => (
-                  <Card key={record.id} className="rounded-xl border border-[#e5e7eb]">
-                    <CardContent className="space-y-3 p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold text-[#111827]">
-                          Ngày khám: {formatDateDdMmYyyy(record.visitDate)}
+                {patientDetail.records.map((record) => {
+                  const hasFollowUpAppointment = Boolean(record.followUpAppointment || record.followUpAppointmentId)
+                  const followUpAppointment = record.followUpAppointment
+                  const followUpPaymentView = resolvePaymentStatusView(followUpAppointment?.paymentStatus)
+                  const followUpTypeLabel = followUpAppointment
+                    ? getAppointmentTypeDisplayLabel({
+                        type: followUpAppointment.type,
+                        appointmentType: followUpAppointment.type,
+                        typeCode: followUpAppointment.typeCode,
+                        appointmentTypeCode: followUpAppointment.appointmentTypeCode,
+                      })
+                    : 'Tái khám'
+
+                  return (
+                    <Card key={record.id} className="rounded-xl border border-[#e5e7eb]">
+                      <CardContent className="space-y-3 p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="font-semibold text-[#111827]">
+                            Ngày khám: {formatDateDdMmYyyy(record.visitDate)}
+                          </div>
+                          <Badge className="rounded-full border bg-sky-50 text-sky-700 border-sky-200">
+                            {getRecordTypeLabel(record)}
+                          </Badge>
                         </div>
-                        <Badge className="rounded-full border bg-sky-50 text-sky-700 border-sky-200">
-                          {normalizeTypeLabel(record.appointmentType)}
-                        </Badge>
-                      </div>
-                      <div className="text-sm text-[#6b7280]">
-                        Ngày tạo hồ sơ: {formatDateDdMmYyyy(record.recordCreatedAt || record.createdAt)}
-                      </div>
+                        <div className="text-sm text-[#6b7280]">
+                          Ngày tạo hồ sơ: {formatDateDdMmYyyy(record.recordCreatedAt || record.createdAt)}
+                        </div>
 
-                      <div><span className="font-semibold">Triệu chứng:</span> {safeString(record.symptoms) || '-'}</div>
-                      <div><span className="font-semibold">Chẩn đoán:</span> {safeString(record.diagnosis) || '-'}</div>
-                      <div><span className="font-semibold">Lời dặn bác sĩ:</span> {safeString(record.advice) || '-'}</div>
+                        <div><span className="font-semibold">Triệu chứng:</span> {safeString(record.symptoms) || '-'}</div>
+                        <div><span className="font-semibold">Chẩn đoán:</span> {safeString(record.diagnosis) || '-'}</div>
+                        <div><span className="font-semibold">Lời dặn bác sĩ:</span> {safeString(record.advice) || '-'}</div>
 
-                      <div>
-                        <p className="font-semibold">Thuốc đã kê:</p>
-                        <ul className="ml-5 list-disc text-sm text-[#374151]">
-                          {(record.medicines ?? []).map((medicine, index) => (
-                            <li key={index}>
-                              {safeString(medicine.medicineName) || '-'}
-                              {medicine.quantity ? ` - ${medicine.quantity}` : ''}
-                              {safeString(medicine.dosage) ? ` - ${safeString(medicine.dosage)}` : ''}
-                              {safeString(medicine.note) ? ` (${safeString(medicine.note)})` : ''}
-                            </li>
-                          ))}
-                          {(record.medicines ?? []).length === 0 && <li>-</li>}
-                        </ul>
-                      </div>
+                        <div>
+                          <p className="font-semibold">Thuốc đã kê:</p>
+                          <ul className="ml-5 list-disc text-sm text-[#374151]">
+                            {(record.medicines ?? []).map((medicine, index) => (
+                              <li key={index}>
+                                {safeString(medicine.medicineName) || '-'}
+                                {medicine.quantity ? ` - ${medicine.quantity}` : ''}
+                                {safeString(medicine.dosage) ? ` - ${safeString(medicine.dosage)}` : ''}
+                                {safeString(medicine.note) ? ` (${safeString(medicine.note)})` : ''}
+                              </li>
+                            ))}
+                            {(record.medicines ?? []).length === 0 && <li>-</li>}
+                          </ul>
+                        </div>
 
-                      <div>
-                        <p className="font-semibold">Dịch vụ y tế đã sử dụng:</p>
-                        <ul className="ml-5 list-disc text-sm text-[#374151]">
-                          {(record.medicalServices ?? []).map((service, index) => (
-                            <li key={index}>
-                              {safeString(service.serviceName) || '-'}
-                              {safeString(service.note) ? ` (${safeString(service.note)})` : ''}
-                            </li>
-                          ))}
-                          {(record.medicalServices ?? []).length === 0 && <li>-</li>}
-                        </ul>
-                      </div>
+                        <div>
+                          <p className="font-semibold">Dịch vụ y tế đã sử dụng:</p>
+                          <ul className="ml-5 list-disc text-sm text-[#374151]">
+                            {(record.medicalServices ?? []).map((service, index) => (
+                              <li key={index}>
+                                {safeString(service.serviceName) || '-'}
+                                {safeString(service.note) ? ` (${safeString(service.note)})` : ''}
+                              </li>
+                            ))}
+                            {(record.medicalServices ?? []).length === 0 && <li>-</li>}
+                          </ul>
+                        </div>
 
-                      <div className="pt-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setFollowUpRecordId(record.id)
-                            setFollowUpForm({ date: '', time: '', note: '' })
-                            setIsFollowUpDatePickerOpen(false)
-                          }}
-                        >
-                          Tạo lịch tái khám
-                        </Button>
-                      </div>
+                      {hasFollowUpAppointment ? (
+                        <div className="rounded-2xl border border-teal-200 bg-teal-50/80 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-teal-950">Lịch tái khám đã tạo</p>
+                              <p className="text-xs text-teal-800">
+                                Hồ sơ này đã có lịch tái khám liên kết theo contract mới.
+                              </p>
+                            </div>
+                            {followUpAppointment ? (
+                              <Badge
+                                className={`rounded-full border ${getAppointmentStatusClass(
+                                  followUpAppointment.status,
+                                  followUpAppointment.statusDisplay
+                                )}`}
+                              >
+                                {getAppointmentStatusLabel(
+                                  followUpAppointment.status,
+                                  followUpAppointment.statusDisplay
+                                )}
+                              </Badge>
+                            ) : null}
+                          </div>
 
-                      {followUpRecordId === record.id && (
+                          {followUpAppointment ? (
+                            <div className="mt-3 grid gap-2 text-sm text-slate-700 md:grid-cols-2">
+                              <div><span className="font-semibold">Mã lịch:</span> {safeString(followUpAppointment.appointmentCode) || safeString(followUpAppointment.appointmentId) || '-'}</div>
+                              <div><span className="font-semibold">Thời gian:</span> {formatDateTimeDisplay(followUpAppointment.appointmentDateTime, followUpAppointment.appointmentDate, followUpAppointment.appointmentTime)}</div>
+                              <div><span className="font-semibold">Loại khám:</span> {followUpTypeLabel}</div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold">Thanh toán:</span>
+                                <Badge className={cn('rounded-full border', followUpPaymentView.className)}>
+                                  {followUpPaymentView.label}
+                                </Badge>
+                              </div>
+                              <div><span className="font-semibold">Phí khám:</span> {formatCurrencyVnd(followUpAppointment.consultationFee)}</div>
+                              <div className="md:col-span-2"><span className="font-semibold">Ghi chú:</span> {safeString(followUpAppointment.note) || '-'}</div>
+                            </div>
+                          ) : (
+                            <div className="mt-3 rounded-xl border border-dashed border-teal-200 bg-white/80 px-3 py-3 text-sm text-slate-700">
+                              Mã lịch tái khám: {safeString(record.followUpAppointmentId) || '-'}.
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="pt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => resetFollowUpDraft(record.id)}
+                          >
+                            Tạo lịch tái khám
+                          </Button>
+                        </div>
+                      )}
+
+                      {!hasFollowUpAppointment && followUpRecordId === record.id && (
                         <div className="space-y-4 rounded-xl border border-[#e5e7eb] bg-slate-50 p-4">
                           <div>
                             <p className="text-sm font-semibold text-[#111827]">Tạo lịch tái khám</p>
                             <p className="text-xs text-[#6b7280]">
-                              Chọn ngày tái khám và nhập giờ theo định dạng 24h để bệnh nhân dễ theo dõi.
+                              Chọn ngày và khung giờ còn trống để tạo lịch tái khám cho bệnh nhân.
                             </p>
                           </div>
 
@@ -550,7 +875,10 @@ export function DoctorMedicalRecordsPage() {
                                       setFollowUpForm((prev) => ({
                                         ...prev,
                                         date: formatDateAsIso(normalizedDate),
+                                        time: '',
                                       }))
+                                      setFollowUpErrors({})
+                                      setFollowUpSubmitError('')
                                       setIsFollowUpDatePickerOpen(false)
                                     }}
                                     disabled={(date) => toDateOnly(date) < todayDateOnly}
@@ -558,45 +886,96 @@ export function DoctorMedicalRecordsPage() {
                                   />
                                 </PopoverContent>
                               </Popover>
-                              <p className="mt-1 text-xs text-[#6b7280]">Chỉ chọn từ hôm nay trở đi.</p>
+                              {followUpErrors.followUpDate ? (
+                                <p className="mt-1 text-xs text-red-600">{followUpErrors.followUpDate}</p>
+                              ) : (
+                                <p className="mt-1 text-xs text-[#6b7280]">Chỉ chọn từ hôm nay trở đi.</p>
+                              )}
                             </div>
 
-                            <div className="xl:col-span-3">
+                            <div className="xl:col-span-4">
                               <Label className="mb-1.5 block">Giờ tái khám</Label>
-                              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                                {followUpAvailableTimeSlots.map((slot) => (
-                                  <button
-                                    key={slot.value}
-                                    type="button"
-                                    disabled={slot.disabled}
-                                    onClick={() => setFollowUpForm((prev) => ({ ...prev, time: slot.value }))}
-                                    className={
-                                      `rounded-xl border px-3 py-2 text-sm font-medium transition ${
-                                        followUpForm.time === slot.value
-                                          ? 'border-teal-600 bg-teal-600 text-white'
-                                          : 'border-slate-200 bg-white text-slate-700 hover:border-teal-500 hover:text-teal-700'
-                                      }` + (slot.disabled ? ' cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-100 hover:text-slate-400' : '')
-                                    }
-                                  >
-                                    {slot.value}
-                                  </button>
-                                ))}
-                              </div>
+                              {followUpDoctorLoading ? (
+                                <div className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                                  Đang xác định bác sĩ để tải khung giờ tái khám...
+                                </div>
+                              ) : !followUpForm.date ? (
+                                <div className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                                  Chọn ngày trước để hiển thị khung giờ khả dụng.
+                                </div>
+                              ) : followUpDoctorError ? (
+                                <div className="rounded-lg border border-dashed border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                                  {followUpDoctorError}
+                                </div>
+                              ) : followUpSlotsLoading ? (
+                                <div className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                                  Đang tải khung giờ tái khám...
+                                </div>
+                              ) : followUpSlotViews.length > 0 ? (
+                                <div className="space-y-3">
+                                  <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                      Ngày đang chọn
+                                    </p>
+                                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                                      {formatDateDisplay(followUpForm.date)}
+                                    </p>
+                                  </div>
+                                  {!hasAvailableFollowUpSlots ? (
+                                    <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                                      Ngày này hiện không còn khung giờ khả dụng. Vui lòng chọn ngày khác.
+                                    </div>
+                                  ) : null}
+                                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                                    {followUpSlotViews.map((slot) => {
+                                      const isSelected = followUpForm.time === slot.value
+                                      return (
+                                        <button
+                                          key={slot.value}
+                                          type="button"
+                                          disabled={slot.disabled}
+                                          onClick={() => {
+                                            setFollowUpForm((prev) => ({ ...prev, time: slot.value }))
+                                            setFollowUpErrors((prev) => ({ ...prev, followUpTime: undefined }))
+                                            setFollowUpSubmitError('')
+                                          }}
+                                          className={getFollowUpSlotButtonClass(slot.state, isSelected)}
+                                        >
+                                          {isSelected ? <Check className="absolute right-2 top-2 h-3.5 w-3.5" /> : null}
+                                          <span className="w-full text-center">{slot.label}</span>
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-3 py-3 text-sm text-slate-600">
+                                  Không có khung giờ nào được trả về cho ngày này. Vui lòng thử ngày khác.
+                                </div>
+                              )}
                               <input type="hidden" value={followUpForm.time} />
-                              <p className="mt-1 text-xs text-[#6b7280]">
-                                Chọn giờ giống như khi đặt lịch khám. Nếu chưa chọn ngày, hãy chọn ngày trước.
-                              </p>
+                              {followUpSlotsError ? (
+                                <p className="mt-1 text-xs text-amber-700">{followUpSlotsError}</p>
+                              ) : (
+                                <p className="mt-1 text-xs text-[#6b7280]">
+                                  Chọn khung giờ còn trống theo lịch làm việc của bác sĩ.
+                                </p>
+                              )}
+                              {followUpErrors.followUpTime ? (
+                                <p className="mt-1 text-xs text-red-600">{followUpErrors.followUpTime}</p>
+                              ) : null}
                             </div>
 
-                            <div className="xl:col-span-5">
-                              <Label className="mb-1.5 block">Ghi chú</Label>
+                            <div className="xl:col-span-4">
+                              <Label className="mb-1.5 block">Ghi chú tái khám</Label>
                               <Textarea
                                 value={followUpForm.note}
                                 rows={3}
                                 placeholder="Ghi chú thêm cho lần tái khám (nếu có)"
-                                onChange={(event) =>
+                                onChange={(event) => {
                                   setFollowUpForm((prev) => ({ ...prev, note: event.target.value }))
-                                }
+                                  setFollowUpSubmitError('')
+                                }}
                               />
                             </div>
                           </div>
@@ -609,14 +988,16 @@ export function DoctorMedicalRecordsPage() {
                             </div>
                           )}
 
+                          {followUpSubmitError ? (
+                            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+                              {followUpSubmitError}
+                            </div>
+                          ) : null}
+
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="outline"
-                              onClick={() => {
-                                setFollowUpRecordId(null)
-                                setFollowUpForm({ date: '', time: '', note: '' })
-                                setIsFollowUpDatePickerOpen(false)
-                              }}
+                              onClick={() => resetFollowUpDraft()}
                             >
                               Hủy
                             </Button>
@@ -626,9 +1007,10 @@ export function DoctorMedicalRecordsPage() {
                           </div>
                         </div>
                       )}
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
 
                 {patientDetail.records.length === 0 && (
                   <Card className="rounded-xl border border-[#e5e7eb]">

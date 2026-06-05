@@ -21,6 +21,7 @@ import {
   shouldOmitInvoiceQueryValue,
   type InvoiceItem,
 } from '@/lib/invoice-contract'
+import { normalizeAppointmentTypeCode } from '@/lib/appointment-type'
 import { mockApi } from './mock-api'
 import {
   getStoredRole,
@@ -85,6 +86,8 @@ export interface PatientMedicalRecordServiceItem {
 export interface PatientMedicalRecordInvoice {
   id?: string
   invoiceCode?: string
+  invoiceCategory?: string
+  invoiceCategoryDisplay?: string
   status?: string
   consultationFee?: number
   medicineFee?: number
@@ -99,11 +102,18 @@ export interface PatientMedicalRecordInvoice {
 export interface PatientMedicalRecordFollowUp {
   appointmentId?: string
   appointmentCode?: string
+  appointmentDateTime?: string
   appointmentDate?: string
   appointmentTime?: string
+  type?: string
+  typeCode?: string
+  appointmentTypeCode?: string
   status?: string
   statusDisplay?: string
   statusColor?: string
+  paymentStatus?: string
+  consultationFee?: number
+  note?: string
 }
 
 export interface PatientMedicalRecord {
@@ -115,6 +125,8 @@ export interface PatientMedicalRecord {
   appointmentCode?: string
   appointmentDate?: string
   appointmentTime?: string
+  typeCode?: string
+  appointmentTypeCode?: string
   doctorName?: string
   doctor?: PatientMedicalRecordDoctor
   patient?: {
@@ -354,7 +366,7 @@ function normalizeAppointment(raw: unknown): Appointment | null {
     parseTimeTo24h(dateFromLabel.time) ??
     parseTimeTo24h(source.appointmentTimeLabel)
 
-  const appointmentType = pickString(source.appointmentType, source.type)
+  const appointmentType = pickString(source.type, source.appointmentType)
   const appointmentTimeLabel = pickString(
     source.appointmentTimeLabel,
     appointmentDate && appointmentTime ? `${appointmentDate} ${appointmentTime}` : undefined,
@@ -381,6 +393,8 @@ function normalizeAppointment(raw: unknown): Appointment | null {
       : undefined,
     doctorId: pickString(source.doctorId, doctor?.id),
     doctorName: pickString(source.doctorName, doctor?.fullName, doctor?.name),
+    specialtyName: pickString(source.specialtyName, specialty?.name),
+    serviceName: pickString(source.serviceName, medicalService?.name),
     specialty: source.specialty
       ? typeof source.specialty === 'string'
         ? source.specialty
@@ -396,6 +410,8 @@ function normalizeAppointment(raw: unknown): Appointment | null {
     appointmentTime,
     type: pickString(source.type, appointmentType),
     appointmentType,
+    typeCode: normalizeAppointmentTypeCode(source.typeCode, source.appointmentTypeCode),
+    appointmentTypeCode: normalizeAppointmentTypeCode(source.appointmentTypeCode, source.typeCode),
     status: pickString(source.status),
     statusDisplay: pickString(source.statusDisplay),
     statusColor: pickString(source.statusColor),
@@ -432,9 +448,14 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
   const invoice = asRecord(source.invoice ?? source.afterExamInvoice ?? source.postExamInvoice)
   const followUp = asRecord(source.followUp ?? source.followUpAppointment)
   const invoiceData = invoice || (source.invoiceCode || source.invoiceId || source.invoiceStatus ? source : null)
+  const followUpDateTime = pickString(source.followUpAppointmentDateTime, followUp?.appointmentDateTime)
   const followUpData =
     followUp ||
-    (source.followUpAppointmentId || source.followUpAppointmentCode || source.followUpDate || source.followUpTime
+    (source.followUpAppointmentId ||
+    source.followUpAppointmentCode ||
+    source.followUpDate ||
+    source.followUpTime ||
+    followUpDateTime
       ? source
       : null)
 
@@ -514,6 +535,8 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
     if (!invoiceData) return null
     const invoiceId = pickString(invoiceData.id, invoiceData.invoiceId)
     const invoiceCode = pickString(invoiceData.invoiceCode, invoiceData.code)
+    const invoiceCategory = pickString(invoiceData.invoiceCategory, invoiceData.category)
+    const invoiceCategoryDisplay = pickString(invoiceData.invoiceCategoryDisplay, invoiceData.categoryDisplay)
     const invoiceStatus = pickString(invoiceData.status, invoiceData.invoiceStatus)
     const consultationFee = pickNumber(invoiceData.consultationFee)
     const medicineFee = pickNumber(invoiceData.medicineFee, invoiceData.medicineTotal)
@@ -536,6 +559,8 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
     return {
       id: invoiceId,
       invoiceCode,
+      invoiceCategory,
+      invoiceCategoryDisplay,
       status: invoiceStatus,
       consultationFee,
       medicineFee,
@@ -557,6 +582,18 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
     appointmentCode: pickString(source.appointmentCode, appointment?.appointmentCode, appointment?.code),
     appointmentDate,
     appointmentTime,
+    typeCode: normalizeAppointmentTypeCode(
+      source.typeCode,
+      source.appointmentTypeCode,
+      appointment?.typeCode,
+      appointment?.appointmentTypeCode
+    ),
+    appointmentTypeCode: normalizeAppointmentTypeCode(
+      source.appointmentTypeCode,
+      source.typeCode,
+      appointment?.appointmentTypeCode,
+      appointment?.typeCode
+    ),
     doctorName: pickString(source.doctorName, doctor?.fullName, doctor?.name),
     doctor: doctor || source.doctorName
       ? {
@@ -575,8 +612,8 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
           email: pickString(patient.email),
         }
       : undefined,
-    diagnosis: pickString(source.diagnosis),
-    symptoms: pickString(source.symptoms),
+    diagnosis: pickString(source.diagnosis, appointment?.diagnosis),
+    symptoms: pickString(source.symptoms, appointment?.symptoms, source.reason, source.description),
     advice: pickString(source.advice, source.doctorAdvice),
     treatmentPlan: pickString(source.treatmentPlan, source.plan),
     prescriptionText: pickString(source.prescriptionText, source.prescription),
@@ -592,16 +629,30 @@ function normalizePatientMedicalRecord(raw: unknown): PatientMedicalRecord | nul
             followUpData.code,
             followUpData.followUpAppointmentCode
           ),
-          appointmentDate: pickString(followUpData.appointmentDate, followUpData.date, followUpData.followUpDate),
-          appointmentTime: pickString(
-            followUpData.appointmentTime,
-            followUpData.time,
-            followUpData.appointmentTimeLabel,
-            followUpData.followUpTime
+          appointmentDateTime: pickString(followUpData.appointmentDateTime, followUpData.followUpAppointmentDateTime),
+          appointmentDate: pickString(
+            followUpData.appointmentDate,
+            followUpData.date,
+            followUpData.followUpDate,
+            extractDateTimeParts(followUpData.appointmentDateTime).date,
+            extractDateTimeParts(followUpData.followUpAppointmentDateTime).date
           ),
+          appointmentTime:
+            parseTimeTo24h(followUpData.appointmentTime) ??
+            parseTimeTo24h(followUpData.time) ??
+            parseTimeTo24h(followUpData.appointmentTimeLabel) ??
+            parseTimeTo24h(followUpData.followUpTime) ??
+            parseTimeTo24h(extractDateTimeParts(followUpData.appointmentDateTime).time) ??
+            parseTimeTo24h(extractDateTimeParts(followUpData.followUpAppointmentDateTime).time),
+          type: pickString(followUpData.type, followUpData.appointmentType),
+          typeCode: normalizeAppointmentTypeCode(followUpData.typeCode, followUpData.appointmentTypeCode),
+          appointmentTypeCode: normalizeAppointmentTypeCode(followUpData.appointmentTypeCode, followUpData.typeCode),
           status: pickString(followUpData.status, followUpData.followUpStatus),
           statusDisplay: pickString(followUpData.statusDisplay, followUpData.followUpStatusDisplay),
           statusColor: pickString(followUpData.statusColor, followUpData.followUpStatusColor),
+          paymentStatus: pickString(followUpData.paymentStatus, followUpData.followUpPaymentStatus),
+          consultationFee: pickNumber(followUpData.consultationFee),
+          note: pickString(followUpData.note),
         }
       : undefined,
     createdAt: pickString(source.createdAt, source.recordCreatedAt),

@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle2, Loader2, Printer, RefreshCw } from 'lucide-r
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getAppointmentStatusLabel, resolvePaymentStatusView } from '@/lib/appointment-status'
-import { getInvoiceStatusClass, getInvoiceStatusLabel } from '@/lib/invoice-contract'
+import { getInvoiceStatusClass, getInvoiceStatusLabel, shouldShowInvoiceConsultationFee } from '@/lib/invoice-contract'
 import { api } from '@/services/api'
 import type {
   AppointmentReceipt,
@@ -296,24 +296,32 @@ function buildInvoiceViewModel(
   const invoice = receipt?.invoice ?? {}
   const payment = receipt?.payment
   const invoiceStatus = normalizeInvoiceStatus(invoice.status ?? payment?.status)
+  const showConsultationFee = shouldShowInvoiceConsultationFee(invoice)
+  const subjectRows: DetailRow[] = [
+    { label: 'Mã hóa đơn', value: invoice.invoiceCode || fallbackId || '-' },
+    { label: 'Loại hóa đơn', value: invoice.invoiceCategoryDisplay || '-' },
+    { label: 'Bác sĩ', value: invoice.doctorName || '-' },
+    { label: 'Dịch vụ', value: invoice.serviceName || '-' },
+  ]
+
+  if (showConsultationFee) {
+    subjectRows.push({ label: 'Phí khám', value: formatCurrencyValue(invoice.consultationFee) })
+  }
+
+  subjectRows.push(
+    { label: 'Tiền thuốc', value: formatCurrencyValue(invoice.medicineFee) },
+    { label: 'Tiền dịch vụ', value: formatCurrencyValue(invoice.serviceFee) },
+    {
+      label: 'Tổng cộng',
+      value: formatCurrencyValue(invoice.totalAmount ?? payment?.amount),
+      valueClassName: 'font-semibold text-primary',
+    }
+  )
 
   return {
     referenceValue: invoice.invoiceCode || fallbackId || '-',
     patient,
-    subjectRows: [
-      { label: 'Mã hóa đơn', value: invoice.invoiceCode || fallbackId || '-' },
-      { label: 'Loại hóa đơn', value: invoice.invoiceCategoryDisplay || '-' },
-      { label: 'Bác sĩ', value: invoice.doctorName || '-' },
-      { label: 'Dịch vụ', value: invoice.serviceName || '-' },
-      { label: 'Phí khám', value: formatCurrencyValue(invoice.consultationFee) },
-      { label: 'Tiền thuốc', value: formatCurrencyValue(invoice.medicineFee) },
-      { label: 'Tiền dịch vụ', value: formatCurrencyValue(invoice.serviceFee) },
-      {
-        label: 'Tổng cộng',
-        value: formatCurrencyValue(invoice.totalAmount ?? payment?.amount),
-        valueClassName: 'font-semibold text-primary',
-      },
-    ],
+    subjectRows,
     paymentRows: buildPaymentRows(payment, payment?.amount ?? invoice.totalAmount, fallbackResponseCode),
     paymentStatus: {
       label: getInvoiceStatusLabel(invoiceStatus, invoice.paymentStatusDisplay ?? payment?.statusDisplay),

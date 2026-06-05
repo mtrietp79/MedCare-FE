@@ -167,6 +167,8 @@ export interface Appointment {
   }
   doctorId?: string
   doctorName?: string
+  specialtyName?: string
+  serviceName?: string
   specialty?: string | {
     id?: string
     name?: string
@@ -178,6 +180,8 @@ export interface Appointment {
   appointmentTime?: string
   type?: string
   appointmentType?: string
+  typeCode?: string
+  appointmentTypeCode?: string
   status?:
     | 'PENDING'
     | 'CONFIRMED'
@@ -275,6 +279,7 @@ export interface InvoiceReceipt {
   patient: PaymentReceiptPatient
   invoice: {
     invoiceCode?: string
+    invoiceCategory?: string
     invoiceCategoryDisplay?: string
     doctorName?: string
     serviceName?: string

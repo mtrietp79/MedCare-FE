@@ -1,4 +1,5 @@
 import { doctorApiClient } from './doctorApiClient'
+import { normalizeAppointmentTypeCode } from '@/lib/appointment-type'
 
 export interface DoctorAppointment {
   id: string
@@ -16,6 +17,8 @@ export interface DoctorAppointment {
   medicalService?: { id?: string; name?: string } | null
   type?: string
   appointmentType?: string
+  typeCode?: string
+  appointmentTypeCode?: string
   status?: string
   statusDisplay?: string
   statusColor?: string
@@ -80,10 +83,14 @@ export interface CompleteAppointmentInvoice {
 
 export interface CompleteFollowUpAppointment {
   id?: string | number
+  appointmentCode?: string
+  appointmentDateTime?: string
   appointmentDate?: string
   appointmentTime?: string
   appointmentType?: string
   type?: string
+  typeCode?: string
+  appointmentTypeCode?: string
   status?: string
   statusDisplay?: string
   consultationFee?: number
@@ -268,8 +275,10 @@ function normalizeDoctorAppointment(raw: unknown): DoctorAppointment | null {
           name: pickString(medicalService.name),
         }
       : null,
-    type: pickString(source.appointmentType, source.type),
-    appointmentType: pickString(source.appointmentType, source.type),
+    type: pickString(source.type, source.appointmentType),
+    appointmentType: pickString(source.type, source.appointmentType),
+    typeCode: normalizeAppointmentTypeCode(source.typeCode, source.appointmentTypeCode),
+    appointmentTypeCode: normalizeAppointmentTypeCode(source.appointmentTypeCode, source.typeCode),
     status: pickString(source.status),
     statusDisplay: pickString(source.statusDisplay),
     statusColor: pickString(source.statusColor),
@@ -292,7 +301,7 @@ function normalizeCompleteResponse(raw: unknown): CompleteAppointmentResponse {
   return {
     message: pickString(source.message),
     appointmentId: source.appointmentId,
-    appointmentType: pickString(source.appointmentType, source.type),
+    appointmentType: pickString(source.type, source.appointmentType),
     status: pickString(source.status),
     statusDisplay: pickString(source.statusDisplay),
     invoice: invoice
@@ -308,13 +317,28 @@ function normalizeCompleteResponse(raw: unknown): CompleteAppointmentResponse {
     followUpAppointment: followUpAppointment
       ? {
           id: pickString(followUpAppointment.id),
-          appointmentDate: pickString(followUpAppointment.appointmentDate, followUpAppointment.date),
+          appointmentCode: pickString(followUpAppointment.appointmentCode, followUpAppointment.code),
+          appointmentDateTime: pickString(followUpAppointment.appointmentDateTime),
+          appointmentDate: pickString(
+            followUpAppointment.appointmentDate,
+            followUpAppointment.date,
+            extractDateTimeParts(followUpAppointment.appointmentDateTime).date
+          ),
           appointmentTime:
             parseTimeTo24h(followUpAppointment.appointmentTime) ??
             parseTimeTo24h(followUpAppointment.time) ??
-            parseTimeTo24h(followUpAppointment.appointmentTimeLabel),
-          appointmentType: pickString(followUpAppointment.appointmentType, followUpAppointment.type),
-          type: pickString(followUpAppointment.appointmentType, followUpAppointment.type),
+            parseTimeTo24h(followUpAppointment.appointmentTimeLabel) ??
+            parseTimeTo24h(extractDateTimeParts(followUpAppointment.appointmentDateTime).time),
+          appointmentType: pickString(followUpAppointment.type, followUpAppointment.appointmentType),
+          type: pickString(followUpAppointment.type, followUpAppointment.appointmentType),
+          typeCode: normalizeAppointmentTypeCode(
+            followUpAppointment.typeCode,
+            followUpAppointment.appointmentTypeCode
+          ),
+          appointmentTypeCode: normalizeAppointmentTypeCode(
+            followUpAppointment.appointmentTypeCode,
+            followUpAppointment.typeCode
+          ),
           status: pickString(followUpAppointment.status),
           statusDisplay: pickString(followUpAppointment.statusDisplay, followUpAppointment.followUpStatusDisplay),
           consultationFee: pickNumber(followUpAppointment.consultationFee),

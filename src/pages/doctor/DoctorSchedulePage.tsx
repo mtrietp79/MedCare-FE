@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 import { doctorAppointmentService, type DoctorAppointment } from '@/services/doctorAppointmentService'
 import { safeString } from '@/lib/admin-normalizers'
+import { getAppointmentTypeLabel as getAppointmentTypeDisplayLabel } from '@/lib/appointment-type'
 import {
   getAppointmentStatusClass,
   getAppointmentStatusKey,
@@ -53,10 +54,13 @@ function getStartOfWeekMonday(date: Date): Date {
   return result
 }
 
-function normalizeType(type: string): string {
-  const lower = safeString(type).toLowerCase()
-  if (lower.includes('tai') || lower.includes('follow') || lower.includes('revisit')) return 'Tái khám'
-  return 'Khám bệnh'
+function getAppointmentTypeLabel(appointment: DoctorAppointment): string {
+  return getAppointmentTypeDisplayLabel({
+    type: appointment.type,
+    appointmentType: appointment.appointmentType,
+    typeCode: appointment.typeCode,
+    appointmentTypeCode: appointment.appointmentTypeCode,
+  })
 }
 
 function getCellClass(count?: number): string {
@@ -362,7 +366,7 @@ export function DoctorSchedulePage() {
                 <TableRow key={appointment.id}>
                   <TableCell>{safeString(appointment.patient?.fullName) || safeString(appointment.patientName) || '-'}</TableCell>
                   <TableCell>{getAppointmentTimeLabel(appointment)}</TableCell>
-                  <TableCell>{normalizeType(safeString(appointment.appointmentType) || safeString(appointment.type))}</TableCell>
+                  <TableCell>{getAppointmentTypeLabel(appointment)}</TableCell>
                   <TableCell>
                     <Badge
                       className={`rounded-full border ${getAppointmentStatusClass(

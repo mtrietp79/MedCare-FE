@@ -4,34 +4,73 @@ import {
   shouldOmitInvoiceQueryValue,
   type InvoiceItem,
 } from '@/lib/invoice-contract'
+import axios from 'axios'
+import { handleProtectedApiAuthFailure } from './auth'
 
 
-interface AdminDashboardSummary {
-  totalPatients: number
-  totalDoctors: number
-  totalAppointments: number
-  totalRevenue: number
-  todayAppointments: number
-  pendingAppointments: number
+export interface AdminDashboardSummary {
+  totalPatients?: number | null
+  activePatients?: number | null
+  patientCount?: number | null
+  patients?: number | null
+  totalDoctors?: number | null
+  workingDoctors?: number | null
+  activeDoctors?: number | null
+  doctorCount?: number | null
+  doctors?: number | null
+  totalAppointments?: number | null
+  appointmentCount?: number | null
+  appointments?: number | null
+  totalRevenue?: number | null
+  monthlyRevenue?: number | null
+  revenue?: number | null
+  appointmentGrowthPercent?: number | null
+  appointmentGrowth?: number | null
+  patientGrowthPercent?: number | null
+  patientGrowth?: number | null
+  doctorGrowth?: number | null
+  doctorDelta?: number | null
+  revenueGrowthPercent?: number | null
+  revenueGrowth?: number | null
+  todayAppointments?: number | null
+  pendingAppointments?: number | null
 }
 
-interface AdminRecentAppointment {
-  id: string
-  patientName: string
-  doctorName: string
-  date: string
-  time: string
-  status: string
-  statusDisplay?: string
-  paymentStatus?: string
-  paymentStatusDisplay?: string
-  specialty: string
+export interface AdminRecentAppointment {
+  id?: string | number | null
+  patientName?: string | null
+  patient?: string | null
+  doctorName?: string | null
+  doctor?: string | null
+  date?: string | null
+  appointmentDate?: string | null
+  time?: string | null
+  appointmentTime?: string | null
+  status?: string | null
+  statusDisplay?: string | null
+  paymentStatus?: string | null
+  paymentStatusDisplay?: string | null
+  specialty?: string | null
+  specialtyName?: string | null
+  statusCode?: string | null
 }
 
-interface AdminRevenueData {
-  month: string
-  revenue: number
-  appointments: number
+export interface AdminRevenueData {
+  label?: string | null
+  month?: string | number | null
+  revenue?: number | null
+  total?: number | null
+  value?: number | null
+  appointments?: number | null
+}
+
+export interface AdminMonthlyPatientsData {
+  label?: string | null
+  month?: string | number | null
+  total?: number | null
+  count?: number | null
+  value?: number | null
+  patients?: number | null
 }
 
 interface AdminDoctor {
@@ -585,9 +624,45 @@ function getAdminDashboardAuthContext() {
   return { role, authHeader, isAdmin, isLoginRoute }
 }
 
+function isDashboardPayloadRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function unwrapAdminDashboardPayload<T>(input: unknown): T {
+  if (!isDashboardPayloadRecord(input)) {
+    return input as T
+  }
+
+  const nested = input.data
+  if (Array.isArray(nested) || isDashboardPayloadRecord(nested)) {
+    return nested as T
+  }
+
+  return input as T
+}
+
+function buildAdminDashboardUrl(path: string, params?: Record<string, string | number | undefined>) {
+  const endpoint = `${API_BASE_URL}${path}`
+  if (!params) return endpoint
+
+  const searchParams = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== '') {
+      searchParams.set(key, String(value))
+    }
+  })
+
+  const query = searchParams.toString()
+  return query ? `${endpoint}?${query}` : endpoint
+}
+
+function buildAdminDashboardHeaders(authHeader: string | null): Record<string, string> {
+  return authHeader ? { Authorization: authHeader } : {}
+}
+
 export const adminApi = {
   // Dashboard APIs
-  getSummary: (): Promise<AdminDashboardSummary> => {
+  getSummary: async (): Promise<AdminDashboardSummary> => {
     const { role, authHeader, isAdmin, isLoginRoute } = getAdminDashboardAuthContext()
     const endpoint = `${API_BASE_URL}/admin/dashboard/summary`
     console.debug('[AdminDashboardAPI] Request', {
@@ -601,22 +676,40 @@ export const adminApi = {
       console.debug('[AdminDashboardAPI] Skip request', {
         reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
       })
-      return Promise.resolve({
-        totalPatients: 0,
-        totalDoctors: 0,
-        totalAppointments: 0,
-        totalRevenue: 0,
-        todayAppointments: 0,
-        pendingAppointments: 0,
-      })
+      return {}
     }
-    const headers: Record<string, string> = authHeader ? { Authorization: authHeader } : {}
-    return fetchJson<AdminDashboardSummary>(endpoint, {
-      headers
-    });
+    const raw = await fetchJson<unknown>(endpoint, {
+      headers: buildAdminDashboardHeaders(authHeader)
+    })
+    const payload = unwrapAdminDashboardPayload<unknown>(raw)
+    return isDashboardPayloadRecord(payload) ? (payload as AdminDashboardSummary) : {}
   },
 
-  getRecentAppointments: (): Promise<AdminRecentAppointment[]> => {
+  getMonthlyPatients: async (year: number): Promise<AdminMonthlyPatientsData[]> => {
+    const { role, authHeader, isAdmin, isLoginRoute } = getAdminDashboardAuthContext()
+    const endpoint = buildAdminDashboardUrl('/admin/dashboard/monthly-patients', { year })
+    console.debug('[AdminDashboardAPI] Request', {
+      url: endpoint,
+      role,
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '',
+      hasAuthorizationHeader: Boolean(authHeader),
+      authorizationHeader: authHeader,
+      params: { year },
+    })
+    if (!isAdmin || !authHeader || isLoginRoute) {
+      console.debug('[AdminDashboardAPI] Skip request', {
+        reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
+      })
+      return []
+    }
+    const raw = await fetchJson<unknown>(endpoint, {
+      headers: buildAdminDashboardHeaders(authHeader)
+    })
+    const payload = unwrapAdminDashboardPayload<unknown>(raw)
+    return Array.isArray(payload) ? (payload as AdminMonthlyPatientsData[]) : []
+  },
+
+  getRecentAppointments: async (): Promise<AdminRecentAppointment[]> => {
     const { role, authHeader, isAdmin, isLoginRoute } = getAdminDashboardAuthContext()
     const endpoint = `${API_BASE_URL}/admin/dashboard/recent-appointments`
     console.debug('[AdminDashboardAPI] Request', {
@@ -630,36 +723,64 @@ export const adminApi = {
       console.debug('[AdminDashboardAPI] Skip request', {
         reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
       })
-      return Promise.resolve([])
+      return []
     }
-    const headers: Record<string, string> = authHeader ? { Authorization: authHeader } : {}
-    return fetchJson<AdminRecentAppointment[]>(endpoint, {
-      headers
-    });
+    const raw = await fetchJson<unknown>(endpoint, {
+      headers: buildAdminDashboardHeaders(authHeader)
+    })
+    const payload = unwrapAdminDashboardPayload<unknown>(raw)
+    return Array.isArray(payload) ? (payload as AdminRecentAppointment[]) : []
   },
 
-  // Note: backend may return { labels: string[], data: number[] } or an array
-  // of AdminRevenueData objects. Keep the return type flexible (any)
-  getRevenueChart: (): Promise<any> => {
+  getRevenueChart: async (year: number): Promise<AdminRevenueData[]> => {
     const { role, authHeader, isAdmin, isLoginRoute } = getAdminDashboardAuthContext()
-    const endpoint = `${API_BASE_URL}/admin/dashboard/revenue-chart`
+    const endpoint = buildAdminDashboardUrl('/admin/dashboard/revenue-chart', { year })
     console.debug('[AdminDashboardAPI] Request', {
       url: endpoint,
       role,
       pathname: typeof window !== 'undefined' ? window.location.pathname : '',
       hasAuthorizationHeader: Boolean(authHeader),
       authorizationHeader: authHeader,
+      params: { year },
     })
     if (!isAdmin || !authHeader || isLoginRoute) {
       console.debug('[AdminDashboardAPI] Skip request', {
         reason: isLoginRoute ? 'LOGIN_ROUTE_BLOCK' : (!isAdmin ? 'ROLE_NOT_ADMIN' : 'MISSING_TOKEN'),
       })
-      return Promise.resolve([])
+      return []
     }
-    const headers: Record<string, string> = authHeader ? { Authorization: authHeader } : {}
-    return fetchJson<AdminRevenueData[]>(endpoint, {
-      headers
-    });
+    const raw = await fetchJson<unknown>(endpoint, {
+      headers: buildAdminDashboardHeaders(authHeader)
+    })
+    const payload = unwrapAdminDashboardPayload<unknown>(raw)
+    return Array.isArray(payload) ? (payload as AdminRevenueData[]) : []
+  },
+
+  downloadDashboardReport: async (year: number): Promise<{ blob: Blob; contentDisposition: string | null }> => {
+    const { authHeader, isAdmin, isLoginRoute } = getAdminDashboardAuthContext()
+    const endpoint = `${API_BASE_URL}/admin/dashboard/report`
+
+    if (!isAdmin || !authHeader || isLoginRoute) {
+      throw new Error('Bạn không có quyền truy cập báo cáo dashboard.')
+    }
+
+    try {
+      const response = await axios.get(endpoint, {
+        headers: buildAdminDashboardHeaders(authHeader),
+        params: { year },
+        responseType: 'blob',
+      })
+
+      return {
+        blob: response.data,
+        contentDisposition: response.headers['content-disposition'] ?? null,
+      }
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        handleProtectedApiAuthFailure(error.response?.status ?? null, error.config?.url)
+      }
+      throw error
+    }
   },
 
   // Doctor Management APIs

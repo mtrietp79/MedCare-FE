@@ -1,4 +1,5 @@
 import { doctorApiClient } from './doctorApiClient'
+import { normalizeAppointmentTypeCode } from '@/lib/appointment-type'
 
 export interface WeekScheduleEntry {
   date?: string
@@ -18,6 +19,8 @@ export interface DayScheduleItem {
   timeLabel?: string
   type?: string
   appointmentType?: string
+  typeCode?: string
+  appointmentTypeCode?: string
   status?: string
   statusDisplay?: string
 }
@@ -57,8 +60,10 @@ function normalizeDayScheduleItem(raw: unknown): DayScheduleItem | null {
     appointmentTime: pickString(source.appointmentTime, source.time),
     time: pickString(source.time, source.appointmentTime),
     timeLabel: pickString(source.timeLabel, source.appointmentTime, source.time),
-    type: pickString(source.appointmentType, source.type),
-    appointmentType: pickString(source.appointmentType, source.type),
+    type: pickString(source.type, source.appointmentType),
+    appointmentType: pickString(source.type, source.appointmentType),
+    typeCode: normalizeAppointmentTypeCode(source.typeCode, source.appointmentTypeCode),
+    appointmentTypeCode: normalizeAppointmentTypeCode(source.appointmentTypeCode, source.typeCode),
     status: pickString(source.status),
     statusDisplay: pickString(source.statusDisplay),
   }

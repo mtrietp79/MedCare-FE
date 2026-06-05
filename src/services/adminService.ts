@@ -766,7 +766,10 @@ export const adminApi = {
 
     try {
       const response = await axios.get(endpoint, {
-        headers: buildAdminDashboardHeaders(authHeader),
+        headers: {
+          ...buildAdminDashboardHeaders(authHeader),
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
         params: { year },
         responseType: 'blob',
       })

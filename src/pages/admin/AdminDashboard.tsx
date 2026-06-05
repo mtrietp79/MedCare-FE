@@ -252,6 +252,9 @@ function getGrowthTone(value: number): string {
 
 function getErrorMessage(error: unknown, fallback: string): string {
   const status = Number((error as { status?: number; response?: { status?: number } })?.response?.status ?? (error as { status?: number })?.status)
+  if (status === 401) {
+    return 'Phiên đăng nhập hết hạn hoặc bạn không có quyền truy cập báo cáo. Vui lòng đăng nhập lại.'
+  }
   if (status === 403) {
     return 'Bạn không có quyền truy cập dữ liệu dashboard.'
   }
@@ -626,7 +629,7 @@ export function AdminDashboard() {
               </Button>
               <Button size="sm" onClick={() => void handleDownloadReport()} disabled={reportLoading}>
                 <Download className={cn('mr-2 h-4 w-4', reportLoading && 'animate-pulse')} />
-                Báo cáo
+                {reportLoading ? 'Đang xuất...' : 'Báo cáo'}
               </Button>
             </div>
           </div>

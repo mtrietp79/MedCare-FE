@@ -33,6 +33,6 @@ echo    Admin: admin@medcare.vn / admin123
 echo    Doctor: doctor@medcare.vn / doctor123
 echo    Patient: patient@medcare.vn / patient123
 echo.
-echo 📖 See TESTING.md for detailed test instructions
+echo 📖 See README.md for project setup instructions
 echo.
 pause

@@ -250,7 +250,7 @@ http://localhost:8080
 
 ## 🧪 Testing
 
-Xem chi tiết hướng dẫn testing tại [TESTING.md](./TESTING.md)
+Hướng dẫn testing cơ bản nằm ngay trong README này và hai script `test-setup.sh`, `test-setup.bat`.
 
 ### Quick Test Setup
 ```bash

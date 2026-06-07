@@ -335,6 +335,48 @@ function normalizeDoctorAppointment(raw: unknown): DoctorAppointment | null {
   }
 }
 
+function normalizeFollowUpSlot(raw: unknown): AppointmentSlotResponse | null {
+  const source = asObject(raw)
+  if (!source) return null
+
+  const time = pickString(source.time)
+  const startTime = pickString(source.startTime)
+  const totalSlots = pickNumber(source.totalSlots) ?? pickNumber(source.maxPatients) ?? 0
+  const bookedSlots = pickNumber(source.bookedSlots) ?? pickNumber(source.bookedPatients) ?? 0
+  const remainingSlots = pickNumber(source.remainingSlots) ?? Math.max(0, totalSlots - bookedSlots)
+  const disabled = Boolean(pickBoolean(source.disabled) ?? false)
+  const available = Boolean(
+    pickBoolean(source.available) ??
+      (!disabled && !(pickBoolean(source.full) ?? false))
+  )
+
+  if (typeof time === 'string') {
+    return {
+      time,
+      totalSlots,
+      bookedSlots,
+      remainingSlots,
+      available,
+      disabled,
+      disabledReason: pickString(source.disabledReason) ?? null,
+    }
+  }
+
+  if (typeof startTime === 'string') {
+    return {
+      time: startTime.slice(11, 16),
+      totalSlots,
+      bookedSlots,
+      remainingSlots,
+      available,
+      disabled,
+      disabledReason: pickString(source.disabledReason) ?? null,
+    }
+  }
+
+  return null
+}
+
 function normalizeAppointmentSlot(raw: unknown): AppointmentSlot | null {
   const source = asObject(raw)
   if (!source) return null
@@ -355,21 +397,8 @@ function normalizeAppointmentSlot(raw: unknown): AppointmentSlot | null {
   }
 }
 
-// Normalize AppointmentSlotResponse (new format for doctor follow-up slots)
 function normalizeAppointmentSlotResponse(raw: unknown): AppointmentSlotResponse | null {
-  const source = asObject(raw)
-  if (!source) return null
-
-  const time = pickString(source.time)
-  if (!time) return null
-
-  return {
-    time,
-    totalSlots: pickNumber(source.totalSlots) ?? 0,
-    bookedSlots: pickNumber(source.bookedSlots) ?? 0,
-    remainingSlots: pickNumber(source.remainingSlots) ?? 0,
-    available: Boolean(pickBoolean(source.available) ?? false),
-  }
+  return normalizeFollowUpSlot(raw)
 }
 
 function normalizeCompleteResponse(raw: unknown): CompleteAppointmentResponse {
@@ -503,15 +532,29 @@ export const doctorAppointmentService = {
     return normalizeCompleteResponse(data)
   },
 
-  async getFollowUpSlots(date: string): Promise<AppointmentSlot[]> {
+  async getFollowUpSlots(date: string): Promise<AppointmentSlotResponse[]> {
     const normalizedDate = normalizeDateToIsoDate(date)
     const { data } = await doctorApiClient.get('/doctor/follow-up-slots', {
       params: { date: normalizedDate },
     })
 
     return normalizeListResponse<unknown>(data)
-      .map((item) => normalizeAppointmentSlot(item))
-      .filter((item): item is AppointmentSlot => item !== null)
+      .map((item) => normalizeFollowUpSlot(item))
+      .filter((item): item is AppointmentSlotResponse => item !== null)
+  },
+
+  async getFollowUpSlotsByRecord(recordId: string, date: string): Promise<AppointmentSlotResponse[]> {
+    const normalizedDate = normalizeDateToIsoDate(date)
+    const { data } = await doctorApiClient.get(
+      `/doctor/medical-records/${recordId}/follow-up-slots`,
+      {
+        params: { date: normalizedDate },
+      }
+    )
+
+    return normalizeListResponse<unknown>(data)
+      .map((item) => normalizeFollowUpSlot(item))
+      .filter((item): item is AppointmentSlotResponse => item !== null)
   },
 
   async getFollowUpSlotsForAppointment(appointmentId: string, date: string): Promise<AppointmentSlotResponse[]> {
@@ -524,7 +567,7 @@ export const doctorAppointmentService = {
     )
 
     return normalizeListResponse<unknown>(data)
-      .map((item) => normalizeAppointmentSlotResponse(item))
+      .map((item) => normalizeFollowUpSlot(item))
       .filter((item): item is AppointmentSlotResponse => item !== null)
   },
 

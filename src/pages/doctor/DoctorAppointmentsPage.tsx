@@ -660,23 +660,14 @@ export function DoctorAppointmentsPage() {
 
     const mapped: FollowUpSlotView[] = []
     followUpSlots.forEach((slot) => {
-      const value = slot.time // New format: already in "HH:mm" format
-      
-      // Determine state based on new response format
-      const state: FollowUpSlotView['state'] = slot.available ? 'available' : 'full'
-      const disabled = !slot.available
-      
-      // Build display label with remaining slots
-      const slotCountLabel = slot.remainingSlots > 0 
-        ? `còn ${slot.remainingSlots}/${slot.totalSlots}`
-        : 'Hết slot'
+      const value = slot.time
+      const disabled = !slot.available || Boolean(slot.disabled)
+      const isFull = slot.remainingSlots === 0 || safeString(slot.disabledReason).toUpperCase() === 'FULL'
+      const state: FollowUpSlotView['state'] = slot.available && !disabled ? 'available' : isFull ? 'full' : 'disabled'
+
+      const slotCountLabel = isFull ? 'Hết slot' : `còn ${slot.remainingSlots}/${slot.totalSlots}`
       const label = `${value} (${slotCountLabel})`
-      
-      const disabledMessage = !slot.available 
-        ? slot.remainingSlots === 0 
-          ? 'Hết slot'
-          : 'Khung giờ này không khả dụng'
-        : undefined
+      const disabledMessage = disabled ? getFollowUpSlotDisabledMessage(slot.disabledReason, state) : undefined
 
       mapped.push({
         key: `${selectedDateKey}-${value}`,
@@ -684,6 +675,7 @@ export function DoctorAppointmentsPage() {
         label,
         disabled,
         state,
+        disabledReason: slot.disabledReason,
         disabledMessage,
       })
     })

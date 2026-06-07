@@ -59,6 +59,8 @@ export interface AppointmentSlotResponse {
   bookedSlots: number
   remainingSlots: number
   available: boolean
+  disabled?: boolean
+  disabledReason?: string | null
 }
 
 export interface PatientMedicalRecordDoctor {

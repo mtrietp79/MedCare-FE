@@ -110,6 +110,17 @@ function validateDoctorForm(form: DoctorForm, isEdit: boolean): FormErrors {
   return errors
 }
 
+function getDoctorLastName(fullName: string): string {
+  if (!fullName) return ''
+
+  const cleanedName = fullName
+    .replace(/^(PGS\.?\s*)?(TS\.?\s*)?(ThS\.?\s*)?(BS\.?CKII\.?|BS\.?CKI\.?|BS\.?CK\.?|BS\.?)\s*/i, '')
+    .trim()
+
+  const parts = cleanedName.split(/\s+/)
+  return parts[parts.length - 1] || ''
+}
+
 export function AdminDoctorsPage() {
   const { toast } = useToast()
 
@@ -187,19 +198,27 @@ export function AdminDoctorsPage() {
       return hitSearch && hitStatus
     })
 
-    result.sort((a, b) => {
+    const sortedDoctors = [...result].sort((a, b) => {
       if (sortBy === 'name_desc') {
-        return a.fullName.localeCompare(b.fullName) * -1
+        return getDoctorLastName(b.fullName).localeCompare(
+          getDoctorLastName(a.fullName),
+          'vi',
+          { sensitivity: 'base' }
+        )
       }
 
       if (sortBy === 'specialty_asc') {
         return a.specialtyName.localeCompare(b.specialtyName)
       }
 
-      return a.fullName.localeCompare(b.fullName)
+      return getDoctorLastName(a.fullName).localeCompare(
+        getDoctorLastName(b.fullName),
+        'vi',
+        { sensitivity: 'base' }
+      )
     })
 
-    return result
+    return sortedDoctors
   }, [doctors, debouncedSearch, statusFilter, sortBy])
 
   const resetForm = () => {

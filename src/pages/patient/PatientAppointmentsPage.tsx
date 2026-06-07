@@ -271,7 +271,7 @@ export function PatientAppointmentsPage() {
       setLoading(true)
       setError(null)
       const [appointmentsData, packageData] = await Promise.all([
-        api.appointments.getAll(),
+        api.patients.getMyAppointments(),
         api.patients.getServicePackageBookings().catch(() => []),
       ])
 
@@ -603,6 +603,9 @@ export function PatientAppointmentsPage() {
                           <p className="mt-1 text-sm font-medium text-foreground">
                             Loại khám: {appointmentTypeLabel}
                           </p>
+                          {isFollowUpAppointment ? (
+                            <p className="mt-1 text-xs text-amber-700">Lịch tái khám do bác sĩ hẹn</p>
+                          ) : null}
                           <p className="mt-1 text-sm text-muted-foreground">
                             {appointment.serviceName || appointment.medicalService?.name || 'Khám tổng quát'}
                           </p>

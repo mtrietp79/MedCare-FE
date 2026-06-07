@@ -423,8 +423,8 @@ export function AdminFinancePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredInvoices.map((invoice) => (
-                  <TableRow key={invoice.id}>
+                {filteredInvoices.map((invoice, index) => (
+                  <TableRow key={invoice.uniqueKey || `${invoice.sourceType}-${invoice.id}-${index}`}>
                     <TableCell>
                       <div className="font-medium">{getInvoiceCategoryLabel(invoice)}</div>
                       <div className="text-xs text-muted-foreground">{getInvoiceSourceLabel(invoice)}</div>

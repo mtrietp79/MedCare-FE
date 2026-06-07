@@ -14,7 +14,7 @@ function getSpecialtyId(doctor: Doctor) {
 }
 
 export function SpecialtyDetailPage() {
-  const { id } = useParams<{ id: string }>()
+  const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const [specialty, setSpecialty] = useState<Specialty | null>(null)
   const [doctors, setDoctors] = useState<Doctor[]>([])
@@ -22,10 +22,9 @@ export function SpecialtyDetailPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const specialtyId = Number(id)
-    console.log('SpecialtyDetailPage:', { id, specialtyId })
+    const specialtyKey = slug?.trim() || ''
 
-    if (!id?.trim() || Number.isNaN(specialtyId)) {
+    if (!specialtyKey) {
       setError('ID chuyên khoa không hợp lệ.')
       setLoading(false)
       const timeoutId = window.setTimeout(() => navigate('/specialty', { replace: true }), 2500)
@@ -37,14 +36,15 @@ export function SpecialtyDetailPage() {
         setLoading(true)
         setError(null)
 
-        const [specialtyData, doctorsData] = await Promise.all([
-          api.specialties.getById(String(specialtyId)),
-          api.doctors.getBySpecialtyId(String(specialtyId)),
-        ])
+        const numericSpecialtyId = Number(specialtyKey)
+        const specialtyData = Number.isNaN(numericSpecialtyId)
+          ? await api.specialties.getBySlug(specialtyKey)
+          : await api.specialties.getById(String(numericSpecialtyId))
+
+        const doctorsData = await api.doctors.getBySpecialtyId(String(specialtyData.id))
 
         setSpecialty(specialtyData)
         const doctorsArray = Array.isArray(doctorsData) ? doctorsData : []
-        console.log('SpecialtyDetailPage doctors in specialty:', doctorsArray.length)
         setDoctors(doctorsArray)
       } catch (err: any) {
         setError(err?.response?.data?.message || err?.message || 'Không thể tải dữ liệu chuyên khoa')
@@ -53,8 +53,8 @@ export function SpecialtyDetailPage() {
       }
     }
 
-    fetchData()
-  }, [id, navigate])
+    void fetchData()
+  }, [slug, navigate])
 
   if (loading) {
     return (

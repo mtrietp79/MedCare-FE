@@ -22,6 +22,7 @@ export interface MedicalRecordPatient {
 
 export interface MedicalRecordDetail {
   id: string
+  recordId: string
   recordCreatedAt?: string
   createdAt?: string
   appointmentId?: string
@@ -36,6 +37,7 @@ export interface MedicalRecordDetail {
   followUpAppointmentId?: string
   followUpAppointment?: {
     appointmentId?: string
+    parentAppointmentId?: string
     appointmentCode?: string
     appointmentDateTime?: string
     appointmentDate?: string
@@ -232,6 +234,7 @@ function normalizeRecord(raw: unknown): MedicalRecordDetail | null {
 
   return {
     id,
+    recordId: id,
     recordCreatedAt: pickString(source.recordCreatedAt, source.createdAt),
     createdAt: pickString(source.createdAt, source.recordCreatedAt),
     appointmentId: pickString(source.appointmentId, appointment?.id),
@@ -251,6 +254,13 @@ function normalizeRecord(raw: unknown): MedicalRecordDetail | null {
       source.followUpAppointmentDateTime
         ? {
             appointmentId: pickString(source.followUpAppointmentId, followUpAppointment?.appointmentId, followUpAppointment?.id),
+            parentAppointmentId: pickString(
+              followUpAppointment?.parentAppointmentId,
+              source.parentAppointmentId,
+              source.followUpParentAppointmentId,
+              appointment?.id,
+              source.appointmentId
+            ),
             appointmentCode: pickString(
               source.followUpAppointmentCode,
               followUpAppointment?.appointmentCode,
@@ -325,11 +335,25 @@ interface CreateFollowUpPayload {
 }
 
 function buildCreateFollowUpPayload(payload: CreateFollowUpPayload) {
+  const followUpDate = pickString(payload.followUpDate)
+  const followUpTime = parseTimeTo24h(payload.followUpTime)
+  const note = pickString(payload.note)
+
   return {
-    followUpDate: pickString(payload.followUpDate),
-    followUpTime: parseTimeTo24h(payload.followUpTime),
-    note: pickString(payload.note),
+    followUpDate,
+    followUpTime,
+    note,
   }
+}
+
+export interface CreateFollowUpResponse {
+  id?: string | number
+  appointmentDate?: string
+  appointmentTime?: string
+  type?: string
+  status?: string
+  paymentStatus?: string
+  consultationFee?: number
 }
 
 export const doctorMedicalRecordService = {
@@ -349,12 +373,12 @@ export const doctorMedicalRecordService = {
   },
 
   async getPatientRecords(patientId: string) {
-    const { data } = await doctorApiClient.get(`/doctor/medical-records/patients/${patientId}`)
+    const { data } = await doctorApiClient.get(`/doctor/medical-records/${patientId}`)
     return normalizePatientRecordDetailResponse(data)
   },
 
   async createFollowUp(recordId: string, payload: CreateFollowUpPayload) {
-    const { data } = await doctorApiClient.post(
+    const { data } = await doctorApiClient.post<CreateFollowUpResponse>(
       `/doctor/medical-records/${recordId}/follow-up`,
       buildCreateFollowUpPayload(payload)
     )

@@ -18,7 +18,8 @@ doctorApiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status
-    if (isProtectedStatusCode(status)) {
+    const skipAuthFailureHandler = Boolean((error?.config as { skipAuthFailureHandler?: boolean } | undefined)?.skipAuthFailureHandler)
+    if (!skipAuthFailureHandler && isProtectedStatusCode(status)) {
       handleProtectedApiAuthFailure(status, error?.config?.url)
     }
     return Promise.reject(error)

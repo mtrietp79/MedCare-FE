@@ -505,79 +505,94 @@ export function AdminDoctorsPage() {
   }
 
   const renderForm = (isEdit: boolean) => (
-    <div className="grid gap-4 py-4">
-      <div className="grid gap-2">
-        <Label htmlFor={isEdit ? 'edit-fullName' : 'create-fullName'}>Họ tên</Label>
-        <Input
-          id={isEdit ? 'edit-fullName' : 'create-fullName'}
-          value={formData.fullName}
-          onChange={(e) => setFormData((prev) => ({ ...prev, fullName: e.target.value }))}
-        />
-        {formErrors.fullName && <p className="text-xs text-red-600">{formErrors.fullName}</p>}
+    <div className="grid gap-6 py-4">
+      {/* Thông tin cơ bản - 3 cột */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2">
+          <Label htmlFor={isEdit ? 'edit-fullName' : 'create-fullName'}>Họ tên *</Label>
+          <Input
+            id={isEdit ? 'edit-fullName' : 'create-fullName'}
+            value={formData.fullName}
+            onChange={(e) => setFormData((prev) => ({ ...prev, fullName: e.target.value }))}
+            placeholder="Nhập họ và tên"
+            className="h-10"
+          />
+          {formErrors.fullName && <p className="text-xs text-red-600">{formErrors.fullName}</p>}
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor={isEdit ? 'edit-email' : 'create-email'}>Email</Label>
+          <Input
+            id={isEdit ? 'edit-email' : 'create-email'}
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+            placeholder="abc@example.com"
+            className="h-10"
+          />
+          {formErrors.email && <p className="text-xs text-red-600">{formErrors.email}</p>}
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor={isEdit ? 'edit-phone' : 'create-phone'}>Số điện thoại</Label>
+          <Input
+            id={isEdit ? 'edit-phone' : 'create-phone'}
+            value={formData.phone}
+            onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
+            placeholder="0912345678"
+            className="h-10"
+          />
+          {formErrors.phone && <p className="text-xs text-red-600">{formErrors.phone}</p>}
+        </div>
+
+        <div className="grid gap-2">
+          <Label>Chuyên khoa *</Label>
+          <Select value={formData.specialtyId || ''} onValueChange={(value) => setFormData((prev) => ({ ...prev, specialtyId: value }))}>
+            <SelectTrigger className="h-10">
+              <SelectValue placeholder="Chọn chuyên khoa" />
+            </SelectTrigger>
+            <SelectContent>
+              {specialties.map((specialty) => (
+                <SelectItem key={specialty.id} value={specialty.id}>{specialty.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {formErrors.specialtyId && <p className="text-xs text-red-600">{formErrors.specialtyId}</p>}
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor={isEdit ? 'edit-experience' : 'create-experience'}>Kinh nghiệm (năm)</Label>
+          <Input
+            id={isEdit ? 'edit-experience' : 'create-experience'}
+            type="number"
+            min={0}
+            value={formData.experience}
+            onChange={(e) => setFormData((prev) => ({ ...prev, experience: e.target.value }))}
+            placeholder="0"
+            className="h-10"
+          />
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor={isEdit ? 'edit-price' : 'create-price'}>Giá khám (VND) *</Label>
+          <Input
+            id={isEdit ? 'edit-price' : 'create-price'}
+            type="number"
+            min={0}
+            value={formData.price}
+            onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
+            placeholder="120000"
+            className="h-10"
+          />
+          {formErrors.price && <p className="text-xs text-red-600">{formErrors.price}</p>}
+        </div>
       </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor={isEdit ? 'edit-email' : 'create-email'}>Email</Label>
-        <Input
-          id={isEdit ? 'edit-email' : 'create-email'}
-          value={formData.email}
-          onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-        />
-        {formErrors.email && <p className="text-xs text-red-600">{formErrors.email}</p>}
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor={isEdit ? 'edit-phone' : 'create-phone'}>Số điện thoại</Label>
-        <Input
-          id={isEdit ? 'edit-phone' : 'create-phone'}
-          value={formData.phone}
-          onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
-        />
-        {formErrors.phone && <p className="text-xs text-red-600">{formErrors.phone}</p>}
-      </div>
-
-      <div className="grid gap-2">
-        <Label>Chuyên khoa</Label>
-        <Select value={formData.specialtyId || ''} onValueChange={(value) => setFormData((prev) => ({ ...prev, specialtyId: value }))}>
-          <SelectTrigger>
-            <SelectValue placeholder="Chọn chuyên khoa" />
-          </SelectTrigger>
-          <SelectContent>
-            {specialties.map((specialty) => (
-              <SelectItem key={specialty.id} value={specialty.id}>{specialty.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {formErrors.specialtyId && <p className="text-xs text-red-600">{formErrors.specialtyId}</p>}
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor={isEdit ? 'edit-experience' : 'create-experience'}>Kinh nghiệm (năm)</Label>
-        <Input
-          id={isEdit ? 'edit-experience' : 'create-experience'}
-          type="number"
-          min={0}
-          value={formData.experience}
-          onChange={(e) => setFormData((prev) => ({ ...prev, experience: e.target.value }))}
-        />
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor={isEdit ? 'edit-price' : 'create-price'}>Giá khám (VND)</Label>
-        <Input
-          id={isEdit ? 'edit-price' : 'create-price'}
-          type="number"
-          min={0}
-          value={formData.price}
-          onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
-        />
-        {formErrors.price && <p className="text-xs text-red-600">{formErrors.price}</p>}
-      </div>
-
+      {/* Ảnh bác sĩ */}
       <div className="grid gap-2">
         <Label>Ảnh bác sĩ</Label>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <div className="relative h-24 w-24 overflow-hidden rounded-3xl border border-border bg-slate-100">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+          <div className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-2xl border-2 border-border bg-slate-100">
             {photoPreview || selectedDoctor?.imageUrl ? (
               <img
                 src={photoPreview || selectedDoctor?.imageUrl || ''}
@@ -596,44 +611,50 @@ export function AdminDoctorsPage() {
               type="file"
               accept="image/*"
               onChange={handlePhotoChange}
-              className="text-sm text-foreground file:rounded-full file:border-0 file:bg-primary file:px-4 file:py-2 file:text-primary-foreground file:hover:bg-primary/90"
+              className="text-sm text-foreground file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-primary-foreground file:hover:bg-primary/90 file:cursor-pointer"
             />
-            <p className="text-xs text-muted-foreground">Chọn ảnh bác sĩ để hiển thị trong danh sách quản lý.</p>
+            <p className="text-xs text-muted-foreground">Định dạng: JPG, PNG. Tối đa 5MB.</p>
             {photoError && <p className="text-xs text-red-600">{photoError}</p>}
           </div>
         </div>
       </div>
 
+      {/* Thông tin đăng nhập - 2 cột */}
       {!isEdit && (
-        <>
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="create-username">Username đăng nhập</Label>
+            <Label htmlFor="create-username">Username đăng nhập *</Label>
             <Input
               id="create-username"
               value={formData.username}
               onChange={(e) => setFormData((prev) => ({ ...prev, username: e.target.value }))}
+              placeholder="Nhập username"
+              className="h-10"
             />
             {formErrors.username && <p className="text-xs text-red-600">{formErrors.username}</p>}
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="create-password">Mật khẩu</Label>
+            <Label htmlFor="create-password">Mật khẩu *</Label>
             <Input
               id="create-password"
               type="password"
               value={formData.password}
               onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+              placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
+              className="h-10"
             />
             {formErrors.password && <p className="text-xs text-red-600">{formErrors.password}</p>}
           </div>
-        </>
+        </div>
       )}
 
+      {/* Trạng thái (chỉ khi edit) */}
       {isEdit && (
         <div className="grid gap-2">
           <Label>Trạng thái</Label>
           <Select value={formData.status} onValueChange={(value: 'active' | 'inactive') => setFormData((prev) => ({ ...prev, status: value }))}>
-            <SelectTrigger>
+            <SelectTrigger className="h-10">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

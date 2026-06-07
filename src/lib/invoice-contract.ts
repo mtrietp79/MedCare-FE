@@ -41,6 +41,7 @@ export interface InvoiceItem {
   canPayOnline: boolean | null
   createdAt: string | null
   paymentDate: string | null
+  uniqueKey?: string | null
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
@@ -326,6 +327,7 @@ export function normalizeInvoiceItem(raw: unknown): InvoiceItem | null {
     canPayOnline: pickBoolean(source.canPayOnline) ?? null,
     createdAt: pickString(source.createdAt) ?? null,
     paymentDate: pickString(source.paymentDate, source.paidAt) ?? null,
+    uniqueKey: pickString(source.uniqueKey) ?? null,
   }
 }
 

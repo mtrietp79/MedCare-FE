@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api, type PatientMedicalRecord } from '@/services/api'
+import { getAppointmentTypeLabel } from '@/lib/appointment-type'
 
 function formatDate(value?: string) {
   if (!value) return '-'
@@ -78,6 +79,12 @@ export function PatientMedicalRecordsPage() {
                   <p className="text-sm text-muted-foreground">{record.recordCode || `#${record.id}`}</p>
                   <p className="font-semibold">{record.diagnosis || 'Chưa cập nhật chẩn đoán'}</p>
                   <p className="text-sm text-muted-foreground">Bác sĩ: {record.doctor?.fullName || record.doctorName || '-'}</p>
+                  <p className="text-sm text-muted-foreground">Loại khám: {getAppointmentTypeLabel({
+                    type: record.type,
+                    appointmentType: record.appointmentType,
+                    typeCode: record.typeCode,
+                    appointmentTypeCode: record.appointmentTypeCode,
+                  })}</p>
                   <p className="text-sm text-muted-foreground">
                     Ngày khám: {formatDateTime(record.appointmentDate, record.appointmentTime)}
                   </p>

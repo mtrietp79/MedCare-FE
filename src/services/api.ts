@@ -52,6 +52,15 @@ export interface AppointmentSlot {
   disabledReason?: string | null
 }
 
+// Doctor follow-up slots - NEW FORMAT (Backend refactored)
+export interface AppointmentSlotResponse {
+  time: string // "08:00"
+  totalSlots: number
+  bookedSlots: number
+  remainingSlots: number
+  available: boolean
+}
+
 export interface PatientMedicalRecordDoctor {
   id?: string
   fullName?: string
@@ -1157,6 +1166,11 @@ export const patientApi = {
     return list
       .map((item) => normalizePatientMedicalRecord(item))
       .filter((item): item is PatientMedicalRecord => item !== null && item.id !== '')
+  },
+
+  async getMyAppointments(): Promise<Appointment[]> {
+    const data = await apiCall<any>('/patient/appointments')
+    return normalizeAppointmentList(data)
   },
 
   async getMyMedicalRecordById(id: string): Promise<PatientMedicalRecord | null> {

@@ -29,7 +29,7 @@ import {
   type DoctorMedicalService,
   type DoctorMedicine,
 } from '@/services/doctorAppointmentService'
-import { api, type AppointmentSlot } from '@/services/api'
+import type { AppointmentSlot, AppointmentSlotResponse } from '@/services/api'
 import { doctorMedicalRecordService } from '@/services/doctorMedicalRecordService'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { safeString } from '@/lib/admin-normalizers'
@@ -85,11 +85,13 @@ interface FollowUpValidationErrors {
 }
 
 interface FollowUpSlotView {
+  key: string
   value: string
   label: string
   disabled: boolean
   state: 'available' | 'full' | 'disabled'
   disabledReason?: string
+  disabledMessage?: string
 }
 
 interface CompleteResultSummary {
@@ -104,7 +106,7 @@ interface MedicineDraftErrors {
   quantity?: string
 }
 
-const SLOT_DISABLED_REASONS = new Set(['PAST', 'LESS_THAN_2H', 'FULL', 'TOO_FAR'])
+const SLOT_DISABLED_REASONS = new Set(['PAST', 'LESS_THAN_2H', 'FULL', 'TOO_FAR', 'NO_SCHEDULE', 'SHIFT_UNAVAILABLE'])
 const MEDICINE_CATEGORY_ALL = '__all__'
 
 const initialCompleteForm: CompleteFormState = {
@@ -288,6 +290,12 @@ function getAppointmentTypeLabel(appointment: Pick<DoctorAppointment, 'type' | '
   })
 }
 
+function getAppointmentCanComplete(
+  appointment?: Pick<DoctorAppointment, 'canExamine' | 'canComplete'> | null
+): boolean {
+  return Boolean(appointment?.canExamine ?? appointment?.canComplete ?? false)
+}
+
 function getFollowUpFieldErrors(error: any): FollowUpValidationErrors {
   const fieldErrors = error?.response?.data?.fieldErrors
   return {
@@ -298,6 +306,23 @@ function getFollowUpFieldErrors(error: any): FollowUpValidationErrors {
 
 function hasFollowUpFieldErrors(errors: FollowUpValidationErrors): boolean {
   return Boolean(errors.date || errors.time)
+}
+
+function getFollowUpSlotDisabledMessage(disabledReason?: string, slotState?: FollowUpSlotView['state']): string {
+  const normalizedReason = safeString(disabledReason).toUpperCase()
+  switch (normalizedReason) {
+    case 'PAST':
+    case 'LESS_THAN_2H':
+      return 'Khung gio da qua'
+    case 'NO_SCHEDULE':
+      return 'Bac si khong co lich lam viec ngay nay'
+    case 'SHIFT_UNAVAILABLE':
+      return 'Bac si khong lam viec buoi nay'
+    case 'FULL':
+      return 'Khung gio da du so luong benh nhan'
+    default:
+      return slotState && slotState !== 'available' ? 'Khung gio hien khong kha dung' : ''
+  }
 }
 
 function getFollowUpSlotButtonClass(slotState: FollowUpSlotView['state'], selected: boolean): string {
@@ -370,7 +395,7 @@ export function DoctorAppointmentsPage() {
   const [initialSymptoms, setInitialSymptoms] = useState('')
   const [diagnosisError, setDiagnosisError] = useState('')
   const [followUpErrors, setFollowUpErrors] = useState<FollowUpValidationErrors>({})
-  const [followUpSlots, setFollowUpSlots] = useState<AppointmentSlot[]>([])
+  const [followUpSlots, setFollowUpSlots] = useState<AppointmentSlotResponse[]>([])
   const [followUpSlotsLoading, setFollowUpSlotsLoading] = useState(false)
   const [followUpSlotsError, setFollowUpSlotsError] = useState('')
   const [isFollowUpDatePickerOpen, setIsFollowUpDatePickerOpen] = useState(false)
@@ -631,49 +656,40 @@ export function DoctorAppointmentsPage() {
   }, [appointments, keyword])
 
   const followUpSlotViews = useMemo<FollowUpSlotView[]>(() => {
-    const selectedDate = parseDateInput(formState.followUpDate)
-    const sorted = [...followUpSlots].sort(
-      (slotA, slotB) => new Date(slotA.startTime).getTime() - new Date(slotB.startTime).getTime()
-    )
+    const selectedDateKey = formState.followUpDate || 'follow-up'
 
     const mapped: FollowUpSlotView[] = []
-    sorted.forEach((slot) => {
-      const value = extractTimeLabelFromDateTime(slot.startTime)
-      if (!value) return
+    followUpSlots.forEach((slot) => {
+      const value = slot.time // New format: already in "HH:mm" format
+      
+      // Determine state based on new response format
+      const state: FollowUpSlotView['state'] = slot.available ? 'available' : 'full'
+      const disabled = !slot.available
+      
+      // Build display label with remaining slots
+      const slotCountLabel = slot.remainingSlots > 0 
+        ? `còn ${slot.remainingSlots}/${slot.totalSlots}`
+        : 'Hết slot'
+      const label = `${value} (${slotCountLabel})`
+      
+      const disabledMessage = !slot.available 
+        ? slot.remainingSlots === 0 
+          ? 'Hết slot'
+          : 'Khung giờ này không khả dụng'
+        : undefined
 
-      const disabledReason = String(slot.disabledReason || '').trim().toUpperCase()
-      const [hourRaw, minuteRaw] = value.split(':').map(Number)
-      const candidateDate = selectedDate ? new Date(selectedDate) : null
-      if (candidateDate && Number.isFinite(hourRaw) && Number.isFinite(minuteRaw)) {
-        candidateDate.setHours(hourRaw, minuteRaw, 0, 0)
-      }
-
-      const disabledByTime = candidateDate ? candidateDate.getTime() <= currentTime.getTime() : false
-      const state: FollowUpSlotView['state'] =
-        Boolean(slot.full) || disabledReason === 'FULL'
-          ? 'full'
-          : Boolean(slot.disabled) || SLOT_DISABLED_REASONS.has(disabledReason) || disabledByTime
-            ? 'disabled'
-            : 'available'
-      const disabled = state === 'full' || state === 'disabled'
       mapped.push({
+        key: `${selectedDateKey}-${value}`,
         value,
-        label: value,
+        label,
         disabled,
         state,
-        disabledReason,
+        disabledMessage,
       })
     })
 
-    const uniqueByValue = new Map<string, FollowUpSlotView>()
-    mapped.forEach((slot) => {
-      if (!uniqueByValue.has(slot.value)) {
-        uniqueByValue.set(slot.value, slot)
-      }
-    })
-
-    return Array.from(uniqueByValue.values())
-  }, [currentTime, followUpSlots, formState.followUpDate])
+    return mapped
+  }, [followUpSlots, formState.followUpDate])
 
   const hasAvailableFollowUpSlots = useMemo(
     () => followUpSlotViews.some((slot) => slot.state === 'available'),
@@ -681,7 +697,7 @@ export function DoctorAppointmentsPage() {
   )
 
   useEffect(() => {
-    if (!formState.followUpEnabled || !formState.followUpDate || !selectedAppointment?.doctorId) {
+    if (!formState.followUpEnabled || !formState.followUpDate || !selectedAppointment?.id) {
       setFollowUpSlots([])
       setFollowUpSlotsError('')
       setFollowUpSlotsLoading(false)
@@ -694,14 +710,17 @@ export function DoctorAppointmentsPage() {
       try {
         setFollowUpSlotsLoading(true)
         setFollowUpSlotsError('')
-        const slotsResult = await api.appointments.getDoctorSlots(selectedAppointment.doctorId || '', formState.followUpDate)
+        const slotsResult = await doctorAppointmentService.getFollowUpSlotsForAppointment(
+          String(selectedAppointment.id),
+          formState.followUpDate
+        )
         if (!active) return
         setFollowUpSlots(Array.isArray(slotsResult) ? slotsResult : [])
       } catch (slotError: any) {
         if (!active) return
         setFollowUpSlots([])
         setFollowUpSlotsError(
-          getBackendErrorMessage(slotError, 'Không thể tải khung giờ tái khám. Vui lòng nhập giờ thủ công.')
+          getBackendErrorMessage(slotError, 'Không thể tải khung giờ tái khám khả dụng.')
         )
       } finally {
         if (active) {
@@ -715,7 +734,7 @@ export function DoctorAppointmentsPage() {
     return () => {
       active = false
     }
-  }, [formState.followUpDate, formState.followUpEnabled, selectedAppointment?.doctorId])
+  }, [formState.followUpDate, formState.followUpEnabled, selectedAppointment?.id])
 
   useEffect(() => {
     if (!formState.followUpTime) return
@@ -789,6 +808,8 @@ export function DoctorAppointmentsPage() {
   }
 
   const openComplete = async (appointment: DoctorAppointment) => {
+    if (!getAppointmentCanComplete(appointment)) return
+
     setSelectedAppointment(appointment)
     setFollowUpErrors({})
     setFollowUpSlots([])
@@ -1019,7 +1040,8 @@ export function DoctorAppointmentsPage() {
         ...appointment,
         status: result.status || 'COMPLETED',
         statusDisplay: safeString(result.statusDisplay) || appointment.statusDisplay,
-        type: result.appointmentType || appointment.appointmentType || appointment.type,
+        canExamine: false,
+        canComplete: false,
         appointmentType: result.appointmentType || appointment.appointmentType || appointment.type,
         typeCode: appointment.typeCode,
         appointmentTypeCode: appointment.appointmentTypeCode,
@@ -1039,12 +1061,13 @@ export function DoctorAppointmentsPage() {
         nextList.push({
           id: followUpId,
           appointmentCode: followUp.appointmentCode,
+          canExamine: false,
+          canComplete: false,
           appointmentDate: followUp.appointmentDate,
           appointmentTime: followUp.appointmentTime,
           appointmentTimeLabel: followUp.appointmentTime,
           time: followUp.appointmentTime,
-          type: followUp.type || followUp.appointmentType || 'Tái khám',
-          appointmentType: followUp.type || followUp.appointmentType || 'Tái khám',
+          appointmentType: followUp.appointmentType || followUp.type || 'Tái khám',
           typeCode: followUp.typeCode,
           appointmentTypeCode: followUp.appointmentTypeCode,
           status: followUp.status || 'PENDING',
@@ -1073,6 +1096,7 @@ export function DoctorAppointmentsPage() {
     const diagnosisValue = formState.diagnosis.trim()
     if (!diagnosisValue) {
       setDiagnosisError('Vui lòng nhập chẩn đoán trước khi xác nhận.')
+      setSubmitError('Vui lòng nhập chẩn đoán trước khi xác nhận.')
       return
     }
     setDiagnosisError('')
@@ -1086,6 +1110,9 @@ export function DoctorAppointmentsPage() {
     const shouldSendSymptoms =
       normalizedCurrentSymptoms.length > 0 &&
       normalizedCurrentSymptoms !== normalizedInitialSymptoms
+    const normalizedFollowUpTime = formState.followUpEnabled
+      ? extractTimeLabelFromDateTime(formState.followUpTime) || formState.followUpTime
+      : undefined
 
     const invalidMedicineIndex = formState.medicines.findIndex(
       (item) => safeString(item.medicineId) && Number(item.quantity) <= 0
@@ -1110,12 +1137,16 @@ export function DoctorAppointmentsPage() {
         medicalServiceId: service.serviceId,
         note: service.note.trim() || undefined,
       })),
-      followUp: {
-        needFollowUp: formState.followUpEnabled,
-        followUpDate: formState.followUpEnabled ? formState.followUpDate || undefined : undefined,
-        followUpTime: formState.followUpEnabled ? formState.followUpTime || undefined : undefined,
-        note: formState.followUpEnabled ? formState.followUpNote.trim() || undefined : undefined,
-      },
+      followUp: formState.followUpEnabled
+        ? {
+            needFollowUp: true,
+            followUpDate: formState.followUpDate || undefined,
+            followUpTime: normalizedFollowUpTime || undefined,
+            note: formState.followUpNote.trim() || undefined,
+          }
+        : {
+            needFollowUp: false,
+          },
     }
     if (shouldSendSymptoms) {
       payload.symptoms = normalizedCurrentSymptoms
@@ -1137,7 +1168,8 @@ export function DoctorAppointmentsPage() {
           ? {
               ...prev,
               status: completeResult.status || 'COMPLETED',
-              type: completeResult.appointmentType || prev.appointmentType || prev.type,
+              canExamine: false,
+              canComplete: false,
               appointmentType: completeResult.appointmentType || prev.appointmentType || prev.type,
               typeCode: prev.typeCode,
               appointmentTypeCode: prev.appointmentTypeCode,
@@ -1148,9 +1180,20 @@ export function DoctorAppointmentsPage() {
 
       const syncResults = await Promise.allSettled([
         refreshAppointmentsList(),
+        doctorAppointmentService.getAppointmentById(appointmentId),
         doctorMedicalRecordService.getSummary(),
         doctorMedicalRecordService.getPatients(''),
       ])
+
+      const appointmentDetailResult = syncResults[1]
+      if (appointmentDetailResult.status === 'fulfilled') {
+        const refreshedAppointment = appointmentDetailResult.value
+        setSelectedAppointment((prev) =>
+          prev && String(prev.id) === appointmentId
+            ? mergeDefinedAppointmentFields(prev, refreshedAppointment ?? {})
+            : prev
+        )
+      }
 
       invalidateQueries({
         keys: [
@@ -1177,6 +1220,9 @@ export function DoctorAppointmentsPage() {
         })
       } else {
         toast({ title: 'Thành công', description: 'Đã hoàn tất lịch khám.' })
+        if (completeResult.followUpAppointment) {
+          toast({ title: 'Tái khám', description: 'Đã tạo lịch tái khám thành công.' })
+        }
       }
 
       const consultationFee = Number(completeResult.invoice?.consultationFee ?? 0)
@@ -1211,25 +1257,46 @@ export function DoctorAppointmentsPage() {
       setInitialSymptoms('')
       setDiagnosisError('')
       setFollowUpErrors({})
+      setFollowUpSlots([])
+      setFollowUpSlotsError('')
       setSubmitError('')
     } catch (submitError: any) {
+      const status = Number(submitError?.response?.status)
       const fieldErrors = getFollowUpFieldErrors(submitError)
-      const hasFieldErrors = submitError?.response?.status === 400 && hasFollowUpFieldErrors(fieldErrors)
-      if (hasFieldErrors) {
+      const hasFieldErrors = status === 400 && hasFollowUpFieldErrors(fieldErrors)
+      const backendMessage = safeString(submitError?.response?.data?.message)
+
+      if (status === 400 && formState.followUpEnabled) {
         setFollowUpErrors(fieldErrors)
       } else if (formState.followUpEnabled) {
         setFollowUpErrors({})
       }
 
-      const errorMessage = hasFieldErrors
-        ? ''
-        : getBackendErrorMessage(submitError, 'Không thể hoàn tất lịch khám.')
-      setSubmitError(errorMessage)
-      toast({
-        title: 'Lỗi',
-        description: errorMessage || 'Vui lòng kiểm tra lại thông tin lịch tái khám.',
-        variant: 'destructive',
-      })
+      if (status === 400) {
+        const validationMessage = hasFieldErrors
+          ? ''
+          : backendMessage || 'Vui lòng kiểm tra lại thông tin lịch tái khám.'
+        setSubmitError(validationMessage)
+        if (validationMessage) {
+          toast({
+            title: 'Lỗi',
+            description: validationMessage,
+            variant: 'destructive',
+          })
+        }
+      } else {
+        const fallbackMessage =
+          status >= 500
+            ? 'Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.'
+            : 'Không thể hoàn tất lịch khám.'
+        const errorMessage = getBackendErrorMessage(submitError, fallbackMessage)
+        setSubmitError(errorMessage)
+        toast({
+          title: 'Lỗi',
+          description: errorMessage,
+          variant: 'destructive',
+        })
+      }
     } finally {
       setSubmitting(false)
     }
@@ -1325,6 +1392,8 @@ export function DoctorAppointmentsPage() {
                   <TableHead>Bệnh nhân</TableHead>
                   <TableHead>Ngày giờ</TableHead>
                   <TableHead>Loại khám</TableHead>
+                  <TableHead>Phí khám</TableHead>
+                  <TableHead>Thanh toán</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
@@ -1334,6 +1403,7 @@ export function DoctorAppointmentsPage() {
                   const statusLabel = getStatusLabel(appointment.status, appointment.statusDisplay)
                   const statusKey = getStatusKey(appointment.status, appointment.statusDisplay)
                   const appointmentType = getAppointmentTypeLabel(appointment)
+                  const canComplete = getAppointmentCanComplete(appointment)
 
                   return (
                     <TableRow key={appointment.id}>
@@ -1352,6 +1422,23 @@ export function DoctorAppointmentsPage() {
                         )}
                       </TableCell>
                       <TableCell>
+                        {appointment.consultationFee !== undefined ? (
+                          <div className="text-sm font-medium">{formatCurrencyVnd(appointment.consultationFee)}</div>
+                        ) : (
+                          <div className="text-sm text-[#6b7280]">-</div>
+                        )}
+                      </TableCell>
+
+                      <TableCell>
+                        <Badge className={`rounded-full border ${getPaymentStatusView(
+                          appointment.paymentStatus,
+                          appointment.paymentStatusDisplay
+                        ).className}`}>
+                          {getPaymentStatusView(appointment.paymentStatus, appointment.paymentStatusDisplay).label}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell>
                         <Badge className={`rounded-full border ${getStatusBadgeClass(appointment.status, appointment.statusDisplay)}`}>
                           {statusLabel}
                         </Badge>
@@ -1367,7 +1454,7 @@ export function DoctorAppointmentsPage() {
                               <Eye className="h-4 w-4" />
                             </Button>
 
-                            {statusKey === 'pending' && (
+                            {canComplete && (
                               <Button variant="ghost" size="icon" onClick={() => void openComplete(appointment)}>
                                 <FilePenLine className="h-4 w-4" />
                               </Button>
@@ -1440,6 +1527,23 @@ export function DoctorAppointmentsPage() {
               )}
             </div>
           )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailOpen(false)}>
+              Đóng
+            </Button>
+            {getAppointmentCanComplete(selectedAppointment) ? (
+              <Button
+                onClick={() => {
+                  setDetailOpen(false)
+                  if (selectedAppointment) {
+                    void openComplete(selectedAppointment)
+                  }
+                }}
+              >
+                Xác nhận hoàn tất khám
+              </Button>
+            ) : null}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1541,6 +1645,9 @@ export function DoctorAppointmentsPage() {
                               setFormState((prev) => ({ ...prev, diagnosis: nextDiagnosis }))
                               if (diagnosisError && nextDiagnosis.trim()) {
                                 setDiagnosisError('')
+                              }
+                              if (nextDiagnosis.trim()) {
+                                setSubmitError('')
                               }
                             }}
                             placeholder="Nhập chẩn đoán (bắt buộc)"
@@ -1844,22 +1951,26 @@ export function DoctorAppointmentsPage() {
                                       {followUpSlotViews.map((slot) => {
                                         const isSelected = formState.followUpTime === slot.value
                                         return (
-                                          <button
-                                            key={slot.value}
-                                            type="button"
-                                            disabled={slot.disabled}
-                                            onClick={() => {
-                                              setFormState((prev) => ({ ...prev, followUpTime: slot.value }))
-                                              setSubmitError('')
-                                              if (followUpErrors.time) {
-                                                setFollowUpErrors((prev) => ({ ...prev, time: undefined }))
-                                              }
-                                            }}
-                                            className={getFollowUpSlotButtonClass(slot.state, isSelected)}
-                                          >
-                                            {isSelected ? <Check className="absolute right-2 top-2 h-3.5 w-3.5" /> : null}
-                                            <span className="w-full text-center">{slot.label}</span>
-                                          </button>
+                                          <div key={slot.key} className="space-y-1" title={slot.disabledMessage || slot.label}>
+                                            <button
+                                              type="button"
+                                              disabled={slot.disabled}
+                                              onClick={() => {
+                                                setFormState((prev) => ({ ...prev, followUpTime: slot.value }))
+                                                setSubmitError('')
+                                                if (followUpErrors.time) {
+                                                  setFollowUpErrors((prev) => ({ ...prev, time: undefined }))
+                                                }
+                                              }}
+                                              className={getFollowUpSlotButtonClass(slot.state, isSelected)}
+                                            >
+                                              {isSelected ? <Check className="absolute right-2 top-2 h-3.5 w-3.5" /> : null}
+                                              <span className="w-full text-center">{slot.label}</span>
+                                            </button>
+                                            {slot.disabledMessage ? (
+                                              <p className="px-1 text-[11px] leading-tight text-amber-700">{slot.disabledMessage}</p>
+                                            ) : null}
+                                          </div>
                                         )
                                       })}
                                     </div>

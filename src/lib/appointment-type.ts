@@ -34,7 +34,7 @@ export function getAppointmentTypeLabel(input: {
   typeCode?: unknown
   appointmentTypeCode?: unknown
 }): string {
-  const label = pickString(input.type, input.appointmentType)
+  const label = pickString(input.appointmentType, input.type)
   if (label) return label
 
   const typeCode = normalizeAppointmentTypeCode(input.typeCode, input.appointmentTypeCode)

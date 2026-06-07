@@ -1,9 +1,12 @@
 import { doctorApiClient } from './doctorApiClient'
 import { normalizeAppointmentTypeCode } from '@/lib/appointment-type'
+import type { AppointmentSlot, AppointmentSlotResponse } from './api'
 
 export interface DoctorAppointment {
   id: string
   appointmentCode?: string
+  canExamine?: boolean
+  canComplete?: boolean
   doctorId?: string
   doctor?: { id?: string; fullName?: string }
   patientName?: string
@@ -156,12 +159,50 @@ function pickNumber(...values: unknown[]): number | undefined {
   return undefined
 }
 
+function pickBoolean(...values: unknown[]): boolean | undefined {
+  for (const value of values) {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'number') {
+      if (value === 1) return true
+      if (value === 0) return false
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase()
+      if (normalized === 'true' || normalized === '1') return true
+      if (normalized === 'false' || normalized === '0') return false
+    }
+  }
+  return undefined
+}
+
 function asObject(value: unknown): Record<string, any> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, any>
 }
 
 const ISO_DATE_TIME_PREFIX_REGEX = /^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2})(?::\d{2}(?:\.\d+)?)?)?/
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
+
+function normalizeDateToIsoDate(value: string): string {
+  const raw = pickString(value)
+  if (!raw) {
+    throw new Error('Ngày tái khám không hợp lệ.')
+  }
+
+  if (ISO_DATE_REGEX.test(raw)) {
+    return raw
+  }
+
+  const parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('Ngày tái khám không hợp lệ.')
+  }
+
+  const year = parsed.getFullYear()
+  const month = String(parsed.getMonth() + 1).padStart(2, '0')
+  const day = String(parsed.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 function parseTimeTo24h(value: unknown): string | undefined {
   const raw = pickString(value)
@@ -241,6 +282,8 @@ function normalizeDoctorAppointment(raw: unknown): DoctorAppointment | null {
   return {
     id,
     appointmentCode: pickString(source.appointmentCode, source.code),
+    canExamine: pickBoolean(source.canExamine),
+    canComplete: pickBoolean(source.canExamine, source.canComplete),
     doctorId: pickString(source.doctorId, doctor?.id),
     doctor: doctor
       ? {
@@ -289,6 +332,43 @@ function normalizeDoctorAppointment(raw: unknown): DoctorAppointment | null {
     parentAppointmentId: pickString(source.parentAppointmentId),
     symptoms: pickString(source.symptoms),
     notes: pickString(source.notes, source.note),
+  }
+}
+
+function normalizeAppointmentSlot(raw: unknown): AppointmentSlot | null {
+  const source = asObject(raw)
+  if (!source) return null
+
+  const startTime = pickString(source.startTime)
+  const endTime = pickString(source.endTime)
+  if (!startTime || !endTime) return null
+
+  return {
+    startTime,
+    endTime,
+    shift: pickString(source.shift) || '',
+    maxPatients: pickNumber(source.maxPatients) ?? 0,
+    bookedPatients: pickNumber(source.bookedPatients) ?? 0,
+    full: Boolean(pickBoolean(source.full) ?? false),
+    disabled: Boolean(pickBoolean(source.disabled) ?? false),
+    disabledReason: pickString(source.disabledReason) ?? null,
+  }
+}
+
+// Normalize AppointmentSlotResponse (new format for doctor follow-up slots)
+function normalizeAppointmentSlotResponse(raw: unknown): AppointmentSlotResponse | null {
+  const source = asObject(raw)
+  if (!source) return null
+
+  const time = pickString(source.time)
+  if (!time) return null
+
+  return {
+    time,
+    totalSlots: pickNumber(source.totalSlots) ?? 0,
+    bookedSlots: pickNumber(source.bookedSlots) ?? 0,
+    remainingSlots: pickNumber(source.remainingSlots) ?? 0,
+    available: Boolean(pickBoolean(source.available) ?? false),
   }
 }
 
@@ -421,6 +501,31 @@ export const doctorAppointmentService = {
   async completeAppointment(id: string, payload: CompleteAppointmentPayload): Promise<CompleteAppointmentResponse> {
     const { data } = await doctorApiClient.post<CompleteAppointmentResponse>(`/doctor/appointments/${id}/complete`, payload)
     return normalizeCompleteResponse(data)
+  },
+
+  async getFollowUpSlots(date: string): Promise<AppointmentSlot[]> {
+    const normalizedDate = normalizeDateToIsoDate(date)
+    const { data } = await doctorApiClient.get('/doctor/follow-up-slots', {
+      params: { date: normalizedDate },
+    })
+
+    return normalizeListResponse<unknown>(data)
+      .map((item) => normalizeAppointmentSlot(item))
+      .filter((item): item is AppointmentSlot => item !== null)
+  },
+
+  async getFollowUpSlotsForAppointment(appointmentId: string, date: string): Promise<AppointmentSlotResponse[]> {
+    const normalizedDate = normalizeDateToIsoDate(date)
+    const { data } = await doctorApiClient.get(
+      `/doctor/appointments/${appointmentId}/follow-up-slots`,
+      {
+        params: { date: normalizedDate },
+      }
+    )
+
+    return normalizeListResponse<unknown>(data)
+      .map((item) => normalizeAppointmentSlotResponse(item))
+      .filter((item): item is AppointmentSlotResponse => item !== null)
   },
 
   async getMedicineCategories() {

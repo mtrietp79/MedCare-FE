@@ -18,9 +18,7 @@ import {
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Họ và tên phải có ít nhất 2 ký tự'),
-  email: z.string().email('Email không hợp lệ').refine(val => val.endsWith('@gmail.com'), {
-    message: 'Vui lòng sử dụng email @gmail.com',
-  }),
+  email: z.string().email('Email không hợp lệ'),
   phone: z.string().regex(/^[0-9]{10,11}$/, 'Số điện thoại phải gồm 10-11 chữ số'),
   password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự'),
   confirmPassword: z.string().min(6, 'Vui lòng xác nhận mật khẩu'),

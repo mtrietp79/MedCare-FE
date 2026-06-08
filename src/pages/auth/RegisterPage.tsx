@@ -280,8 +280,8 @@ export function RegisterPage() {
                 />
                 <span className="leading-tight">
                   Tôi đồng ý với{' '}
-                  <span className="text-primary font-medium hover:underline">Điều khoản</span> và{' '}
-                  <span className="text-primary font-medium hover:underline">Chính sách bảo mật</span>
+                  <Link to="/terms" className="text-primary font-medium hover:underline hover:underline-offset-4">Điều khoản</Link> và{' '}
+                  <Link to="/privacy-policy" className="text-primary font-medium hover:underline hover:underline-offset-4">Chính sách bảo mật</Link>
                 </span>
               </label>
               {errors.agreeTerms && <p className="text-destructive text-sm font-medium">{errors.agreeTerms.message}</p>}

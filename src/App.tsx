@@ -35,6 +35,8 @@ import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
+import { TermsPage } from '@/pages/TermsPage'
+import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 
 // Patient pages
 import { PatientDashboardPage } from '@/pages/patient/PatientDashboardPage'
@@ -79,6 +81,8 @@ export default function App() {
 							<Route path="/booking" element={<BookingPage />} />
 							<Route path="/booking/service-package/payment-result" element={<ServicePackagePaymentResultPage />} />
 							<Route path="/contact" element={<ContactPage />} />
+							<Route path="/terms" element={<TermsPage />} />
+							<Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
 						</Route>
 
 						{/* Auth Layout */}

@@ -94,6 +94,8 @@ export function AdminSpecialtiesPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [statusActionLoadingKey, setStatusActionLoadingKey] = useState('')
   const [deactivateTarget, setDeactivateTarget] = useState<NormalizedSpecialty | null>(null)
+  const [bulkAction, setBulkAction] = useState<'activate-all' | 'deactivate-all' | null>(null)
+  const [isBulkActionLoading, setIsBulkActionLoading] = useState(false)
 
   const fetchSpecialties = async () => {
     setLoading(true)
@@ -304,6 +306,40 @@ export function AdminSpecialtiesPage() {
     }
   }
 
+  const openBulkActionDialog = (action: 'activate-all' | 'deactivate-all') => {
+    setBulkAction(action)
+  }
+
+  const handleConfirmBulkAction = async () => {
+    if (!bulkAction) return
+
+    setIsBulkActionLoading(true)
+    try {
+      if (bulkAction === 'activate-all') {
+        await adminSpecialtyService.activateAllSpecialties()
+        toast({ title: 'Thành công', description: 'Bật hoạt động tất cả chuyên khoa thành công' })
+      } else {
+        await adminSpecialtyService.deactivateAllSpecialties()
+        toast({ title: 'Thành công', description: 'Tạm ngưng tất cả chuyên khoa thành công' })
+      }
+      setBulkAction(null)
+      await fetchSpecialties()
+    } catch (actionError: unknown) {
+      toast({
+        title: 'Lỗi',
+        description: adminSpecialtyService.getErrorMessage(
+          actionError,
+          bulkAction === 'activate-all'
+            ? 'Không thể bật hoạt động tất cả chuyên khoa.'
+            : 'Không thể tạm ngưng tất cả chuyên khoa.',
+        ),
+        variant: 'destructive',
+      })
+    } finally {
+      setIsBulkActionLoading(false)
+    }
+  }
+
   const handleViewDoctors = (specialty?: NormalizedSpecialty | null) => {
     const target = specialty || deleteTarget
     if (!target) {
@@ -343,36 +379,54 @@ export function AdminSpecialtiesPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Quản lý chuyên khoa</h1>
         </div>
-        <Dialog
-          open={isCreateDialogOpen}
-          onOpenChange={(open) => {
-            setIsCreateDialogOpen(open)
-            if (!open) resetForm()
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Thêm chuyên khoa
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Tạo chuyên khoa mới</DialogTitle>
-              <DialogDescription>Thông tin chuyên khoa hiển thị cho bác sĩ và người bệnh.</DialogDescription>
-            </DialogHeader>
-            {renderForm()}
-            <DialogFooter>
-              <Button onClick={handleCreate} disabled={isSubmitting}>
-                {isSubmitting ? 'Đang tạo...' : 'Tạo chuyên khoa'}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={() => openBulkActionDialog('activate-all')}
+            disabled={loading || isBulkActionLoading || specialties.length === 0 || specialties.every((item) => item.isActive)}
+          >
+            <Power className="mr-2 h-4 w-4" />
+            Bật hoạt động tất cả
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => openBulkActionDialog('deactivate-all')}
+            disabled={loading || isBulkActionLoading || specialties.length === 0 || specialties.every((item) => !item.isActive)}
+          >
+            <PowerOff className="mr-2 h-4 w-4" />
+            Tạm ngưng tất cả
+          </Button>
+          <Dialog
+            open={isCreateDialogOpen}
+            onOpenChange={(open) => {
+              setIsCreateDialogOpen(open)
+              if (!open) resetForm()
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Thêm chuyên khoa
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Tạo chuyên khoa mới</DialogTitle>
+                <DialogDescription>Thông tin chuyên khoa hiển thị cho bác sĩ và người bệnh.</DialogDescription>
+              </DialogHeader>
+              {renderForm()}
+              <DialogFooter>
+                <Button onClick={handleCreate} disabled={isSubmitting}>
+                  {isSubmitting ? 'Đang tạo...' : 'Tạo chuyên khoa'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Card>
@@ -613,6 +667,48 @@ export function AdminSpecialtiesPage() {
               }}
             >
               {statusActionLoadingKey === `deactivate-${deactivateTarget?.id}` ? 'Đang xử lý...' : 'Tạm ngưng'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={bulkAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setBulkAction(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkAction === 'activate-all'
+                ? 'Bật hoạt động tất cả chuyên khoa'
+                : 'Tạm ngưng tất cả chuyên khoa'}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 leading-relaxed">
+              <span className="block">
+                {bulkAction === 'activate-all'
+                  ? 'Tất cả chuyên khoa sẽ được bật hoạt động và có thể hiển thị lại trên trang đặt lịch của bệnh nhân.'
+                  : 'Tất cả chuyên khoa sẽ bị ẩn khỏi trang đặt lịch của bệnh nhân. Dữ liệu bác sĩ, lịch hẹn và bệnh án cũ vẫn được giữ nguyên.'}
+              </span>
+              <span className="block">
+                {bulkAction === 'activate-all'
+                  ? 'Bạn có chắc muốn bật hoạt động tất cả chuyên khoa không?'
+                  : 'Bạn có chắc muốn tạm ngưng tất cả chuyên khoa không?'}
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkActionLoading}>Hủy</AlertDialogCancel>
+            <AlertDialogAction disabled={isBulkActionLoading} onClick={(event) => {
+              event.preventDefault()
+              void handleConfirmBulkAction()
+            }}>
+              {isBulkActionLoading
+                ? 'Đang xử lý...'
+                : bulkAction === 'activate-all'
+                ? 'Bật hoạt động'
+                : 'Tạm ngưng tất cả'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

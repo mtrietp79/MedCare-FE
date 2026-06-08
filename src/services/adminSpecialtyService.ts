@@ -103,5 +103,31 @@ export const adminSpecialtyService = {
     }
   },
 
+  activateAllSpecialties: async (): Promise<void> => {
+    const url = `${API_BASE_URL}/admin/specialties/activate-all`
+    try {
+      await fetchJson(url, {
+        method: 'PATCH',
+        body: JSON.stringify({}),
+      })
+    } catch (error) {
+      logSpecialtyActionError(error, url)
+      throw error
+    }
+  },
+
+  deactivateAllSpecialties: async (): Promise<void> => {
+    const url = `${API_BASE_URL}/admin/specialties/deactivate-all`
+    try {
+      await fetchJson(url, {
+        method: 'PATCH',
+        body: JSON.stringify({}),
+      })
+    } catch (error) {
+      logSpecialtyActionError(error, url)
+      throw error
+    }
+  },
+
   getErrorMessage,
 }

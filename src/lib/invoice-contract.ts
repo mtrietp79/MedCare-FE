@@ -45,10 +45,12 @@ export interface InvoiceItem {
   appointmentId: number | null
   appointmentCode: string | null
   appointmentType: string | null
+  appointmentTypeLabel?: string | null
   appointmentDate?: string | null
   appointmentTime?: string | null
   appointmentDateTime?: string | null
   appointmentTypeDisplay: string | null
+  isReExamination?: boolean | null
   servicePackageBookingId: number | null
   servicePackageBookingCode: string | null
   servicePackageName: string | null
@@ -430,10 +432,12 @@ export function normalizeInvoiceItem(raw: unknown): InvoiceItem | null {
     appointmentId: pickNumber(source.appointmentId, source.sourceType === 'APPOINTMENT' ? source.sourceId : undefined) ?? null,
     appointmentCode: pickString(source.appointmentCode) ?? null,
     appointmentType: pickString(source.appointmentType) ?? null,
+    appointmentTypeLabel: pickString(source.appointmentTypeLabel, source.typeLabel) ?? null,
     appointmentDate: pickString(source.appointmentDate, source.date) ?? null,
     appointmentTime: pickString(source.appointmentTime, source.time) ?? null,
     appointmentDateTime,
     appointmentTypeDisplay,
+    isReExamination: pickBoolean(source.isReExamination) ?? null,
     servicePackageBookingId:
       pickNumber(
         source.servicePackageBookingId,
@@ -510,6 +514,89 @@ export function getInvoiceCategoryLabel(
   invoice: Pick<InvoiceItem, 'invoiceCategory' | 'invoiceCategoryDisplay'>
 ): string {
   return invoice.invoiceCategoryDisplay || inferInvoiceCategoryDisplay(invoice.invoiceCategory)
+}
+
+export function getInvoiceTypeLabel(
+  invoice: Pick<
+    InvoiceItem,
+    | 'sourceType'
+    | 'invoiceCategory'
+    | 'appointmentTypeDisplay'
+    | 'appointmentType'
+    | 'examType'
+    | 'typeLabel'
+    | 'invoiceType'
+    | 'type'
+  > & {
+    isReExamination?: boolean | null
+  }
+): string {
+  const explicitLabel = pickDisplayLabel(
+    invoice.examType,
+    invoice.typeLabel,
+    invoice.invoiceType,
+    invoice.type
+  )
+  if (explicitLabel) return explicitLabel
+
+  const category = normalizeCategory(invoice.invoiceCategory)
+  if (invoice.sourceType === 'SERVICE_PACKAGE' || category === 'SERVICE_PACKAGE') {
+    return 'Hóa đơn gói dịch vụ'
+  }
+  if (category === 'POST_EXAM') return 'Hóa đơn sau khám'
+  if (category === 'FOLLOW_UP') return 'Hóa đơn tái khám'
+
+  const appointmentType = getAppointmentTypeDisplay(invoice.appointmentTypeDisplay, invoice.appointmentType)
+  if (invoice.sourceType === 'APPOINTMENT') {
+    if (invoice.isReExamination || appointmentType === 'Tái khám') {
+      return 'Hóa đơn tái khám'
+    }
+    return 'Hóa đơn khám bệnh'
+  }
+
+  if (appointmentType === 'Tái khám') return 'Hóa đơn tái khám'
+  return 'Hóa đơn khám bệnh'
+}
+
+export function getInvoiceExamTypeLabel(
+  invoice: Pick<
+    InvoiceItem,
+    | 'sourceType'
+    | 'appointmentTypeDisplay'
+    | 'appointmentType'
+    | 'examType'
+    | 'typeLabel'
+    | 'invoiceType'
+    | 'type'
+  > & {
+    isReExamination?: boolean | null
+  }
+): string {
+  const explicitLabel = pickDisplayLabel(
+    invoice.examType,
+    invoice.typeLabel,
+    invoice.invoiceType,
+    invoice.type
+  )
+  if (explicitLabel) {
+    const normalized = normalizeText(explicitLabel)
+    if (normalized.includes('service') || normalized.includes('package') || normalized.includes('dich vu')) {
+      return 'Dịch vụ'
+    }
+    if (normalized.includes('tai kham') || normalized.includes('follow')) {
+      return 'Tái khám'
+    }
+    if (normalized.includes('kham benh') || normalized.includes('exam') || normalized.includes('checkup')) {
+      return 'Khám bệnh'
+    }
+    return explicitLabel
+  }
+
+  if (invoice.sourceType === 'SERVICE_PACKAGE') return 'Dịch vụ'
+
+  const appointmentType = getAppointmentTypeDisplay(invoice.appointmentTypeDisplay, invoice.appointmentType)
+  if (invoice.isReExamination || appointmentType === 'Tái khám') return 'Tái khám'
+  return 'Khám bệnh'
 }
 
 export function resolveInvoiceCategory(

@@ -24,7 +24,7 @@ import {
   isPaymentSettled,
   resolveAppointmentStatusView,
 } from '@/lib/appointment-status'
-import { getAppointmentTypeDisplay } from '@/lib/invoice-contract'
+import { getAppointmentTypeLabel as getPatientAppointmentTypeLabel } from '@/lib/appointment-type'
 
 function normalizeStatusText(value?: string): string {
   return String(value || '').trim().toUpperCase()
@@ -67,11 +67,6 @@ function getAppointmentTimeLabel(appointment: Appointment) {
   return `${dateLabel} ${timeLabel}`
 }
 
-function getAppointmentTypeLabel(appointment: Appointment): string {
-  if (appointment.parentAppointmentId) return 'Tái khám'
-  return getAppointmentTypeDisplay(appointment.appointmentType, appointment.type) || 'Khám bệnh'
-}
-
 function getErrorStatusCode(error: any): number | null {
   const status = Number(error?.status ?? error?.response?.status)
   return Number.isFinite(status) ? status : null
@@ -88,12 +83,16 @@ function getErrorMessage(error: any, fallbackMessage: string): string {
 }
 
 function isFollowUpAppointment(appointment: Appointment): boolean {
-  const typeSource = String(appointment.appointmentType || appointment.type || '').trim().toLowerCase()
   return (
-    Boolean(appointment.parentAppointmentId) ||
-    typeSource.includes('tai') ||
-    typeSource.includes('follow') ||
-    typeSource.includes('revisit')
+    getPatientAppointmentTypeLabel({
+      type: appointment.type,
+      appointmentType: appointment.appointmentType,
+      typeCode: appointment.typeCode,
+      appointmentTypeCode: appointment.appointmentTypeCode,
+      appointmentTypeLabel: appointment.appointmentTypeLabel,
+      isReExamination: appointment.isReExamination,
+      parentAppointmentId: appointment.parentAppointmentId,
+    }) === 'Tái khám'
   )
 }
 
@@ -290,7 +289,15 @@ export function PatientAppointmentDetailPage() {
   const isCompleted = statusView.key === 'completed'
   const isPaymentFinalized = isPaymentSettled(appointment.paymentStatus, appointment.paymentStatusDisplay)
   const followUpAppointment = isFollowUpAppointment(appointment)
-  const appointmentTypeLabel = getAppointmentTypeLabel(appointment)
+  const appointmentTypeLabel = getPatientAppointmentTypeLabel({
+    type: appointment.type,
+    appointmentType: appointment.appointmentType,
+    typeCode: appointment.typeCode,
+    appointmentTypeCode: appointment.appointmentTypeCode,
+    appointmentTypeLabel: appointment.appointmentTypeLabel,
+    isReExamination: appointment.isReExamination,
+    parentAppointmentId: appointment.parentAppointmentId,
+  })
   const isConsultationAppointment = appointmentTypeLabel === 'Khám bệnh'
   const doctorLabel = appointment.doctorName || appointment.doctor?.fullName || 'Đang chờ hệ thống gán'
   const specialtyLabel =

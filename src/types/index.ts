@@ -178,6 +178,7 @@ export interface Appointment {
   appointmentTimeLabel?: string
   appointmentDate?: string
   appointmentTime?: string
+  appointmentTypeLabel?: string
   type?: string
   appointmentType?: string
   typeCode?: string
@@ -200,6 +201,7 @@ export interface Appointment {
   consultationFee?: number
   followUpNote?: string
   parentAppointmentId?: string
+  isReExamination?: boolean
   medicalService?: {
     id?: string
     name?: string

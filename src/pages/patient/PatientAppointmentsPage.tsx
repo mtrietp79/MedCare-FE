@@ -35,14 +35,16 @@ import { doctorFeedbackService } from '@/services/doctorFeedbackService'
 import type { Appointment, ServicePackageBooking } from '@/types'
 import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
 import { normalizePaymentRedirectUrl } from '@/lib/payment-url'
+import { getAppointmentTypeLabel as getPatientAppointmentTypeLabel } from '@/lib/appointment-type'
 import { resolveAppointmentStatusView, resolvePaymentStatusView } from '@/lib/appointment-status'
 import {
   canPayInvoiceOnline,
   getAppointmentTypeDisplay,
   getInvoiceAmount,
-  getInvoiceCategoryLabel,
+  getInvoiceExamTypeLabel,
   getInvoiceReferenceCode,
   getInvoiceSourceLabel,
+  getInvoiceTypeLabel,
   getInvoiceStatusClass,
   getInvoiceStatusLabel,
 } from '@/lib/invoice-contract'
@@ -160,37 +162,8 @@ function formatCurrencyVnd(value?: number | null) {
   return `${new Intl.NumberFormat('vi-VN').format(Number(value || 0))} VND`
 }
 
-function normalizeText(value?: string | null): string {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-}
-
 function formatInvoiceMoney(value?: number | null): string {
   return formatCurrencyVnd(value)
-}
-
-function getInvoiceExamTypeLabel(invoice: PatientInvoice): string {
-  const raw = [
-    invoice.examType,
-    invoice.typeLabel,
-    invoice.appointmentTypeDisplay,
-    invoice.appointmentType,
-  ].find((item) => String(item || '').trim())
-
-  const normalized = normalizeText(raw)
-  if (
-    invoice.sourceType === 'SERVICE_PACKAGE' ||
-    normalized.includes('dich vu') ||
-    normalized.includes('service') ||
-    normalized.includes('package')
-  ) {
-    return 'Khám dịch vụ'
-  }
-
-  return 'Khám bệnh'
 }
 
 function getInvoiceMedicalRecordCode(invoice: PatientInvoice): string {
@@ -245,8 +218,15 @@ function formatInvoiceAppointmentDateTime(invoice: PatientInvoice): string {
 }
 
 function getAppointmentTypeLabel(appointment: Appointment): string {
-  if (appointment.parentAppointmentId) return 'Tái khám'
-  return getAppointmentTypeDisplay(appointment.appointmentType, appointment.type) || 'Khám bệnh'
+  return getPatientAppointmentTypeLabel({
+    type: appointment.type,
+    appointmentType: appointment.appointmentType,
+    typeCode: appointment.typeCode,
+    appointmentTypeCode: appointment.appointmentTypeCode,
+    appointmentTypeLabel: appointment.appointmentTypeLabel,
+    isReExamination: appointment.isReExamination,
+    parentAppointmentId: appointment.parentAppointmentId,
+  })
 }
 
 function getAppointmentListKey(appointment: Appointment, index: number): string {
@@ -275,11 +255,8 @@ function getInvoiceFilterCategory(invoice: PatientInvoice): Exclude<InvoiceCateg
   if (invoice.sourceType === 'SERVICE_PACKAGE' || invoice.invoiceCategory === 'SERVICE_PACKAGE') {
     return 'SERVICE_PACKAGE'
   }
-
-  if (invoice.invoiceCategory === 'POST_EXAM' || invoice.invoiceCategory === 'FOLLOW_UP') {
-    return 'POST_EXAM'
-  }
-
+  if (invoice.invoiceCategory === 'FOLLOW_UP') return 'FOLLOW_UP'
+  if (invoice.invoiceCategory === 'POST_EXAM') return 'POST_EXAM'
   return 'APPOINTMENT_BOOKING'
 }
 
@@ -319,7 +296,7 @@ function isCompletedAppointment(appointment: Appointment): boolean {
 }
 
 type InvoiceStatusFilter = 'all' | 'UNPAID' | 'PAID' | 'FAILED' | 'CANCELLED'
-type InvoiceCategoryFilter = 'all' | 'APPOINTMENT_BOOKING' | 'POST_EXAM' | 'SERVICE_PACKAGE'
+type InvoiceCategoryFilter = 'all' | 'APPOINTMENT_BOOKING' | 'POST_EXAM' | 'FOLLOW_UP' | 'SERVICE_PACKAGE'
 
 export function PatientAppointmentsPage() {
   const { toast } = useToast()
@@ -847,6 +824,7 @@ export function PatientAppointmentsPage() {
                       <SelectItem value="all">Tất cả loại hóa đơn</SelectItem>
                       <SelectItem value="APPOINTMENT_BOOKING">Hóa đơn khám bệnh</SelectItem>
                       <SelectItem value="POST_EXAM">Hóa đơn sau khám</SelectItem>
+                      <SelectItem value="FOLLOW_UP">Hóa đơn tái khám</SelectItem>
                       <SelectItem value="SERVICE_PACKAGE">Hóa đơn gói dịch vụ</SelectItem>
                     </SelectContent>
                   </Select>
@@ -875,7 +853,7 @@ export function PatientAppointmentsPage() {
                       >
                         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-sm text-muted-foreground">{getInvoiceCategoryLabel(invoice)}</p>
+                            <p className="text-sm text-muted-foreground">{getInvoiceTypeLabel(invoice)}</p>
                             <p className="font-semibold">{getInvoiceReferenceCode(invoice)}</p>
                             <p className="text-xs text-muted-foreground">
                               Ngày tạo: {formatDate(invoice.createdAt)}
@@ -1127,7 +1105,7 @@ export function PatientAppointmentsPage() {
                 <p className="mt-1 font-mono text-sm font-semibold text-foreground">
                   {selectedInvoice.invoiceCode || `#${selectedInvoice.id}`}
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">{getInvoiceCategoryLabel(selectedInvoice)}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{getInvoiceTypeLabel(selectedInvoice)}</p>
               </div>
               <PatientStatusBadge
                 label={getInvoiceStatusLabel(selectedInvoice.status, selectedInvoice.paymentStatusDisplay)}
@@ -1141,7 +1119,7 @@ export function PatientAppointmentsPage() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <p className="text-xs text-muted-foreground">Loại hóa đơn</p>
-                    <p className="font-medium text-foreground">{getInvoiceCategoryLabel(selectedInvoice)}</p>
+                    <p className="font-medium text-foreground">{getInvoiceTypeLabel(selectedInvoice)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Loại khám</p>

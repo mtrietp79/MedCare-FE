@@ -378,6 +378,7 @@ function normalizeAppointment(raw: unknown): Appointment | null {
     parseTimeTo24h(source.appointmentTimeLabel)
 
   const appointmentType = pickString(source.type, source.appointmentType)
+  const appointmentTypeLabel = pickString(source.appointmentTypeLabel, source.typeLabel)
   const appointmentTimeLabel = pickString(
     source.appointmentTimeLabel,
     appointmentDate && appointmentTime ? `${appointmentDate} ${appointmentTime}` : undefined,
@@ -419,6 +420,7 @@ function normalizeAppointment(raw: unknown): Appointment | null {
     appointmentTimeLabel,
     appointmentDate,
     appointmentTime,
+    appointmentTypeLabel,
     type: pickString(source.type, appointmentType),
     appointmentType,
     typeCode: normalizeAppointmentTypeCode(source.typeCode, source.appointmentTypeCode),
@@ -432,6 +434,7 @@ function normalizeAppointment(raw: unknown): Appointment | null {
     consultationFee: pickNumber(source.consultationFee, source.fee),
     followUpNote: pickString(source.followUpNote),
     parentAppointmentId: pickString(source.parentAppointmentId),
+    isReExamination: toBoolean(source.isReExamination) || normalizeAppointmentTypeCode(source.typeCode, source.appointmentTypeCode) === 'FOLLOW_UP',
     medicalService: medicalService
       ? {
           id: pickString(medicalService.id),

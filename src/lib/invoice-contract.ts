@@ -7,15 +7,39 @@ export type InvoiceCategory =
   | 'SERVICE_PACKAGE'
   | string
 
+export interface InvoicePrescriptionItem {
+  id?: string | null
+  medicineId?: string | null
+  name?: string | null
+  quantity?: number | null
+  dosage?: string | null
+  unit?: string | null
+  unitPrice?: number | null
+  lineTotal?: number | null
+}
+
+export interface InvoiceMedicalServiceItem {
+  id?: string | null
+  serviceId?: string | null
+  name?: string | null
+  quantity?: number | null
+  note?: string | null
+  unitPrice?: number | null
+  lineTotal?: number | null
+}
+
 export interface InvoiceItem {
   id: number
   sourceType: InvoiceSourceType
   sourceId: number
   invoiceType?: string | null
   type?: string | null
+  examType?: string | null
+  typeLabel?: string | null
   invoiceCode: string | null
   invoiceCategory: InvoiceCategory
   invoiceCategoryDisplay: string | null
+  medicalRecordCode?: string | null
   recordId: number | null
   medicalRecordId: number | null
   appointmentId: number | null
@@ -47,6 +71,8 @@ export interface InvoiceItem {
   createdAt: string | null
   paymentDate: string | null
   uniqueKey?: string | null
+  prescriptionItems?: InvoicePrescriptionItem[] | null
+  medicalServiceItems?: InvoiceMedicalServiceItem[] | null
 }
 
 function asRecord(value: unknown): Record<string, any> | null {
@@ -301,6 +327,55 @@ function sumInvoiceAmount(
   return (consultationFee ?? 0) + (medicineFee ?? 0) + (serviceFee ?? 0)
 }
 
+function normalizeInvoicePrescriptionItems(raw: unknown): InvoicePrescriptionItem[] | null {
+  const rows = Array.isArray(raw) ? raw : []
+  if (rows.length === 0) return null
+
+  const items = rows.reduce<InvoicePrescriptionItem[]>((accumulator, item) => {
+    const row = asRecord(item)
+    if (!row) return accumulator
+
+    accumulator.push({
+      id: pickString(row.id),
+      medicineId: pickString(row.medicineId, row.id),
+      name: pickString(row.name, row.medicineName),
+      quantity: pickNumber(row.quantity, row.qty, row.count),
+      dosage: pickString(row.dosage, row.usage),
+      unit: pickString(row.unit),
+      unitPrice: pickNumber(row.unitPrice, row.price),
+      lineTotal: pickNumber(row.lineTotal, row.totalAmount, row.amount),
+    })
+
+    return accumulator
+  }, [])
+
+  return items.length > 0 ? items : null
+}
+
+function normalizeInvoiceMedicalServiceItems(raw: unknown): InvoiceMedicalServiceItem[] | null {
+  const rows = Array.isArray(raw) ? raw : []
+  if (rows.length === 0) return null
+
+  const items = rows.reduce<InvoiceMedicalServiceItem[]>((accumulator, item) => {
+    const row = asRecord(item)
+    if (!row) return accumulator
+
+    accumulator.push({
+      id: pickString(row.id),
+      serviceId: pickString(row.serviceId, row.id),
+      name: pickString(row.name, row.serviceName),
+      quantity: pickNumber(row.quantity, row.qty, row.count),
+      note: pickString(row.note, row.notes),
+      unitPrice: pickNumber(row.unitPrice, row.price),
+      lineTotal: pickNumber(row.lineTotal, row.totalAmount, row.amount),
+    })
+
+    return accumulator
+  }, [])
+
+  return items.length > 0 ? items : null
+}
+
 export function normalizeInvoiceItem(raw: unknown): InvoiceItem | null {
   const source = unwrapEntity(raw)
   if (!source) return null
@@ -342,11 +417,14 @@ export function normalizeInvoiceItem(raw: unknown): InvoiceItem | null {
     sourceId,
     invoiceType: pickString(source.invoiceType) ?? null,
     type: pickString(source.type) ?? null,
+    examType: pickString(source.examType) ?? null,
+    typeLabel: pickString(source.typeLabel) ?? null,
     invoiceCode: pickString(source.invoiceCode, source.code) ?? null,
     invoiceCategory,
     invoiceCategoryDisplay:
       pickDisplayLabel(source.invoiceCategoryDisplay, source.categoryDisplay) ??
       inferInvoiceCategoryDisplay(invoiceCategory),
+    medicalRecordCode: pickString(source.medicalRecordCode, source.recordCode) ?? null,
     recordId: pickNumber(source.recordId, source.medicalRecordId) ?? null,
     medicalRecordId: pickNumber(source.medicalRecordId, source.recordId) ?? null,
     appointmentId: pickNumber(source.appointmentId, source.sourceType === 'APPOINTMENT' ? source.sourceId : undefined) ?? null,
@@ -383,6 +461,10 @@ export function normalizeInvoiceItem(raw: unknown): InvoiceItem | null {
     createdAt: pickString(source.createdAt) ?? null,
     paymentDate: pickString(source.paymentDate, source.paidAt) ?? null,
     uniqueKey: pickString(source.uniqueKey) ?? null,
+    prescriptionItems: normalizeInvoicePrescriptionItems(source.prescriptionItems ?? source.medicines ?? source.medicineItems),
+    medicalServiceItems: normalizeInvoiceMedicalServiceItems(
+      source.medicalServiceItems ?? source.services ?? source.serviceItems
+    ),
   }
 }
 

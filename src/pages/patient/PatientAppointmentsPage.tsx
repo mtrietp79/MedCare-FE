@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { api, type PatientInvoice, type PatientMedicalRecord } from '@/services/api'
 import { doctorFeedbackService } from '@/services/doctorFeedbackService'
@@ -158,6 +159,71 @@ function formatCurrencyVnd(value?: number | null) {
   return `${new Intl.NumberFormat('vi-VN').format(Number(value || 0))} VND`
 }
 
+function normalizeText(value?: string | null): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function formatInvoiceMoney(value?: number | null): string {
+  return formatCurrencyVnd(value)
+}
+
+function getInvoiceExamTypeLabel(invoice: PatientInvoice): string {
+  const raw = [
+    invoice.examType,
+    invoice.typeLabel,
+    invoice.appointmentTypeDisplay,
+    invoice.appointmentType,
+  ].find((item) => String(item || '').trim())
+
+  const normalized = normalizeText(raw)
+  if (
+    invoice.sourceType === 'SERVICE_PACKAGE' ||
+    normalized.includes('dich vu') ||
+    normalized.includes('service') ||
+    normalized.includes('package')
+  ) {
+    return 'Khám dịch vụ'
+  }
+
+  return 'Khám bệnh'
+}
+
+function getInvoiceMedicalRecordCode(invoice: PatientInvoice): string {
+  return invoice.medicalRecordCode || '-'
+}
+
+function getInvoiceDoctorName(invoice: PatientInvoice): string {
+  return invoice.doctorFullName || invoice.doctorName || '-'
+}
+
+function formatInvoiceLineAmount(
+  item: { quantity?: number | null; unitPrice?: number | null; lineTotal?: number | null },
+  fallbackAmount?: number | null
+): string {
+  const computed =
+    item.lineTotal ??
+    (item.quantity != null && item.unitPrice != null ? item.quantity * item.unitPrice : undefined) ??
+    fallbackAmount ??
+    0
+  return formatInvoiceMoney(computed)
+}
+
+function sumInvoiceItemAmounts(
+  items?: Array<{ quantity?: number | null; unitPrice?: number | null; lineTotal?: number | null }> | null
+): number {
+  return (items || []).reduce((total, item) => {
+    const amount =
+      item.lineTotal ??
+      (item.quantity != null && item.unitPrice != null ? item.quantity * item.unitPrice : 0) ??
+      0
+    return total + Number(amount || 0)
+  }, 0)
+}
+
 function formatInvoiceAppointmentDateTime(invoice: PatientInvoice): string {
   const rawDateSource = String(invoice.appointmentDate || invoice.appointmentDateTime || '').trim()
   const rawTimeSource = String(invoice.appointmentTime || '').trim()
@@ -222,6 +288,7 @@ function mergeInvoiceWithMedicalRecord(invoice: PatientInvoice, record: PatientM
 
   return {
     ...invoice,
+    medicalRecordCode: record.recordCode ?? invoice.medicalRecordCode,
     invoiceCode: recordInvoice.invoiceCode ?? invoice.invoiceCode,
     invoiceCategory: recordInvoice.invoiceCategory ?? invoice.invoiceCategory,
     invoiceCategoryDisplay: recordInvoice.invoiceCategoryDisplay ?? invoice.invoiceCategoryDisplay,
@@ -232,6 +299,17 @@ function mergeInvoiceWithMedicalRecord(invoice: PatientInvoice, record: PatientM
     totalAmount: recordInvoice.totalAmount ?? invoice.totalAmount,
     canPayOnline: recordInvoice.canPayOnline ?? invoice.canPayOnline,
     paymentDate: recordInvoice.paymentDate ?? invoice.paymentDate,
+    doctorName: record.doctor?.fullName ?? record.doctorName ?? invoice.doctorName,
+    doctorFullName: record.doctor?.fullName ?? record.doctorName ?? invoice.doctorFullName,
+    appointmentCode: record.appointmentCode ?? invoice.appointmentCode,
+    appointmentDate: record.appointmentDate ?? invoice.appointmentDate,
+    appointmentTime: record.appointmentTime ?? invoice.appointmentTime,
+    appointmentType: record.appointmentTypeCode ?? invoice.appointmentType,
+    appointmentTypeDisplay: getAppointmentTypeDisplay(record.appointmentTypeCode, record.typeCode, invoice.appointmentTypeDisplay),
+    examType: invoice.examType ?? record.typeCode ?? record.appointmentTypeCode ?? invoice.examType,
+    typeLabel: invoice.typeLabel ?? record.typeCode ?? record.appointmentTypeCode ?? invoice.typeLabel,
+    prescriptionItems: record.medicines ?? invoice.prescriptionItems,
+    medicalServiceItems: record.services ?? invoice.medicalServiceItems,
   }
 }
 
@@ -545,6 +623,9 @@ export function PatientAppointmentsPage() {
 
       if (invoice.medicalRecordId) {
         const record = await api.patients.getMyMedicalRecordById(String(invoice.medicalRecordId))
+        detail = mergeInvoiceWithMedicalRecord(detail, record)
+      } else if (invoice.sourceType === 'APPOINTMENT' && invoice.appointmentId) {
+        const record = await api.patients.getMyMedicalRecordByAppointmentId(String(invoice.appointmentId))
         detail = mergeInvoiceWithMedicalRecord(detail, record)
       }
 
@@ -1029,34 +1110,191 @@ export function PatientAppointmentsPage() {
       </Dialog>
 
       <Dialog open={invoiceDetailOpen} onOpenChange={setInvoiceDetailOpen}>
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>Chi tiết hóa đơn</DialogTitle>
-            <DialogDescription>Thông tin giao dịch và thanh toán</DialogDescription>
-          </DialogHeader>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-[960px]">
+        <DialogHeader>
+          <DialogTitle>Chi tiết hóa đơn</DialogTitle>
+          <DialogDescription>Thông tin giao dịch và thanh toán</DialogDescription>
+        </DialogHeader>
 
-          {invoiceDetailLoading ? (
-            <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">Đang tải chi tiết...</div>
-          ) : selectedInvoice ? (
-            <div className="space-y-2 text-sm">
-              <p><span className="font-semibold">Loại hóa đơn:</span> {getInvoiceCategoryLabel(selectedInvoice)}</p>
-              <p><span className="font-semibold">Nguồn:</span> {getInvoiceSourceLabel(selectedInvoice)}</p>
-              <p><span className="font-semibold">Mã tham chiếu:</span> {getInvoiceReferenceCode(selectedInvoice)}</p>
-              <p><span className="font-semibold">Mã hóa đơn:</span> {selectedInvoice.invoiceCode || `#${selectedInvoice.id}`}</p>
-              <p><span className="font-semibold">Mã bệnh án:</span> {selectedInvoice.medicalRecordId || selectedInvoice.recordId || '-'}</p>
-              <p><span className="font-semibold">Loại khám:</span> {selectedInvoice.appointmentTypeDisplay || '-'}</p>
-              <p><span className="font-semibold">Booking gói dịch vụ:</span> {selectedInvoice.servicePackageBookingCode || '-'}</p>
-              <p><span className="font-semibold">Tên gói dịch vụ:</span> {selectedInvoice.servicePackageName || '-'}</p>
-              <p><span className="font-semibold">Tổng tiền:</span> {formatCurrencyVnd(getInvoiceAmount(selectedInvoice))}</p>
-              <p><span className="font-semibold">Trạng thái:</span> {getInvoiceStatusLabel(selectedInvoice.status, selectedInvoice.paymentStatusDisplay)}</p>
-              <p><span className="font-semibold">Ngày tạo:</span> {formatDate(selectedInvoice.createdAt)}</p>
-              <p><span className="font-semibold">Ngày thanh toán:</span> {formatDate(selectedInvoice.paymentDate)}</p>
+        {invoiceDetailLoading ? (
+          <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">Đang tải chi tiết...</div>
+        ) : selectedInvoice ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 p-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Mã hóa đơn</p>
+                <p className="mt-1 font-mono text-sm font-semibold text-foreground">
+                  {selectedInvoice.invoiceCode || `#${selectedInvoice.id}`}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">{getInvoiceCategoryLabel(selectedInvoice)}</p>
+              </div>
+              <PatientStatusBadge
+                label={getInvoiceStatusLabel(selectedInvoice.status, selectedInvoice.paymentStatusDisplay)}
+                className={getInvoiceStatusClass(selectedInvoice.status)}
+              />
             </div>
-          ) : (
-            <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">
-              Không có dữ liệu hóa đơn.
+
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="rounded-xl border border-border/70 bg-background p-4">
+                <h4 className="mb-3 text-sm font-semibold text-foreground">Thông tin chính</h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Loại hóa đơn</p>
+                    <p className="font-medium text-foreground">{getInvoiceCategoryLabel(selectedInvoice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Loại khám</p>
+                    <p className="font-medium text-foreground">{getInvoiceExamTypeLabel(selectedInvoice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Mã tham chiếu</p>
+                    <p className="font-medium text-foreground">{getInvoiceReferenceCode(selectedInvoice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Mã bệnh án</p>
+                    <p className="font-medium text-foreground">{getInvoiceMedicalRecordCode(selectedInvoice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Bác sĩ</p>
+                    <p className="font-medium text-foreground">{getInvoiceDoctorName(selectedInvoice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Ngày tạo</p>
+                    <p className="font-medium text-foreground">{formatDate(selectedInvoice.createdAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Ngày thanh toán</p>
+                    <p className="font-medium text-foreground">{formatDate(selectedInvoice.paymentDate)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/70 bg-background p-4">
+                <h4 className="mb-3 text-sm font-semibold text-foreground">Chi phí</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Tiền khám</span>
+                    <span className="font-medium text-foreground">
+                      {formatInvoiceMoney(selectedInvoice.consultationFee)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Tiền thuốc</span>
+                    <span className="font-medium text-foreground">
+                      {formatInvoiceMoney(
+                        selectedInvoice.medicineFee ?? sumInvoiceItemAmounts(selectedInvoice.prescriptionItems)
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Tiền dịch vụ</span>
+                    <span className="font-medium text-foreground">
+                      {formatInvoiceMoney(
+                        selectedInvoice.serviceFee ?? sumInvoiceItemAmounts(selectedInvoice.medicalServiceItems)
+                      )}
+                    </span>
+                  </div>
+                  <div className="border-t border-dashed border-border pt-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-foreground">Tổng tiền</span>
+                      <span className="text-base font-semibold text-primary">
+                        {formatInvoiceMoney(getInvoiceAmount(selectedInvoice))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
+
+            {selectedInvoice.sourceType === 'SERVICE_PACKAGE' ? (
+              <div className="rounded-xl border border-border/70 bg-background p-4">
+                <h4 className="mb-3 text-sm font-semibold text-foreground">Gói dịch vụ</h4>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Booking gói dịch vụ</p>
+                    <p className="font-medium text-foreground">{selectedInvoice.servicePackageBookingCode || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Tên gói dịch vụ</p>
+                    <p className="font-medium text-foreground">{selectedInvoice.servicePackageName || '-'}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {selectedInvoice.prescriptionItems?.length ? (
+              <div className="rounded-xl border border-border/70 bg-background p-4">
+                <h4 className="mb-3 text-sm font-semibold text-foreground">Đơn thuốc</h4>
+                <div className="overflow-hidden rounded-lg border border-border/70">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tên thuốc</TableHead>
+                        <TableHead className="w-20 text-center">SL</TableHead>
+                        <TableHead>Liều dùng</TableHead>
+                        <TableHead className="text-right">Đơn giá</TableHead>
+                        <TableHead className="text-right">Thành tiền</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedInvoice.prescriptionItems.map((item, index) => (
+                        <TableRow key={item.id ?? `${item.medicineId || 'medicine'}-${index}`}>
+                          <TableCell className="font-medium">{item.name || '-'}</TableCell>
+                          <TableCell className="text-center">{item.quantity ?? '-'}</TableCell>
+                          <TableCell>{item.dosage || '-'}</TableCell>
+                          <TableCell className="text-right">
+                            {formatInvoiceMoney(item.unitPrice)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatInvoiceLineAmount(item)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ) : null}
+
+            {selectedInvoice.medicalServiceItems?.length ? (
+              <div className="rounded-xl border border-border/70 bg-background p-4">
+                <h4 className="mb-3 text-sm font-semibold text-foreground">Dịch vụ phát sinh</h4>
+                <div className="overflow-hidden rounded-lg border border-border/70">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Tên dịch vụ</TableHead>
+                        <TableHead className="w-20 text-center">SL</TableHead>
+                        <TableHead>Ghi chú</TableHead>
+                        <TableHead className="text-right">Đơn giá</TableHead>
+                        <TableHead className="text-right">Thành tiền</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedInvoice.medicalServiceItems.map((item, index) => (
+                        <TableRow key={item.id ?? `${item.serviceId || 'service'}-${index}`}>
+                          <TableCell className="font-medium">{item.name || '-'}</TableCell>
+                          <TableCell className="text-center">{item.quantity ?? '-'}</TableCell>
+                          <TableCell>{item.note || '-'}</TableCell>
+                          <TableCell className="text-right">
+                            {formatInvoiceMoney(item.unitPrice)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatInvoiceLineAmount(item)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-muted-foreground">
+            Không có dữ liệu hóa đơn.
+          </div>
+        )}
         </DialogContent>
       </Dialog>
     </div>

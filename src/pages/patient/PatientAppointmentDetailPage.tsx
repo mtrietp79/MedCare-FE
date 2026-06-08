@@ -19,6 +19,11 @@ import { api, type PatientMedicalRecord } from '@/services/api'
 import type { Appointment } from '@/types'
 import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
 import {
+  canRequestAppointmentCancellation,
+  getAppointmentCancellationStatusLabel,
+  getAppointmentCancellationStatusMessage,
+} from '@/lib/appointment-cancellation'
+import {
   getPaymentStatusKey,
   getPaymentStatusLabel,
   isPaymentSettled,
@@ -312,7 +317,9 @@ export function PatientAppointmentDetailPage() {
     Boolean(record?.invoice?.canPayOnline) &&
     isInvoicePendingPaymentStatus(record?.invoice?.status) &&
     invoiceTotalAmount > 0
-  const canCancel = !isCancelled && !isCompleted
+  const canCancel = canRequestAppointmentCancellation(appointment)
+  const cancellationStatusLabel = getAppointmentCancellationStatusLabel(appointment)
+  const cancellationStatusMessage = getAppointmentCancellationStatusMessage(appointment)
 
   return (
     <div className="space-y-6">
@@ -401,6 +408,16 @@ export function PatientAppointmentDetailPage() {
               </div>
             ) : null}
           </div>
+
+          {cancellationStatusLabel ? (
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-5">
+              <p className="text-sm text-muted-foreground">Yêu cầu hủy</p>
+              <p className="mt-2 font-medium text-foreground">{cancellationStatusLabel}</p>
+              {cancellationStatusMessage ? (
+                <p className="mt-2 text-sm text-muted-foreground">{cancellationStatusMessage}</p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
             <Button variant="outline" className="gap-2" onClick={openMedicalRecordDialog}>

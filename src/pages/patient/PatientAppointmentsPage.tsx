@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CancelAppointmentDialog } from '@/components/booking/cancel-appointment'
 import {
   Select,
   SelectContent,
@@ -36,6 +37,12 @@ import type { Appointment, ServicePackageBooking } from '@/types'
 import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
 import { normalizePaymentRedirectUrl } from '@/lib/payment-url'
 import { getAppointmentTypeLabel as getPatientAppointmentTypeLabel } from '@/lib/appointment-type'
+import {
+  canRequestAppointmentCancellation,
+  getAppointmentCancellationStatusClass,
+  getAppointmentCancellationStatusLabel,
+  getAppointmentCancellationStatusMessage,
+} from '@/lib/appointment-cancellation'
 import { resolveAppointmentStatusView, resolvePaymentStatusView } from '@/lib/appointment-status'
 import {
   canPayInvoiceOnline,
@@ -676,6 +683,9 @@ export function PatientAppointmentsPage() {
                   const statusView = resolveAppointmentStatusView(appointment.status, appointment.statusDisplay)
                   const appointmentTypeLabel = getAppointmentTypeLabel(appointment)
                   const isFollowUpAppointment = appointmentTypeLabel === 'Tái khám' || Boolean(appointment.parentAppointmentId)
+                  const cancellationStatusLabel = getAppointmentCancellationStatusLabel(appointment)
+                  const cancellationStatusMessage = getAppointmentCancellationStatusMessage(appointment)
+                  const canCancelAppointment = canRequestAppointmentCancellation(appointment)
                   return (
                     <Card
                       key={getAppointmentListKey(appointment, index)}
@@ -697,6 +707,20 @@ export function PatientAppointmentsPage() {
                           </p>
                           {isFollowUpAppointment ? (
                             <p className="text-xs text-amber-700 dark:text-amber-400">Lịch tái khám do bác sĩ hẹn</p>
+                          ) : null}
+                          {cancellationStatusLabel ? (
+                            <div className="space-y-1">
+                              <span
+                                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getAppointmentCancellationStatusClass(
+                                  appointment
+                                )}`}
+                              >
+                                {cancellationStatusLabel}
+                              </span>
+                              {cancellationStatusMessage ? (
+                                <p className="text-xs text-muted-foreground">{cancellationStatusMessage}</p>
+                              ) : null}
+                            </div>
                           ) : null}
                           <p className="text-sm text-muted-foreground">
                             {appointment.serviceName || appointment.medicalService?.name || 'Khám tổng quát'}
@@ -736,6 +760,10 @@ export function PatientAppointmentsPage() {
                               )
                             ) : null}
                           </div>
+
+                          {canCancelAppointment ? (
+                            <CancelAppointmentDialog appointment={appointment} onSuccess={() => void loadData()} />
+                          ) : null}
 
                           <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
                             <Link to={`/patient/appointments/${appointment.id}`}>

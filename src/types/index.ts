@@ -202,6 +202,20 @@ export interface Appointment {
   followUpNote?: string
   parentAppointmentId?: string
   isReExamination?: boolean
+  cancellationRequestId?: string
+  cancellationRequestStatus?: string
+  cancellationRequestStatusDisplay?: string
+  cancellationRequestReason?: string
+  cancellationRequestPatientNote?: string
+  cancellationRequestAdminNote?: string
+  cancellationRequestBankName?: string
+  cancellationRequestBankAccountNumber?: string
+  cancellationRequestBankAccountHolder?: string
+  cancellationRequestProcessedBy?: string
+  cancellationRequestProcessedByName?: string
+  cancellationRequestProcessedAt?: string
+  cancellationRequestCreatedAt?: string
+  cancellationRequestUpdatedAt?: string
   medicalService?: {
     id?: string
     name?: string

@@ -160,6 +160,14 @@ export interface PatientMedicalRecord {
   updatedAt?: string
 }
 
+export interface AppointmentCancellationRequestPayload {
+  cancelReason: string
+  bankName?: string
+  bankAccountNumber?: string
+  bankAccountHolder?: string
+  patientNote?: string
+}
+
 export type PatientInvoice = InvoiceItem
 
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
@@ -354,6 +362,7 @@ function normalizeAppointment(raw: unknown): Appointment | null {
   const doctor = asRecord(source.doctor)
   const specialty = asRecord(source.specialty)
   const medicalService = asRecord(source.medicalService)
+  const cancellationRequest = asRecord(source.cancellationRequest ?? source.cancelRequest ?? source.refundRequest)
 
   const id = pickString(source.id, source.appointmentId)
   if (!id) return null
@@ -435,6 +444,80 @@ function normalizeAppointment(raw: unknown): Appointment | null {
     followUpNote: pickString(source.followUpNote),
     parentAppointmentId: pickString(source.parentAppointmentId),
     isReExamination: toBoolean(source.isReExamination) || normalizeAppointmentTypeCode(source.typeCode, source.appointmentTypeCode) === 'FOLLOW_UP',
+    cancellationRequestId: pickString(cancellationRequest?.id, source.cancellationRequestId, source.cancelRequestId),
+    cancellationRequestStatus: pickString(
+      cancellationRequest?.status,
+      source.cancellationRequestStatus,
+      source.cancelRequestStatus,
+      source.cancellationStatus,
+      source.refundStatus
+    ),
+    cancellationRequestStatusDisplay: pickString(
+      cancellationRequest?.statusDisplay,
+      source.cancellationRequestStatusDisplay,
+      source.cancelRequestStatusDisplay,
+      source.cancellationStatusDisplay,
+      source.refundStatusDisplay
+    ),
+    cancellationRequestReason: pickString(cancellationRequest?.reason, source.cancellationRequestReason, source.cancelRequestReason),
+    cancellationRequestPatientNote: pickString(
+      cancellationRequest?.patientNote,
+      source.cancellationRequestPatientNote,
+      source.cancelRequestNote,
+      source.patientNote
+    ),
+    cancellationRequestAdminNote: pickString(
+      cancellationRequest?.adminNote,
+      source.cancellationRequestAdminNote,
+      source.cancelRequestAdminNote,
+      source.adminNote,
+      source.rejectReason
+    ),
+    cancellationRequestBankName: pickString(cancellationRequest?.bankName, source.cancellationRequestBankName, source.bankName),
+    cancellationRequestBankAccountNumber: pickString(
+      cancellationRequest?.bankAccountNumber,
+      source.cancellationRequestBankAccountNumber,
+      source.bankAccountNumber,
+      source.accountNumber
+    ),
+    cancellationRequestBankAccountHolder: pickString(
+      cancellationRequest?.bankAccountHolder,
+      source.cancellationRequestBankAccountHolder,
+      source.bankAccountHolder,
+      source.accountHolder,
+      source.accountName
+    ),
+    cancellationRequestProcessedBy: pickString(
+      cancellationRequest?.processedBy,
+      source.cancellationRequestProcessedBy,
+      source.cancelRequestProcessedBy,
+      source.processedBy
+    ),
+    cancellationRequestProcessedByName: pickString(
+      cancellationRequest?.processedByName,
+      source.cancellationRequestProcessedByName,
+      source.cancelRequestProcessedByName,
+      source.processedByName
+    ),
+    cancellationRequestProcessedAt: pickString(
+      cancellationRequest?.processedAt,
+      source.cancellationRequestProcessedAt,
+      source.cancelRequestProcessedAt,
+      source.processedAt
+    ),
+    cancellationRequestCreatedAt: pickString(
+      cancellationRequest?.createdAt,
+      source.cancellationRequestCreatedAt,
+      source.cancelRequestCreatedAt,
+      source.requestedAt,
+      source.submittedAt
+    ),
+    cancellationRequestUpdatedAt: pickString(
+      cancellationRequest?.updatedAt,
+      source.cancellationRequestUpdatedAt,
+      source.cancelRequestUpdatedAt,
+      source.updatedAt
+    ),
     medicalService: medicalService
       ? {
           id: pickString(medicalService.id),
@@ -1027,6 +1110,22 @@ export const appointmentApi = {
     const normalized = normalizeAppointment(payload)
     if (!normalized) {
       throw new Error('Khong the huy lich kham.')
+    }
+    return normalized
+  },
+
+  async requestCancellation(
+    id: string,
+    payload: AppointmentCancellationRequestPayload
+  ): Promise<Appointment> {
+    const raw = await apiCall<any>(`/patient/appointments/${id}/cancel-request`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    const responsePayload = unwrapDataPayload(raw)
+    const normalized = normalizeAppointment(responsePayload)
+    if (!normalized) {
+      throw new Error('Không thể gửi yêu cầu hủy lịch.')
     }
     return normalized
   },

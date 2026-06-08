@@ -4,6 +4,13 @@ import {
   shouldOmitInvoiceQueryValue,
   type InvoiceItem,
 } from '@/lib/invoice-contract'
+import {
+  normalizeCancellationRequestList,
+  normalizeCancellationRequestItem,
+  normalizeCancellationRequestStats,
+  type CancellationRequestItem,
+  type CancellationRequestStats,
+} from '@/lib/cancellation-request-contract'
 import axios from 'axios'
 import { handleProtectedApiAuthFailure } from './auth'
 
@@ -323,6 +330,18 @@ export interface AdminInvoiceSummary {
   pendingAmount?: number
   paidInvoices?: number
   pendingInvoices?: number
+}
+
+export type AdminCancellationRequest = CancellationRequestItem
+
+export type AdminCancellationRequestSummary = CancellationRequestStats
+
+export interface AdminCancellationRequestPage {
+  items: AdminCancellationRequest[]
+  total?: number
+  page?: number
+  size?: number
+  totalPages?: number
 }
 
 interface HttpStatusError extends Error {
@@ -1430,6 +1449,78 @@ export const adminApi = {
       headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(data || {})
     });
+  },
+
+  getCancellationRequests: async (query?: {
+    keyword?: string
+    status?: string
+    page?: number
+    size?: number
+    sort?: string
+  }): Promise<AdminCancellationRequestPage> => {
+    const token = getStoredToken()
+    const params = new URLSearchParams()
+
+    if (query?.keyword) params.append('keyword', query.keyword)
+    if (query?.status && !shouldOmitInvoiceQueryValue(query.status)) params.append('status', query.status)
+    if (query?.page !== undefined) params.append('page', String(query.page))
+    if (query?.size !== undefined) params.append('size', String(query.size))
+    if (query?.sort) params.append('sort', query.sort)
+
+    const endpoint = `${API_BASE_URL}/admin/finance/cancellation-requests${params.toString() ? `?${params.toString()}` : ''}`
+    const data = await fetchJson<any>(endpoint, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const items = normalizeCancellationRequestList(data)
+    const source = asRecord(data) ?? asRecord(asRecord(data)?.data) ?? {}
+    return {
+      items,
+      total: pickNumber(source.totalElements, source.total, source.count, items.length),
+      page: pickNumber(source.number, source.page, query?.page) ?? query?.page,
+      size: pickNumber(source.size, query?.size) ?? query?.size,
+      totalPages: pickNumber(source.totalPages, source.pages),
+    }
+  },
+
+  getCancellationRequestsStats: async (): Promise<AdminCancellationRequestSummary> => {
+    const token = getStoredToken()
+    const data = await fetchJson<any>(`${API_BASE_URL}/admin/finance/cancellation-requests/stats`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    return normalizeCancellationRequestStats(data)
+  },
+
+  approveCancellationRequest: async (id: string, data?: { adminNote?: string }): Promise<AdminCancellationRequest | null> => {
+    const token = getStoredToken()
+    const response = await fetchJson<any>(`${API_BASE_URL}/admin/finance/cancellation-requests/${id}/approve`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data || {})
+    })
+    return normalizeCancellationRequestItem(response)
+  },
+
+  rejectCancellationRequest: async (id: string, data?: { adminNote?: string }): Promise<AdminCancellationRequest | null> => {
+    const token = getStoredToken()
+    const response = await fetchJson<any>(`${API_BASE_URL}/admin/finance/cancellation-requests/${id}/reject`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data || {})
+    })
+    return normalizeCancellationRequestItem(response)
+  },
+
+  markCancellationRequestRefunded: async (
+    id: string,
+    data?: { adminNote?: string }
+  ): Promise<AdminCancellationRequest | null> => {
+    const token = getStoredToken()
+    const response = await fetchJson<any>(`${API_BASE_URL}/admin/finance/cancellation-requests/${id}/mark-refunded`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data || {})
+    })
+    return normalizeCancellationRequestItem(response)
   },
 
   // Feedback Management APIs

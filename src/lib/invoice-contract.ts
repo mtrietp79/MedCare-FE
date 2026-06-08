@@ -11,6 +11,8 @@ export interface InvoiceItem {
   id: number
   sourceType: InvoiceSourceType
   sourceId: number
+  invoiceType?: string | null
+  type?: string | null
   invoiceCode: string | null
   invoiceCategory: InvoiceCategory
   invoiceCategoryDisplay: string | null
@@ -19,7 +21,10 @@ export interface InvoiceItem {
   appointmentId: number | null
   appointmentCode: string | null
   appointmentType: string | null
-  appointmentTypeDisplay: 'Khám bệnh' | 'Tái khám' | null
+  appointmentDate?: string | null
+  appointmentTime?: string | null
+  appointmentDateTime?: string | null
+  appointmentTypeDisplay: string | null
   servicePackageBookingId: number | null
   servicePackageBookingCode: string | null
   servicePackageName: string | null
@@ -52,7 +57,8 @@ function unwrapEntity(input: unknown): Record<string, any> | null {
   const source = asRecord(input)
   if (!source) return null
   const nested = asRecord(source.data)
-  return nested ?? source
+  if (!nested) return source
+  return asRecord(nested.data) ?? nested
 }
 
 function unwrapList(input: unknown): any[] {
@@ -67,8 +73,15 @@ function unwrapList(input: unknown): any[] {
 
   const dataRecord = asRecord(source.data)
   if (dataRecord) {
+    if (Array.isArray(dataRecord.data)) return dataRecord.data
     if (Array.isArray(dataRecord.items)) return dataRecord.items
     if (Array.isArray(dataRecord.content)) return dataRecord.content
+
+    const nestedDataRecord = asRecord(dataRecord.data)
+    if (nestedDataRecord) {
+      if (Array.isArray(nestedDataRecord.items)) return nestedDataRecord.items
+      if (Array.isArray(nestedDataRecord.content)) return nestedDataRecord.content
+    }
   }
 
   return []
@@ -149,7 +162,7 @@ function pickDisplayLabel(...values: unknown[]): string | null {
   return null
 }
 
-export function getAppointmentTypeDisplay(...values: unknown[]): InvoiceItem['appointmentTypeDisplay'] {
+export function getAppointmentTypeDisplay(...values: unknown[]): string | null {
   const raw = pickString(...values)
   if (!raw) return null
 
@@ -190,8 +203,40 @@ function normalizeCategory(...values: unknown[]): InvoiceCategory | undefined {
   return raw
 }
 
+function normalizeInvoiceCategoryAlias(
+  category: InvoiceCategory | undefined,
+  sourceType: InvoiceSourceType
+): InvoiceCategory | undefined {
+  if (!category) return undefined
+
+  if (category === 'APPOINTMENT' || category === 'APPOINTMENT_BOOKING' || category === 'BOOKING') {
+    return 'APPOINTMENT_BOOKING'
+  }
+
+  if (category === 'INVOICE' || category === 'MEDICAL_RECORD' || category === 'POST_EXAM' || category === 'AFTER_EXAM') {
+    return 'POST_EXAM'
+  }
+
+  if (category === 'SERVICE_PACKAGE') {
+    return 'SERVICE_PACKAGE'
+  }
+
+  if (category === 'FOLLOW_UP' || category === 'REVISIT' || category === 'TAI_KHAM') {
+    return 'FOLLOW_UP'
+  }
+
+  if (sourceType === 'APPOINTMENT' && category !== 'SERVICE_PACKAGE') {
+    return 'APPOINTMENT_BOOKING'
+  }
+
+  return category
+}
+
 function inferInvoiceCategory(sourceType: InvoiceSourceType, source: Record<string, any>): InvoiceCategory {
-  const explicitCategory = normalizeCategory(source.invoiceCategory, source.category)
+  const explicitCategory = normalizeInvoiceCategoryAlias(
+    normalizeCategory(source.invoiceCategory, source.category, source.invoiceType, source.type),
+    sourceType
+  )
   if (explicitCategory) return explicitCategory
 
   if (sourceType === 'SERVICE_PACKAGE') return 'SERVICE_PACKAGE'
@@ -285,11 +330,18 @@ export function normalizeInvoiceItem(raw: unknown): InvoiceItem | null {
   const invoiceCategory = inferInvoiceCategory(sourceType, source)
   const appointmentTypeDisplay = getAppointmentTypeDisplay(source.appointmentTypeDisplay, source.appointmentType)
   const status = pickUppercaseString(source.status, source.paymentStatus) ?? ''
+  const appointmentDateTime = pickString(
+    source.appointmentDateTime,
+    source.appointmentDate,
+    source.appointmentTime && source.appointmentDate ? `${source.appointmentDate} ${source.appointmentTime}` : undefined
+  )
 
   return {
     id,
     sourceType,
     sourceId,
+    invoiceType: pickString(source.invoiceType) ?? null,
+    type: pickString(source.type) ?? null,
     invoiceCode: pickString(source.invoiceCode, source.code) ?? null,
     invoiceCategory,
     invoiceCategoryDisplay:
@@ -300,6 +352,9 @@ export function normalizeInvoiceItem(raw: unknown): InvoiceItem | null {
     appointmentId: pickNumber(source.appointmentId, source.sourceType === 'APPOINTMENT' ? source.sourceId : undefined) ?? null,
     appointmentCode: pickString(source.appointmentCode) ?? null,
     appointmentType: pickString(source.appointmentType) ?? null,
+    appointmentDate: pickString(source.appointmentDate, source.date) ?? null,
+    appointmentTime: pickString(source.appointmentTime, source.time) ?? null,
+    appointmentDateTime,
     appointmentTypeDisplay,
     servicePackageBookingId:
       pickNumber(
@@ -410,3 +465,4 @@ export function getInvoiceReferenceCode(invoice: Pick<InvoiceItem, 'sourceType' 
   if (invoice.sourceType === 'SERVICE_PACKAGE') return invoice.servicePackageBookingCode || `#${invoice.id}`
   return invoice.invoiceCode || `#${invoice.id}`
 }
+

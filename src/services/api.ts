@@ -1205,11 +1205,12 @@ export const patientApi = {
     }
   },
 
-  async getMyInvoices(query?: { status?: string; keyword?: string; category?: string }): Promise<PatientInvoice[]> {
+  async getMyInvoices(query?: { status?: string; type?: string; keyword?: string; category?: string }): Promise<PatientInvoice[]> {
     const params = new URLSearchParams()
-    if (query?.status && !shouldOmitInvoiceQueryValue(query.status)) params.append('status', query.status)
-    if (query?.keyword) params.append('keyword', query.keyword)
-    if (query?.category && !shouldOmitInvoiceQueryValue(query.category)) params.append('category', query.category)
+    if (query?.status !== undefined) params.append('status', query.status)
+    if (query?.type !== undefined) params.append('type', query.type)
+    if (query?.category !== undefined) params.append('category', query.category)
+    if (query?.keyword !== undefined) params.append('keyword', query.keyword)
     const endpoint = `/invoices/my${params.toString() ? `?${params.toString()}` : ''}`
 
     const data = await apiCall<any>(endpoint)

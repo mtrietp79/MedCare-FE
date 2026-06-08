@@ -158,6 +158,25 @@ function formatCurrencyVnd(value?: number | null) {
   return `${new Intl.NumberFormat('vi-VN').format(Number(value || 0))} VND`
 }
 
+function formatInvoiceAppointmentDateTime(invoice: PatientInvoice): string {
+  const rawDateSource = String(invoice.appointmentDate || invoice.appointmentDateTime || '').trim()
+  const rawTimeSource = String(invoice.appointmentTime || '').trim()
+
+  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/)
+  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
+  const embeddedTime = (datePrefixMatch?.[2] || '').trim()
+  const timeMatch = (rawTimeSource || embeddedTime).match(/^(\d{1,2}):(\d{2})/i)
+  const timeLabel = timeMatch
+    ? `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
+    : ''
+
+  const dateLabel = formatDate(dateSource)
+  if (dateLabel === '-' && !timeLabel) return '-'
+  if (dateLabel === '-') return timeLabel
+  if (!timeLabel) return dateLabel
+  return `${dateLabel} ${timeLabel}`
+}
+
 function getAppointmentTypeLabel(appointment: Appointment): string {
   if (appointment.parentAppointmentId) return 'Tái khám'
   return getAppointmentTypeDisplay(appointment.appointmentType, appointment.type) || 'Khám bệnh'
@@ -185,6 +204,18 @@ function getInvoiceDetailSubtitle(invoice: PatientInvoice): string {
   return getInvoiceSourceLabel(invoice)
 }
 
+function getInvoiceFilterCategory(invoice: PatientInvoice): Exclude<InvoiceCategoryFilter, 'all'> {
+  if (invoice.sourceType === 'SERVICE_PACKAGE' || invoice.invoiceCategory === 'SERVICE_PACKAGE') {
+    return 'SERVICE_PACKAGE'
+  }
+
+  if (invoice.invoiceCategory === 'POST_EXAM' || invoice.invoiceCategory === 'FOLLOW_UP') {
+    return 'POST_EXAM'
+  }
+
+  return 'APPOINTMENT_BOOKING'
+}
+
 function mergeInvoiceWithMedicalRecord(invoice: PatientInvoice, record: PatientMedicalRecord | null): PatientInvoice {
   const recordInvoice = record?.invoice
   if (!recordInvoice) return invoice
@@ -209,7 +240,7 @@ function isCompletedAppointment(appointment: Appointment): boolean {
 }
 
 type InvoiceStatusFilter = 'all' | 'UNPAID' | 'PAID' | 'FAILED' | 'CANCELLED'
-type InvoiceCategoryFilter = 'all' | 'APPOINTMENT_BOOKING' | 'POST_EXAM' | 'FOLLOW_UP' | 'SERVICE_PACKAGE'
+type InvoiceCategoryFilter = 'all' | 'APPOINTMENT_BOOKING' | 'POST_EXAM' | 'SERVICE_PACKAGE'
 
 export function PatientAppointmentsPage() {
   const { toast } = useToast()
@@ -296,7 +327,7 @@ export function PatientAppointmentsPage() {
     try {
       setInvoiceLoading(true)
       setInvoiceError(null)
-      const data = await api.patients.getMyInvoices()
+      const data = await api.patients.getMyInvoices({ status: 'ALL', type: 'ALL', keyword: '' })
       setInvoices(Array.isArray(data) ? data : [])
     } catch (fetchError) {
       setInvoiceError(fetchError instanceof Error ? fetchError.message : 'Không thể tải hóa đơn.')
@@ -353,7 +384,7 @@ export function PatientAppointmentsPage() {
           ? ['UNPAID', 'PENDING', 'PENDING_PAYMENT', 'WAITING_PAYMENT'].includes(normalizedStatus)
           : normalizedStatus === invoiceStatus)
 
-      const hitCategory = invoiceCategory === 'all' || invoice.invoiceCategory === invoiceCategory
+      const hitCategory = invoiceCategory === 'all' || getInvoiceFilterCategory(invoice) === invoiceCategory
       return hitKeyword && hitStatus && hitCategory
     })
   }, [invoices, invoiceKeyword, invoiceStatus, invoiceCategory])
@@ -734,7 +765,6 @@ export function PatientAppointmentsPage() {
                       <SelectItem value="all">Tất cả loại hóa đơn</SelectItem>
                       <SelectItem value="APPOINTMENT_BOOKING">Hóa đơn khám bệnh</SelectItem>
                       <SelectItem value="POST_EXAM">Hóa đơn sau khám</SelectItem>
-                      <SelectItem value="FOLLOW_UP">Hóa đơn tái khám</SelectItem>
                       <SelectItem value="SERVICE_PACKAGE">Hóa đơn gói dịch vụ</SelectItem>
                     </SelectContent>
                   </Select>
@@ -756,9 +786,9 @@ export function PatientAppointmentsPage() {
                   <PatientEmptyState message="Chưa có hóa đơn phù hợp." />
                 ) : (
                   <div className="space-y-3">
-                    {visibleInvoices.map((invoice) => (
+                    {visibleInvoices.map((invoice, index) => (
                       <div
-                        key={invoice.id}
+                        key={invoice.uniqueKey ?? `${invoice.sourceType}-${invoice.id}-${index}`}
                         className="rounded-xl border border-border/80 bg-muted/20 p-4 transition-colors hover:border-primary/25 hover:bg-muted/40"
                       >
                         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
@@ -780,12 +810,16 @@ export function PatientAppointmentsPage() {
 
                         <div className="mb-3 text-sm text-muted-foreground">
                           <p>{getInvoiceDetailSubtitle(invoice)}</p>
+                          <p>Bác sĩ: {invoice.doctorFullName || invoice.doctorName || '-'}</p>
                           <p>
                             Tổng tiền:{' '}
                             <span className="font-semibold text-foreground">
                               {formatCurrencyVnd(getInvoiceAmount(invoice))}
                             </span>
                           </p>
+                          {invoice.sourceType === 'APPOINTMENT' || invoice.appointmentDate || invoice.appointmentDateTime ? (
+                            <p>Ngày khám: {formatInvoiceAppointmentDateTime(invoice)}</p>
+                          ) : null}
                           <p>Mã bệnh án: {invoice.medicalRecordId || invoice.recordId || '-'}</p>
                           {invoice.paymentDate ? <p>Ngày thanh toán: {formatDate(invoice.paymentDate)}</p> : null}
                         </div>

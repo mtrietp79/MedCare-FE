@@ -234,10 +234,20 @@ export function AdminPatientsPage() {
     try {
       setActionLoadingKey(`lock-${patient.id}`)
       const updated = await adminPatientService.lockPatient(patient.id)
+      console.info(`[AdminPatients] Lock patient success:`, {
+        patientId: patient.id,
+        patientName: patient.fullName,
+        updatedIsActive: updated.isActive,
+      })
       updatePatientInList(updated)
       await loadStats()
       toast({ title: 'Thành công', description: 'Khóa tài khoản bệnh nhân thành công' })
     } catch (actionError: unknown) {
+      console.error('[AdminPatients] Lock patient failed:', {
+        status: (actionError as { response?: { status: number } }).response?.status,
+        patientId: patient.id,
+        error: actionError,
+      })
       toast({
         title: 'Lỗi',
         description: adminPatientService.getErrorMessage(actionError, 'Không thể khóa tài khoản bệnh nhân.'),
@@ -253,10 +263,20 @@ export function AdminPatientsPage() {
     try {
       setActionLoadingKey(`unlock-${patient.id}`)
       const updated = await adminPatientService.unlockPatient(patient.id)
+      console.info(`[AdminPatients] Unlock patient success:`, {
+        patientId: patient.id,
+        patientName: patient.fullName,
+        updatedIsActive: updated.isActive,
+      })
       updatePatientInList(updated)
       await loadStats()
       toast({ title: 'Thành công', description: 'Mở khóa tài khoản bệnh nhân thành công' })
     } catch (actionError: unknown) {
+      console.error('[AdminPatients] Unlock patient failed:', {
+        status: (actionError as { response?: { status: number } }).response?.status,
+        patientId: patient.id,
+        error: actionError,
+      })
       toast({
         title: 'Lỗi',
         description: adminPatientService.getErrorMessage(actionError, 'Không thể mở khóa tài khoản bệnh nhân.'),
@@ -724,17 +744,18 @@ export function AdminPatientsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Khóa tài khoản bệnh nhân</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bạn có chắc muốn khóa tài khoản bệnh nhân này không?
+            <AlertDialogDescription className="space-y-3">
+              <p>Bạn có chắc muốn khóa tài khoản bệnh nhân <strong>{lockTarget?.fullName}</strong> không?</p>
+              <p>Tài khoản này sẽ không thể đăng nhập cho đến khi được mở khóa.</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogCancel disabled={lockTarget ? actionLoadingKey === `lock-${lockTarget.id}` : false}>Hủy</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => lockTarget && void handleLock(lockTarget)}
               disabled={lockTarget ? actionLoadingKey === `lock-${lockTarget.id}` : false}
             >
-              Khóa
+              {lockTarget && actionLoadingKey === `lock-${lockTarget.id}` ? 'Đang khóa...' : 'Khóa'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -744,17 +765,18 @@ export function AdminPatientsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Mở khóa tài khoản bệnh nhân</AlertDialogTitle>
-            <AlertDialogDescription>
-              Bạn có chắc muốn mở khóa tài khoản bệnh nhân {unlockTarget?.fullName}?
+            <AlertDialogDescription className="space-y-3">
+              <p>Bạn có chắc muốn mở khóa tài khoản bệnh nhân <strong>{unlockTarget?.fullName}</strong> không?</p>
+              <p>Bệnh nhân sẽ có thể đăng nhập lại sau khi mở khóa.</p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogCancel disabled={unlockTarget ? actionLoadingKey === `unlock-${unlockTarget.id}` : false}>Hủy</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => unlockTarget && void handleUnlock(unlockTarget)}
               disabled={unlockTarget ? actionLoadingKey === `unlock-${unlockTarget.id}` : false}
             >
-              Mở khóa
+              {unlockTarget && actionLoadingKey === `unlock-${unlockTarget.id}` ? 'Đang mở khóa...' : 'Mở khóa'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

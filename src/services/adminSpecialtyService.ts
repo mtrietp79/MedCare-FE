@@ -14,6 +14,17 @@ export interface SpecialtyDeleteCheckResult {
   message: string
 }
 
+export type SpecialtyStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE'
+export type SpecialtySortOrder = 'name_asc' | 'name_desc' | 'doctor_desc'
+
+export interface SpecialtyPaginatedResponse {
+  content: unknown[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+}
+
 function safeString(value: unknown): string {
   if (typeof value === 'string') return value.trim()
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
@@ -64,6 +75,40 @@ export const adminSpecialtyService = {
     const url = `${API_BASE_URL}/admin/specialties`
     const data = await fetchJson<unknown>(url)
     return extractListFromResponse(unwrapApiPayload(data))
+  },
+
+  getSpecialtiesPaginated: async (options: {
+    keyword?: string
+    status?: SpecialtyStatusFilter
+    sort?: SpecialtySortOrder
+    page?: number
+    size?: number
+  }): Promise<{ items: unknown[]; total: number; totalPages: number; currentPage: number }> => {
+    const { keyword = '', status = 'ALL', sort = 'name_asc', page = 0, size = 10 } = options
+    const params = new URLSearchParams()
+    if (keyword) params.append('keyword', keyword)
+    params.append('status', status)
+    params.append('page', String(page))
+    params.append('size', String(size))
+    params.append('sort', sort)
+
+    const url = `${API_BASE_URL}/admin/specialties?${params.toString()}`
+    const data = await fetchJson<unknown>(url)
+    const unwrapped = unwrapApiPayload(data)
+    const record = asRecord(unwrapped) || {}
+
+    const content = Array.isArray(record.content)
+      ? record.content
+      : Array.isArray(unwrapped)
+      ? unwrapped
+      : []
+
+    return {
+      items: content,
+      total: safeNumber(record.totalElements ?? record.total),
+      totalPages: safeNumber(record.totalPages ?? 1, 1),
+      currentPage: safeNumber(record.number ?? page),
+    }
   },
 
   checkDelete: async (id: string): Promise<SpecialtyDeleteCheckResult> => {

@@ -5,6 +5,8 @@ import { adminApi } from '@/services/adminService'
 import {
   adminSpecialtyService,
   type SpecialtyDeleteCheckResult,
+  type SpecialtyStatusFilter,
+  type SpecialtySortOrder,
 } from '@/services/adminSpecialtyService'
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -79,7 +81,11 @@ export function AdminSpecialtiesPage() {
 
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, 300)
-  const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'doctor_desc'>('name_asc')
+  const [sortBy, setSortBy] = useState<SpecialtySortOrder>('name_asc')
+  const [statusFilter, setStatusFilter] = useState<SpecialtyStatusFilter>('ALL')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
 
   const [selectedSpecialty, setSelectedSpecialty] = useState<NormalizedSpecialty | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -97,14 +103,22 @@ export function AdminSpecialtiesPage() {
   const [bulkAction, setBulkAction] = useState<'activate-all' | 'deactivate-all' | null>(null)
   const [isBulkActionLoading, setIsBulkActionLoading] = useState(false)
 
-  const fetchSpecialties = async () => {
+  const fetchSpecialties = async (page: number = 0) => {
     setLoading(true)
     setError('')
 
     try {
-      const raw = await adminSpecialtyService.getSpecialties()
-      const normalized = raw.map(normalizeSpecialty)
+      const result = await adminSpecialtyService.getSpecialtiesPaginated({
+        keyword: debouncedSearch,
+        status: statusFilter,
+        sort: sortBy,
+        page,
+        size: 10,
+      })
+      const normalized = result.items.map(normalizeSpecialty)
       setSpecialties(normalized)
+      setTotalItems(result.total)
+      setTotalPages(result.totalPages)
     } catch (fetchError: any) {
       setError(fetchError?.message || 'Không thể tải danh sách chuyên khoa.')
     } finally {
@@ -113,25 +127,16 @@ export function AdminSpecialtiesPage() {
   }
 
   useEffect(() => {
-    void fetchSpecialties()
-  }, [])
+    setCurrentPage(1)
+  }, [debouncedSearch, statusFilter, sortBy])
+
+  useEffect(() => {
+    void fetchSpecialties(currentPage - 1)
+  }, [currentPage, debouncedSearch, statusFilter, sortBy])
 
   const filteredSpecialties = useMemo(() => {
-    const keyword = safeLower(debouncedSearch)
-
-    const list = specialties.filter((item) => {
-      if (!keyword) return true
-      return safeLower(item.name).includes(keyword) || safeLower(item.description).includes(keyword)
-    })
-
-    list.sort((a, b) => {
-      if (sortBy === 'name_desc') return a.name.localeCompare(b.name) * -1
-      if (sortBy === 'doctor_desc') return b.doctorCount - a.doctorCount
-      return a.name.localeCompare(b.name)
-    })
-
-    return list
-  }, [specialties, debouncedSearch, sortBy])
+    return specialties
+  }, [specialties])
 
   const resetForm = () => {
     setFormData(initialForm)
@@ -168,7 +173,8 @@ export function AdminSpecialtiesPage() {
       toast({ title: 'Thành công', description: 'Đã tạo chuyên khoa mới.' })
       setIsCreateDialogOpen(false)
       resetForm()
-      await fetchSpecialties()
+      setCurrentPage(1)
+      await fetchSpecialties(0)
     } catch (createError: any) {
       toast({
         title: 'Lỗi',
@@ -203,7 +209,8 @@ export function AdminSpecialtiesPage() {
       toast({ title: 'Thành công', description: 'Đã cập nhật chuyên khoa.' })
       setIsEditDialogOpen(false)
       resetForm()
-      await fetchSpecialties()
+      setCurrentPage(1)
+      await fetchSpecialties(0)
     } catch (updateError: any) {
       toast({
         title: 'Lỗi',
@@ -255,7 +262,8 @@ export function AdminSpecialtiesPage() {
       await adminSpecialtyService.deleteSpecialty(deleteTarget.id)
       toast({ title: 'Thành công', description: 'Xóa chuyên khoa thành công' })
       closeDeleteModal()
-      await fetchSpecialties()
+      setCurrentPage(1)
+      await fetchSpecialties(0)
     } catch (deleteError: unknown) {
       toast({
         title: 'Lỗi',
@@ -277,7 +285,7 @@ export function AdminSpecialtiesPage() {
       toast({ title: 'Thành công', description: 'Tạm ngưng chuyên khoa thành công' })
       setDeactivateTarget(null)
       closeDeleteModal()
-      await fetchSpecialties()
+      await fetchSpecialties(currentPage - 1)
     } catch (actionError: unknown) {
       toast({
         title: 'Lỗi',
@@ -294,7 +302,7 @@ export function AdminSpecialtiesPage() {
       setStatusActionLoadingKey(`activate-${specialty.id}`)
       await adminSpecialtyService.activateSpecialty(specialty.id)
       toast({ title: 'Thành công', description: 'Kích hoạt chuyên khoa thành công' })
-      await fetchSpecialties()
+      await fetchSpecialties(currentPage - 1)
     } catch (actionError: unknown) {
       toast({
         title: 'Lỗi',
@@ -323,7 +331,8 @@ export function AdminSpecialtiesPage() {
         toast({ title: 'Thành công', description: 'Tạm ngưng tất cả chuyên khoa thành công' })
       }
       setBulkAction(null)
-      await fetchSpecialties()
+      setCurrentPage(1)
+      await fetchSpecialties(0)
     } catch (actionError: unknown) {
       toast({
         title: 'Lỗi',
@@ -445,96 +454,138 @@ export function AdminSpecialtiesPage() {
                 className="pl-8"
               />
             </div>
-            <Select value={sortBy} onValueChange={(value: 'name_asc' | 'name_desc' | 'doctor_desc') => setSortBy(value)}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name_asc">Tên A-Z</SelectItem>
-                <SelectItem value="name_desc">Tên Z-A</SelectItem>
-                <SelectItem value="doctor_desc">Nhiều bác sĩ trước</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              <Select
+                value={statusFilter}
+                onValueChange={(value: SpecialtyStatusFilter) => setStatusFilter(value)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Tất cả trạng thái</SelectItem>
+                  <SelectItem value="ACTIVE">Đang hoạt động</SelectItem>
+                  <SelectItem value="INACTIVE">Tạm ngưng</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(value: SpecialtySortOrder) => setSortBy(value)}>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name_asc">Tên A-Z</SelectItem>
+                  <SelectItem value="name_desc">Tên Z-A</SelectItem>
+                  <SelectItem value="doctor_desc">Nhiều bác sĩ trước</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
           {loading && <AdminTableSkeleton rows={6} />}
-          {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchSpecialties()} />}
+          {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchSpecialties(currentPage - 1)} />}
           {!loading && !error && filteredSpecialties.length === 0 && <AdminEmptyState title="Không có chuyên khoa phù hợp." />}
 
           {!loading && !error && filteredSpecialties.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tên chuyên khoa</TableHead>
-                  <TableHead>Mô tả</TableHead>
-                  <TableHead>Số bác sĩ</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead className="text-right">Hành động</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredSpecialties.map((specialty) => (
-                  <TableRow key={specialty.id}>
-                    <TableCell className="font-medium">{specialty.name || '-'}</TableCell>
-                    <TableCell className="max-w-[360px] truncate">{specialty.description || '-'}</TableCell>
-                    <TableCell>{specialty.doctorCount}</TableCell>
-                    <TableCell>
-                      <SpecialtyStatusBadge isActive={specialty.isActive} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex flex-wrap justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(specialty)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {specialty.isActive ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            title="Tạm ngưng"
-                            disabled={statusActionLoadingKey === `deactivate-${specialty.id}`}
-                            onClick={() => setDeactivateTarget(specialty)}
-                          >
-                            {statusActionLoadingKey === `deactivate-${specialty.id}` ? (
-                              <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
-                            ) : (
-                              <PowerOff className="h-4 w-4 text-amber-600" />
-                            )}
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            title="Kích hoạt lại"
-                            disabled={statusActionLoadingKey === `activate-${specialty.id}`}
-                            onClick={() => void handleActivate(specialty)}
-                          >
-                            {statusActionLoadingKey === `activate-${specialty.id}` ? (
-                              <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
-                            ) : (
-                              <Power className="h-4 w-4 text-emerald-600" />
-                            )}
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={deleteCheckLoading && deleteTarget?.id === specialty.id}
-                          onClick={() => void handleDeleteClick(specialty)}
-                        >
-                          {deleteCheckLoading && deleteTarget?.id === specialty.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tên chuyên khoa</TableHead>
+                    <TableHead>Mô tả</TableHead>
+                    <TableHead>Số bác sĩ</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    <TableHead className="text-right">Hành động</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredSpecialties.map((specialty) => (
+                    <TableRow key={specialty.id}>
+                      <TableCell className="font-medium">{specialty.name || '-'}</TableCell>
+                      <TableCell className="max-w-[360px] truncate">{specialty.description || '-'}</TableCell>
+                      <TableCell>{specialty.doctorCount}</TableCell>
+                      <TableCell>
+                        <SpecialtyStatusBadge isActive={specialty.isActive} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex flex-wrap justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEditDialog(specialty)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          {specialty.isActive ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              title="Tạm ngưng"
+                              disabled={statusActionLoadingKey === `deactivate-${specialty.id}`}
+                              onClick={() => setDeactivateTarget(specialty)}
+                            >
+                              {statusActionLoadingKey === `deactivate-${specialty.id}` ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                              ) : (
+                                <PowerOff className="h-4 w-4 text-amber-600" />
+                              )}
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              title="Kích hoạt lại"
+                              disabled={statusActionLoadingKey === `activate-${specialty.id}`}
+                              onClick={() => void handleActivate(specialty)}
+                            >
+                              {statusActionLoadingKey === `activate-${specialty.id}` ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                              ) : (
+                                <Power className="h-4 w-4 text-emerald-600" />
+                              )}
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={deleteCheckLoading && deleteTarget?.id === specialty.id}
+                            onClick={() => void handleDeleteClick(specialty)}
+                          >
+                            {deleteCheckLoading && deleteTarget?.id === specialty.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <p>
+                  Hiển thị {(currentPage - 1) * 10 + 1}-{Math.min(currentPage * 10, totalItems)} trong tổng {totalItems} chuyên khoa
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  >
+                    Trước
+                  </Button>
+                  <span>
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  >
+                    Sau
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

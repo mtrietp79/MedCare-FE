@@ -259,6 +259,7 @@ export interface AuthResponse {
   displayName?: string | null
   role: string
   profileCompleted?: boolean | null
+  mustChangePassword?: boolean
 }
 
 export interface AuthUser {
@@ -333,6 +334,13 @@ function normalizeAuthResponse(raw: unknown, fallbackUsername?: string): AuthRes
     userRecord?.fullName,
   ) ?? null
 
+  const mustChangePassword =
+    typeof payload.mustChangePassword === 'boolean'
+      ? payload.mustChangePassword
+      : typeof payload.must_change_password === 'boolean'
+        ? payload.must_change_password
+        : false
+
   return {
     accessToken: tokenValue,
     token: tokenValue,
@@ -347,6 +355,7 @@ function normalizeAuthResponse(raw: unknown, fallbackUsername?: string): AuthRes
           : typeof userRecord?.profileCompleted === 'boolean'
             ? userRecord.profileCompleted
             : null,
+    mustChangePassword,
   }
 }
 
@@ -386,12 +395,20 @@ export async function getMe(token: string) {
   return normalizeAuthUserPayload(data)
 }
 
-export async function forgotPassword(data: { username: string }) {
-  return api.post('/auth/forgot-password', data)
+export async function requestForgotPasswordOtp(data: { email: string }) {
+  return api.post('/auth/forgot-password/request-otp', data)
 }
 
-export async function resetPassword(data: { username: string; otp: string; newPassword: string }) {
-  return api.post('/auth/reset-password', data)
+export async function verifyForgotPasswordOtp(data: { email: string; otp: string }) {
+  return api.post<{ resetToken: string }>('/auth/forgot-password/verify-otp', data)
+}
+
+export async function resetForgotPassword(data: { resetToken: string; newPassword: string; confirmPassword: string }) {
+  return api.post('/auth/forgot-password/reset', data)
+}
+
+export async function changePassword(data: { oldPassword: string; newPassword: string; confirmPassword: string }) {
+  return api.post('/auth/change-password', data)
 }
 
 export function getStoredToken(): string | null {
@@ -405,6 +422,27 @@ export function setStoredToken(token: string) {
 
 export function removeStoredToken() {
   localStorage.removeItem(TOKEN_KEY)
+}
+
+export const MUST_CHANGE_PASSWORD_KEY = 'must_change_password'
+
+export function getStoredMustChangePassword(): boolean {
+  if (typeof window === 'undefined') return false
+  return sessionStorage.getItem(MUST_CHANGE_PASSWORD_KEY) === 'true'
+}
+
+export function setStoredMustChangePassword(enabled: boolean) {
+  if (typeof window === 'undefined') return
+  if (enabled) {
+    sessionStorage.setItem(MUST_CHANGE_PASSWORD_KEY, 'true')
+  } else {
+    sessionStorage.removeItem(MUST_CHANGE_PASSWORD_KEY)
+  }
+}
+
+export function removeStoredMustChangePassword() {
+  if (typeof window === 'undefined') return
+  sessionStorage.removeItem(MUST_CHANGE_PASSWORD_KEY)
 }
 
 export function isValidRole(role?: string | null): role is (typeof VALID_ROLES)[number] {
@@ -465,6 +503,7 @@ export function removeStoredUser() {
 export function clearStoredAuth() {
   removeStoredToken()
   removeStoredUser()
+  removeStoredMustChangePassword()
 }
 
 export function queueForbiddenNotice(message = 'Bạn không có quyền truy cập') {

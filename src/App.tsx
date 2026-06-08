@@ -35,6 +35,7 @@ import { LoginPage } from '@/pages/auth/LoginPage'
 import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
+import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage'
 import { TermsPage } from '@/pages/TermsPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 
@@ -91,11 +92,11 @@ export default function App() {
 							<Route path="/register" element={<RegisterPage />} />
 							<Route path="/forgot-password" element={<ForgotPasswordPage />} />
 							<Route path="/reset-password" element={<ResetPasswordPage />} />
-						</Route>
+							<Route path="/change-password" element={<ChangePasswordPage />} />
+					</Route>
 
-						{/* Patient area */}
-						<Route
-							path="/patient"
+				<Route
+					path="/patient"
 							element={
 								<RequireAuth>
 									<PatientGuard>
@@ -228,3 +229,5 @@ export default function App() {
 		</ThemeProvider>
 	)
 }
+
+

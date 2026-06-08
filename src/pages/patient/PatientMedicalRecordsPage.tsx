@@ -80,8 +80,6 @@ export function PatientMedicalRecordsPage() {
                   <p className="font-semibold">{record.diagnosis || 'Chưa cập nhật chẩn đoán'}</p>
                   <p className="text-sm text-muted-foreground">Bác sĩ: {record.doctor?.fullName || record.doctorName || '-'}</p>
                   <p className="text-sm text-muted-foreground">Loại khám: {getAppointmentTypeLabel({
-                    type: record.type,
-                    appointmentType: record.appointmentType,
                     typeCode: record.typeCode,
                     appointmentTypeCode: record.appointmentTypeCode,
                   })}</p>

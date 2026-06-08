@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Heart, Menu, ChevronDown, User, Calendar, LogOut, BriefcaseMedical } from 'lucide-react'
+import { Heart, Menu, ChevronDown, User, Calendar, LogOut, BriefcaseMedical, Key } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -38,6 +38,7 @@ function getAccountMenu(role: string | undefined): AccountMenuItem[] {
   if (role === 'ROLE_ADMIN') {
     return [
       { label: 'Trang qu\u1ea3n tr\u1ecb', href: '/admin/dashboard', icon: User },
+      { label: '\u0110\u1ed5i m\u1eadt kh\u1ea9u', href: '/change-password', icon: Key },
       { label: '\u0110\u0103ng xu\u1ea5t', icon: LogOut, isLogout: true },
     ]
   }
@@ -45,6 +46,7 @@ function getAccountMenu(role: string | undefined): AccountMenuItem[] {
   if (role === 'ROLE_DOCTOR') {
     return [
       { label: 'H\u1ed3 s\u01a1 c\u00e1 nh\u00e2n', href: '/doctor/profile', icon: User },
+      { label: '\u0110\u1ed5i m\u1eadt kh\u1ea9u', href: '/change-password', icon: Key },
       { label: 'L\u1ecbch l\u00e0m vi\u1ec7c', href: '/doctor/schedule', icon: BriefcaseMedical },
       { label: '\u0110\u0103ng xu\u1ea5t', icon: LogOut, isLogout: true },
     ]
@@ -52,6 +54,7 @@ function getAccountMenu(role: string | undefined): AccountMenuItem[] {
 
   return [
     { label: 'H\u1ed3 s\u01a1 c\u00e1 nh\u00e2n', href: '/profile', icon: User },
+    { label: '\u0110\u1ed5i m\u1eadt kh\u1ea9u', href: '/change-password', icon: Key },
     { label: 'L\u1ecbch kh\u00e1m', href: '/appointments', icon: Calendar },
     { label: '\u0110\u0103ng xu\u1ea5t', icon: LogOut, isLogout: true },
   ]

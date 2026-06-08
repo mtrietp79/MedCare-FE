@@ -3,15 +3,19 @@ import { useNavigate } from 'react-router-dom'
 import {
   AUTH_SOFT_LOGOUT_EVENT,
   clearStoredAuth,
-  forgotPassword as apiForgotPassword,
   getMe,
+  getStoredMustChangePassword,
   getStoredToken,
   getStoredUser,
   isValidRole,
   login as apiLogin,
   redirectByRole,
   register as apiRegister,
-  resetPassword as apiResetPassword,
+  requestForgotPasswordOtp as apiRequestForgotPasswordOtp,
+  verifyForgotPasswordOtp as apiVerifyForgotPasswordOtp,
+  resetForgotPassword as apiResetForgotPassword,
+  changePassword as apiChangePassword,
+  setStoredMustChangePassword,
   setStoredToken,
   setStoredUser,
   type AuthResponse,
@@ -22,11 +26,13 @@ interface AuthContextValue {
   user: AuthUser | null
   token: string | null
   loading: boolean
+  mustChangePassword: boolean
   login: (data: { username: string; password: string }, redirectTo?: string) => Promise<void>
   register: (data: { username: string; password: string }) => Promise<void>
   logout: () => void
-  forgotPassword: (payload: { username: string }) => Promise<any>
-  resetPassword: (data: { username: string; otp: string; newPassword: string }) => Promise<void>
+  forgotPassword: (payload: { email: string }) => Promise<any>
+  resetPassword: (data: { resetToken: string; newPassword: string; confirmPassword: string }) => Promise<void>
+  changePassword: (data: { oldPassword: string; newPassword: string; confirmPassword: string }) => Promise<void>
   refreshUser: () => Promise<void>
 }
 
@@ -63,6 +69,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate()
   const [user, setUser] = useState<AuthUser | null>(() => getStoredUser())
   const [token, setToken] = useState<string | null>(() => getStoredToken())
+  const [mustChangePassword, setMustChangePassword] = useState<boolean>(() => getStoredMustChangePassword())
   const [loading, setLoading] = useState(() => Boolean(getStoredToken()))
   const validatedTokenRef = useRef<string | null>(null)
 
@@ -70,9 +77,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const handleAuthSync = () => {
       const nextToken = getStoredToken()
       const nextUser = getStoredUser()
+      const nextMustChangePassword = getStoredMustChangePassword()
 
       setToken(nextToken)
       setUser(nextUser)
+      setMustChangePassword(nextMustChangePassword)
 
       if (!nextToken) {
         validatedTokenRef.current = null
@@ -90,6 +99,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       validatedTokenRef.current = null
       setToken(null)
       setUser(null)
+      setMustChangePassword(false)
       setLoading(false)
       navigate('/login', { replace: true })
     }
@@ -211,6 +221,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     setStoredUser(userData)
     setUser(userData)
+    setMustChangePassword(Boolean(response.mustChangePassword))
+    setStoredMustChangePassword(Boolean(response.mustChangePassword))
+
+    if (response.mustChangePassword) {
+      navigate('/change-password', { replace: true })
+      return
+    }
 
     if (redirectTo && canNavigateToRedirectByRole(redirectTo, response.role)) {
       navigate(redirectTo, { replace: true })
@@ -234,14 +251,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     validatedTokenRef.current = null
     setToken(null)
     setUser(null)
+    setMustChangePassword(false)
     setLoading(false)
     navigate('/login', { replace: true })
   }
 
-  const forgotPassword = async (payload: { username: string }) => apiForgotPassword(payload)
+  const forgotPassword = async (payload: { email: string }) => apiRequestForgotPasswordOtp(payload)
 
-  const resetPassword = async (data: { username: string; otp: string; newPassword: string }) => {
-    await apiResetPassword(data)
+  const verifyForgotPasswordOtp = async (payload: { email: string; otp: string }) => apiVerifyForgotPasswordOtp(payload)
+
+  const resetPassword = async (data: { resetToken: string; newPassword: string; confirmPassword: string }) => {
+    await apiResetForgotPassword(data)
+  }
+
+  const changePassword = async (data: { oldPassword: string; newPassword: string; confirmPassword: string }) => {
+    await apiChangePassword(data)
+    setMustChangePassword(false)
+    setStoredMustChangePassword(false)
   }
 
   const refreshUser = async () => {
@@ -268,14 +294,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       user,
       token,
       loading,
+      mustChangePassword,
       login,
       register,
       logout,
       forgotPassword,
       resetPassword,
+      changePassword,
       refreshUser,
     }),
-    [user, token, loading]
+    [user, token, loading, mustChangePassword]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

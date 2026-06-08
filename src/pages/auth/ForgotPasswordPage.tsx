@@ -1,13 +1,10 @@
+import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useState } from 'react'
-import { Mail, ArrowLeft, Heart, Loader2 } from 'lucide-react'
-import { useAuth } from '@/context/AuthContext'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
+import { ArrowLeft, Heart, Loader2, Mail } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useToast } from '@/hooks/use-toast'
 import {
   pageTransitionVariants,
   containerVariants,
@@ -15,42 +12,87 @@ import {
   fadeInVariants,
   slideUpVariants,
 } from '@/lib/animations'
+import { requestForgotPasswordOtp, verifyForgotPasswordOtp } from '@/services/auth'
 
-const forgotPasswordSchema = z.object({
-  email: z.string().email('Email không hợp lệ'),
-})
-
-type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const RESET_PASSWORD_TOKEN_KEY = 'passwordResetToken'
+const OTP_COOLDOWN_SECONDS = 60
 
 export function ForgotPasswordPage() {
   const navigate = useNavigate()
-  const { forgotPassword } = useAuth()
+  const { toast } = useToast()
+  const [email, setEmail] = useState('')
+  const [otp, setOtp] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [apiError, setApiError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const [isRequestingOtp, setIsRequestingOtp] = useState(false)
+  const [countdown, setCountdown] = useState(0)
+  const [infoMessage, setInfoMessage] = useState('')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<ForgotPasswordFormValues>({
-    resolver: zodResolver(forgotPasswordSchema),
-    defaultValues: {
-      email: '',
-    },
-  })
+  useEffect(() => {
+    let timer: number | undefined
+    if (countdown > 0) {
+      timer = window.setTimeout(() => setCountdown(countdown - 1), 1000)
+    }
+    return () => {
+      if (timer) {
+        window.clearTimeout(timer)
+      }
+    }
+  }, [countdown])
 
-  const onSubmit = async (data: ForgotPasswordFormValues) => {
-    setApiError(null)
-    setSuccess(null)
+  const handleRequestOtp = async () => {
+    setErrorMessage(null)
+    setInfoMessage('')
+
+    if (!email.trim() || !emailRegex.test(email.trim())) {
+      setErrorMessage('Email không hợp lệ')
+      return
+    }
+
+    setIsRequestingOtp(true)
     setIsLoading(true)
 
     try {
-      await forgotPassword({ username: data.email.trim() })
-      setSuccess('Hướng dẫn đặt lại mật khẩu đã được gửi tới email của bạn.')
-      setTimeout(() => navigate('/login'), 2500)
-    } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Yêu cầu thất bại. Vui lòng thử lại.')
+      await requestForgotPasswordOtp({ email: email.trim() })
+      setInfoMessage('Nếu email hợp lệ và có thể khôi phục, mã OTP sẽ được gửi đến email của bạn.')
+      setCountdown(OTP_COOLDOWN_SECONDS)
+      toast({ title: 'OTP đã được gửi', description: 'Vui lòng kiểm tra email của bạn.', variant: 'default' })
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || 'Không thể gửi mã OTP. Vui lòng thử lại.'
+      setErrorMessage(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async () => {
+    setErrorMessage(null)
+    setInfoMessage('')
+
+    if (!email.trim() || !emailRegex.test(email.trim())) {
+      setErrorMessage('Email không hợp lệ')
+      return
+    }
+
+    if (!otp.trim()) {
+      setErrorMessage('Vui lòng nhập mã OTP')
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const response = await verifyForgotPasswordOtp({ email: email.trim(), otp: otp.trim() })
+      const resetToken = response.data?.resetToken
+      if (!resetToken) {
+        throw new Error('Mã OTP không đúng hoặc đã hết hạn')
+      }
+      sessionStorage.setItem(RESET_PASSWORD_TOKEN_KEY, resetToken)
+      navigate('/reset-password')
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || 'Mã OTP không đúng hoặc đã hết hạn'
+      setErrorMessage(message)
     } finally {
       setIsLoading(false)
     }
@@ -79,10 +121,7 @@ export function ForgotPasswordPage() {
           <span className="text-2xl tracking-tight">MedCare</span>
         </motion.div>
 
-        <motion.div
-          className="relative z-10 space-y-8"
-          variants={containerVariants}
-        >
+        <motion.div className="relative z-10 space-y-8" variants={containerVariants}>
           <motion.h2 variants={itemVariants} className="text-5xl font-bold leading-tight tracking-tight">
             Chăm sóc sức khỏe <br />
             của bạn một cách <span className="text-accent">dễ dàng</span>
@@ -115,12 +154,7 @@ export function ForgotPasswordPage() {
 
       {/* RIGHT SIDE */}
       <div className="flex w-full lg:w-1/2 items-center justify-center bg-background p-6">
-        <motion.div
-          className="w-full max-w-md space-y-8"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
+        <motion.div className="w-full max-w-md space-y-8" variants={containerVariants} initial="hidden" animate="visible">
           <div className="lg:hidden flex items-center gap-2 text-xl font-bold mb-8">
             <div className="bg-primary text-primary-foreground p-2 rounded-lg">
               <Heart className="w-5 h-5" />
@@ -128,85 +162,92 @@ export function ForgotPasswordPage() {
             MedCare
           </div>
 
-          <motion.div variants={itemVariants}>
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors mb-6"
-            >
+          <div className="space-y-2">
+            <Link to="/login" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               <ArrowLeft className="w-4 h-4" />
               Quay lại đăng nhập
             </Link>
-          </motion.div>
+          </div>
 
-          <motion.div variants={itemVariants} className="space-y-2 text-center lg:text-left">
+          <div className="space-y-2 text-center lg:text-left">
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Quên mật khẩu?</h1>
-            <p className="text-muted-foreground text-sm">
-              Nhập email của bạn, chúng tôi sẽ gửi hướng dẫn đặt lại mật khẩu.
-            </p>
-          </motion.div>
+            <p className="text-muted-foreground text-sm">Nhập email và mã OTP để xác minh tài khoản của bạn.</p>
+          </div>
 
-          <motion.form variants={itemVariants} onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            {apiError && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive font-medium flex items-center gap-2"
-              >
-                <div className="w-1.5 h-1.5 rounded-full bg-destructive" />
-                {apiError}
-              </motion.div>
-            )}
-            
-            {success && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="rounded-lg bg-emerald-500/10 p-4 text-sm text-emerald-600 font-medium flex items-center gap-2"
-              >
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                {success}
-              </motion.div>
-            )}
+          {errorMessage && (
+            <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive font-medium flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-destructive" />
+              {errorMessage}
+            </div>
+          )}
 
+          {infoMessage && (
+            <div className="rounded-lg bg-emerald-500/10 p-4 text-sm text-emerald-600 font-medium flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {infoMessage}
+            </div>
+          )}
+
+          <div className="space-y-5">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Email</label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   type="email"
-                  placeholder="name@example.com"
-                  className={`pl-10 h-12 rounded-xl bg-input/50 border-transparent focus:bg-background focus:border-ring transition-all ${
-                    errors.email ? 'border-destructive focus:border-destructive ring-destructive/20' : ''
-                  }`}
-                  {...register('email')}
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="Nhập email của bạn"
+                  className="pl-10 h-12 rounded-xl bg-input/50 border-transparent focus:bg-background focus:border-ring transition-all"
                 />
               </div>
-              {errors.email && <p className="text-destructive text-sm mt-1 font-medium">{errors.email.message}</p>}
             </div>
 
-            <Button
-              type="submit"
-              size="lg"
-              className="w-full h-12 text-base font-semibold rounded-xl shadow-md hover:shadow-lg transition-all mt-2"
-              disabled={isLoading || !!success}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Đang gửi...
-                </>
-              ) : (
-                'Gửi hướng dẫn'
-              )}
-            </Button>
-          </motion.form>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Mã OTP</label>
+              <Input
+                type="text"
+                value={otp}
+                onChange={(event) => setOtp(event.target.value)}
+                placeholder="Nhập mã OTP 6 số"
+                className="h-12 rounded-xl bg-input/50 border-transparent focus:bg-background focus:border-ring transition-all"
+              />
+            </div>
 
-          <motion.p variants={itemVariants} className="text-center text-sm text-muted-foreground mt-8">
-            Nhớ mật khẩu?{' '}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRequestOtp}
+                disabled={isLoading || countdown > 0}
+                className="h-12 w-full rounded-xl"
+              >
+                {countdown > 0 ? `Gửi lại sau ${countdown}s` : 'Lấy mã OTP'}
+              </Button>
+              <Button
+                type="button"
+                onClick={handleVerifyOtp}
+                disabled={isLoading}
+                className="h-12 w-full rounded-xl"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Đang xác nhận...
+                  </>
+                ) : (
+                  'Xác nhận OTP'
+                )}
+              </Button>
+            </div>
+          </div>
+
+          <p className="text-center text-sm text-muted-foreground mt-8">
+            Hoặc quay lại {' '}
             <Link to="/login" className="text-primary font-semibold hover:underline hover:underline-offset-4 transition-all">
-              Đăng nhập
+              đăng nhập
             </Link>
-          </motion.p>
+          </p>
         </motion.div>
       </div>
     </motion.div>

@@ -667,7 +667,8 @@ export function DoctorAppointmentsPage() {
 
       const slotCountLabel = isFull ? 'Hết slot' : `còn ${slot.remainingSlots}/${slot.totalSlots}`
       const label = `${value} (${slotCountLabel})`
-      const disabledMessage = disabled ? getFollowUpSlotDisabledMessage(slot.disabledReason, state) : undefined
+      const disabledReason = slot.disabledReason ?? undefined
+      const disabledMessage = disabled ? getFollowUpSlotDisabledMessage(disabledReason, state) : undefined
 
       mapped.push({
         key: `${selectedDateKey}-${value}`,
@@ -675,7 +676,7 @@ export function DoctorAppointmentsPage() {
         label,
         disabled,
         state,
-        disabledReason: slot.disabledReason,
+        disabledReason,
         disabledMessage,
       })
     })

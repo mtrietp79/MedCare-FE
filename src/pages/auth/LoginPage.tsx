@@ -19,6 +19,9 @@ export function LoginPage() {
     remember: false,
   })
 
+  const REMEMBERED_LOGIN_KEY = 'rememberedLogin'
+  const REMEMBER_ME_KEY = 'rememberMe'
+
   const clearLegacyAuthStorage = () => {
     const legacyKeys = [
       'token',
@@ -38,6 +41,14 @@ export function LoginPage() {
       setError(decodeURIComponent(errorFromUrl))
     }
   }, [searchParams])
+
+  useEffect(() => {
+    const remembered = localStorage.getItem(REMEMBER_ME_KEY) === 'true'
+    const rememberedLogin = localStorage.getItem(REMEMBERED_LOGIN_KEY) ?? ''
+    if (remembered && rememberedLogin) {
+      setFormData((prev) => ({ ...prev, username: rememberedLogin, remember: true }))
+    }
+  }, [])
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -69,6 +80,14 @@ export function LoginPage() {
           : undefined
 
       await login({ username: formData.username.trim(), password: formData.password }, safeRedirectPath)
+
+      if (formData.remember) {
+        localStorage.setItem(REMEMBER_ME_KEY, 'true')
+        localStorage.setItem(REMEMBERED_LOGIN_KEY, formData.username.trim())
+      } else {
+        localStorage.removeItem(REMEMBER_ME_KEY)
+        localStorage.removeItem(REMEMBERED_LOGIN_KEY)
+      }
     } catch (err: any) {
       const message = err?.response?.data?.message || err?.message || 'Đăng nhập thất bại. Vui lòng thử lại.'
       setError(message)

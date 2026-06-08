@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { DoctorCard } from '@/components/doctors/doctor-card'
 import { api } from '@/services/api'
 import type { Doctor, Specialty } from '@/types'
@@ -101,18 +100,11 @@ export function SpecialtyDetailPage() {
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="space-y-3">
               <div>
                 <h2 className="text-2xl font-semibold">Bác sĩ chuyên khoa {specialty.name}</h2>
-                <p className="text-sm text-muted-foreground">Lọc bác sĩ theo chuyên môn và lịch khám.</p>
+                <p className="text-sm text-muted-foreground">Chọn bác sĩ phù hợp và bấm Đặt lịch trên card bác sĩ.</p>
               </div>
-              {doctors.length > 0 && (
-                <Button asChild>
-                  <Link to="/booking" className="text-center">
-                    Đặt lịch khám
-                  </Link>
-                </Button>
-              )}
             </div>
 
             {doctors.length > 0 ? (

@@ -7,19 +7,17 @@ const footerLinks = {
     { name: 'Đặt lịch khám', href: '/booking' },
     { name: 'Tìm bác sĩ', href: '/doctors' },
     { name: 'Chuyên khoa', href: '/specialty' },
-    { name: 'Tư vấn trực tuyến', href: '#' },
+    { name: 'Tư vấn trực tuyến', href: '/contact' },
   ],
   company: [
     { name: 'Giới thiệu', href: '/about' },
     { name: 'Liên hệ', href: '/contact' },
-    { name: 'Tuyển dụng', href: '#' },
-    { name: 'Tin tức', href: '#' },
   ],
   support: [
-    { name: 'Hướng dẫn đặt lịch', href: '#' },
-    { name: 'Câu hỏi thường gặp', href: '#' },
-    { name: 'Chính sách bảo mật', href: '#' },
-    { name: 'Điều khoản sử dụng', href: '#' },
+    { name: 'Hướng dẫn đặt lịch', href: '/booking-guide' },
+    { name: 'Câu hỏi thường gặp', href: '/faq' },
+    { name: 'Chính sách bảo mật', href: '/privacy-policy' },
+    { name: 'Điều khoản sử dụng', href: '/terms' },
   ],
 }
 

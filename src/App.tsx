@@ -36,6 +36,9 @@ import { RegisterPage } from '@/pages/auth/RegisterPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
 import { ChangePasswordPage } from '@/pages/auth/ChangePasswordPage'
+import { AboutPage } from '@/pages/home/AboutPage'
+import { BookingGuidePage } from '@/pages/home/BookingGuidePage'
+import { FaqPage } from '@/pages/home/FaqPage'
 import { TermsPage } from '@/pages/TermsPage'
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage'
 
@@ -84,7 +87,9 @@ export default function App() {
 							<Route path="/booking" element={<BookingPage />} />
 							<Route path="/booking/service-package/payment-result" element={<ServicePackagePaymentResultPage />} />
 							<Route path="/contact" element={<ContactPage />} />
-							<Route path="/terms" element={<TermsPage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/booking-guide" element={<BookingGuidePage />} />
+              <Route path="/faq" element={<FaqPage />} />
 							<Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
 						</Route>
 

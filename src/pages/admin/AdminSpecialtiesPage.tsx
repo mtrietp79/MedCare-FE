@@ -219,7 +219,6 @@ export function AdminSpecialtiesPage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Quản lý chuyên khoa</h1>
-          <p className="text-muted-foreground">CRUD chuyên khoa, tìm kiếm và sắp xếp</p>
         </div>
         <Dialog
           open={isCreateDialogOpen}

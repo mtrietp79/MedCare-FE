@@ -518,7 +518,7 @@ export function AdminDashboard() {
         value: formatNumber(summaryState.data.patients),
         growthLabel: formatPercent(summaryState.data.patientGrowth),
         growthTone: getGrowthTone(summaryState.data.patientGrowth),
-        helper: 'Theo summary backend',
+        helper: '',
         icon: Users,
       },
       {
@@ -600,9 +600,7 @@ export function AdminDashboard() {
           <div>
             <p className="text-sm uppercase tracking-[0.28em] text-muted-foreground">Bảng điều khiển</p>
             <h1 className="text-3xl font-semibold">Tổng quan MedCare</h1>
-            <p className="mt-2 max-w-2xl text-muted-foreground">
-              Theo dõi số liệu vận hành, lịch hẹn và doanh thu từ các API dashboard mới của backend.
-            </p>
+            
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -675,7 +673,7 @@ export function AdminDashboard() {
         <Card className="rounded-3xl border border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle>Bệnh nhân theo tháng</CardTitle>
-            <CardDescription>Dữ liệu 12 tháng trong năm {selectedYear} từ `/admin/dashboard/monthly-patients`.</CardDescription>
+            <CardDescription>Dữ liệu 12 tháng trong năm {selectedYear}</CardDescription>
           </CardHeader>
           <CardContent>
             {monthlyPatientsState.error ? (
@@ -715,7 +713,7 @@ export function AdminDashboard() {
         <Card className="rounded-3xl border border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle>Doanh thu theo tháng</CardTitle>
-            <CardDescription>Dữ liệu 12 tháng trong năm {selectedYear} từ `/admin/dashboard/revenue-chart`.</CardDescription>
+            <CardDescription>Dữ liệu 12 tháng trong năm {selectedYear}</CardDescription>
           </CardHeader>
           <CardContent>
             {revenueState.error ? (
@@ -754,7 +752,7 @@ export function AdminDashboard() {
         <Card className="rounded-3xl border border-border/70 shadow-sm">
           <CardHeader>
             <CardTitle>Lịch hẹn gần đây</CardTitle>
-            <CardDescription>Dữ liệu trực tiếp từ `/admin/dashboard/recent-appointments`.</CardDescription>
+            <CardDescription></CardDescription>
           </CardHeader>
           <CardContent>
             {recentAppointmentsState.error ? (

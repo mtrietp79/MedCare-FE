@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Edit, Plus, Search, Tags, Trash2 } from 'lucide-react'
 import {
   adminApi,
@@ -780,7 +780,6 @@ export function AdminMedicinesPage() {
               <DialogHeader>
                 <DialogTitle>Quản lý danh mục thuốc</DialogTitle>
                 <DialogDescription>
-                  Thêm, chỉnh sửa và xóa danh mục để dùng cho form tạo hoặc cập nhật thuốc.
                 </DialogDescription>
               </DialogHeader>
 
@@ -791,7 +790,6 @@ export function AdminMedicinesPage() {
                       {selectedCategory ? 'Cập nhật danh mục' : 'Tạo danh mục mới'}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Danh mục được dùng trực tiếp trong dropdown thêm và sửa thuốc.
                     </p>
                   </div>
 
@@ -848,7 +846,7 @@ export function AdminMedicinesPage() {
                     <div>
                       <p className="font-semibold text-slate-900">Danh sách danh mục</p>
                       <p className="text-sm text-slate-500">
-                        {sortedMedicineCategories.length} danh mục đang khả dụng cho dropdown chọn thuốc
+                        {sortedMedicineCategories.length} danh mục đang khả dụng
                       </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={resetCategoryForm}>

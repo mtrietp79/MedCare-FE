@@ -691,7 +691,6 @@ export function AdminDoctorsPage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Quản lý bác sĩ</h1>
-          <p className="text-muted-foreground">CRUD, tìm kiếm, lọc và cập nhật trạng thái bác sĩ</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
@@ -727,7 +726,7 @@ export function AdminDoctorsPage() {
             <DialogContent className="sm:max-w-[560px]">
               <DialogHeader>
                 <DialogTitle>Tạo bác sĩ mới</DialogTitle>
-                <DialogDescription>Thông tin này sẽ được gửi lên backend theo contract hiện tại.</DialogDescription>
+                <DialogDescription></DialogDescription>
               </DialogHeader>
               {renderForm(false)}
               <DialogFooter>
@@ -744,7 +743,7 @@ export function AdminDoctorsPage() {
         <CardHeader>
           <CardTitle>Danh sách bác sĩ</CardTitle>
           <CardDescription>
-            Tổng cộng {doctors.length} bác sĩ. Đang hiển thị {filteredDoctors.length} bác sĩ theo bộ lọc hiện tại.
+            Tổng cộng {doctors.length} bác sĩ.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

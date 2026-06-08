@@ -321,13 +321,13 @@ export function AdminWebsiteFeedbacksPage() {
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold">Feedback website</h1>
-        <p className="text-muted-foreground">Quản lý phản hồi đánh giá MedCare từ homepage</p>
+        <p className="text-muted-foreground">Quản lý phản hồi đánh giá MedCare</p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Danh sách feedback</CardTitle>
-          <CardDescription>Duyệt, ẩn hoặc xóa phản hồi website/cơ sở y tế</CardDescription>
+          <CardDescription></CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">

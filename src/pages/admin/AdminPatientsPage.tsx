@@ -8,6 +8,7 @@ import {
   Search,
   Unlock,
 } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import {
@@ -347,8 +348,8 @@ export function AdminPatientsPage() {
           <CardDescription>Tìm kiếm, lọc và quản lý tài khoản bệnh nhân</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px_auto]">
-            <div className="relative">
+          <div className="grid gap-3 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_160px_160px_auto]">
+            <div className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 value={searchInput}
@@ -396,71 +397,87 @@ export function AdminPatientsPage() {
           ) : (
             <>
               <div className="overflow-x-auto rounded-xl border">
-                <Table>
+                <Table className="min-w-[1100px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Bệnh nhân</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Số điện thoại</TableHead>
-                      <TableHead>Giới tính</TableHead>
-                      <TableHead>Ngày sinh</TableHead>
-                      <TableHead>Số lịch hẹn</TableHead>
-                      <TableHead>Số bệnh án</TableHead>
-                      <TableHead>Trạng thái</TableHead>
-                      <TableHead>Ngày tạo</TableHead>
-                      <TableHead className="text-right">Hành động</TableHead>
+                      <TableHead className="min-w-[180px]">Bệnh nhân</TableHead>
+                      <TableHead className="min-w-[190px]">Email</TableHead>
+                      <TableHead className="min-w-[140px]">Số điện thoại</TableHead>
+                      <TableHead className="min-w-[90px] text-left">Giới tính</TableHead>
+                      <TableHead className="min-w-[110px] text-left">Ngày sinh</TableHead>
+                      <TableHead className="min-w-[110px] text-left">Số lịch hẹn</TableHead>
+                      <TableHead className="min-w-[110px] text-left">Số bệnh án</TableHead>
+                      <TableHead className="min-w-[110px] text-left">Trạng thái</TableHead>
+                      <TableHead className="min-w-[150px] text-left">Ngày tạo</TableHead>
+                      <TableHead className="text-right sticky right-0 bg-background/90 dark:bg-slate-950/95 z-20">Hành động</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {patients.map((patient) => (
                       <TableRow key={patient.id}>
-                        <TableCell>
+                        <TableCell className="min-w-[180px]">
                           <div className="flex items-center gap-3">
                             <PatientAvatar name={patient.fullName} size="md" />
                             <span className="font-medium">{patient.fullName || '-'}</span>
                           </div>
                         </TableCell>
-                        <TableCell>{patient.email || '-'}</TableCell>
-                        <TableCell>{patient.phone || '-'}</TableCell>
-                        <TableCell>{patient.genderLabel}</TableCell>
-                        <TableCell>{patient.dateOfBirth}</TableCell>
-                        <TableCell>{patient.appointmentCount}</TableCell>
-                        <TableCell>{patient.medicalRecordCount}</TableCell>
-                        <TableCell>
+                        <TableCell className="max-w-[190px] truncate" title={patient.email || '-'}>{patient.email || '-'}</TableCell>
+                        <TableCell className="max-w-[140px] truncate" title={patient.phone || '-'}>{patient.phone || '-'}</TableCell>
+                        <TableCell className="whitespace-nowrap">{patient.genderLabel}</TableCell>
+                        <TableCell className="whitespace-nowrap">{patient.dateOfBirth}</TableCell>
+                        <TableCell className="whitespace-nowrap">{patient.appointmentCount}</TableCell>
+                        <TableCell className="whitespace-nowrap">{patient.medicalRecordCount}</TableCell>
+                        <TableCell className="whitespace-nowrap">
                           <AccountStatusBadge isActive={patient.isActive} />
                         </TableCell>
-                        <TableCell>{formatDateTime(patient.createdAt)}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => void openDetail(patient)}>
-                              <Eye className="mr-1 h-4 w-4" />
-                              Chi tiết
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => openResetDialog(patient)}>
-                              <KeyRound className="mr-1 h-4 w-4" />
-                              Reset MK
-                            </Button>
-                            {patient.isActive ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-amber-700 hover:text-amber-700"
-                                onClick={() => setLockTarget(patient)}
-                              >
-                                <Lock className="mr-1 h-4 w-4" />
-                                Khóa
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-emerald-700 hover:text-emerald-700"
-                                onClick={() => setUnlockTarget(patient)}
-                              >
-                                <Unlock className="mr-1 h-4 w-4" />
-                                Mở khóa
-                              </Button>
-                            )}
+                        <TableCell className="whitespace-nowrap">{formatDateTime(patient.createdAt)}</TableCell>
+                        <TableCell className="sticky right-0 bg-background/90 dark:bg-slate-950/95 z-10">
+                          <div className="flex items-center justify-end gap-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-md p-0"
+                                  onClick={() => void openDetail(patient)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent sideOffset={4}>Xem chi tiết</TooltipContent>
+                            </Tooltip>
+
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-md p-0"
+                                  onClick={() => openResetDialog(patient)}
+                                >
+                                  <KeyRound className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent sideOffset={4}>Reset mật khẩu</TooltipContent>
+                            </Tooltip>
+
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-md p-0"
+                                  onClick={() => (patient.isActive ? setLockTarget(patient) : setUnlockTarget(patient))}
+                                >
+                                  {patient.isActive ? (
+                                    <Lock className="h-4 w-4 text-amber-700" />
+                                  ) : (
+                                    <Unlock className="h-4 w-4 text-emerald-700" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent sideOffset={4}>{patient.isActive ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}</TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableCell>
                       </TableRow>

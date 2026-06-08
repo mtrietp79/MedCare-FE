@@ -5,26 +5,50 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { useToast } from '@/hooks/use-toast'
 import { containerVariants, itemVariants } from '@/lib/animations'
+import { CONTACT_INFO, getContactEmailHref, getContactPhoneHref } from '@/lib/contact-info'
+import { contactMessageService } from '@/services/contactMessageService'
 
 interface FormData {
-  name: string
+  fullName: string
   email: string
   phone: string
   subject: string
   message: string
 }
 
+function validateContactForm(formData: FormData): string | null {
+  if (!formData.fullName.trim()) {
+    return 'Vui lòng nhập họ và tên.'
+  }
+
+  if (!formData.email.trim()) {
+    return 'Vui lòng nhập email.'
+  }
+
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailPattern.test(formData.email.trim())) {
+    return 'Email không đúng định dạng.'
+  }
+
+  if (!formData.message.trim()) {
+    return 'Vui lòng nhập nội dung tin nhắn.'
+  }
+
+  return null
+}
+
 export function ContactPage() {
+  const { toast } = useToast()
   const [formData, setFormData] = useState<FormData>({
-    name: '',
+    fullName: '',
     email: '',
     phone: '',
     subject: '',
     message: '',
   })
   const [isLoading, setIsLoading] = useState(false)
-  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle')
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -33,16 +57,48 @@ export function ContactPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    const validationError = validateContactForm(formData)
+    if (validationError) {
+      toast({
+        title: 'Thiếu thông tin',
+        description: validationError,
+        variant: 'destructive',
+      })
+      return
+    }
+
     setIsLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      setSubmitStatus('success')
-      setFormData({ name: '', email: '', phone: '', subject: '', message: '' })
-      setTimeout(() => setSubmitStatus('idle'), 3000)
+      await contactMessageService.createPublicMessage({
+        fullName: formData.fullName,
+        email: formData.email,
+        phone: formData.phone,
+        subject: formData.subject,
+        message: formData.message,
+      })
+
+      setFormData({
+        fullName: '',
+        email: '',
+        phone: '',
+        subject: '',
+        message: '',
+      })
+
+      toast({
+        title: 'Thành công',
+        description: 'Gửi tin nhắn thành công. Chúng tôi sẽ phản hồi trong thời gian sớm nhất.',
+      })
     } catch (error) {
-      setSubmitStatus('error')
-      setTimeout(() => setSubmitStatus('idle'), 3000)
+      toast({
+        title: 'Lỗi',
+        description: contactMessageService.getErrorMessage(
+          error,
+          'Gửi tin nhắn thất bại. Vui lòng thử lại.',
+        ),
+        variant: 'destructive',
+      })
     } finally {
       setIsLoading(false)
     }
@@ -53,21 +109,21 @@ export function ContactPage() {
       icon: Phone,
       title: 'Gọi cho chúng tôi',
       description: 'Hỗ trợ 24/7 mọi ngày',
-      value: '1900 123 456',
+      value: CONTACT_INFO.phone,
       color: 'bg-primary/10 text-primary',
     },
     {
       icon: Mail,
       title: 'Gửi email',
       description: 'Phản hồi trong 1 giờ',
-      value: 'support@medcare.vn',
+      value: CONTACT_INFO.email,
       color: 'bg-accent/10 text-accent',
     },
     {
       icon: MapPin,
       title: 'Địa chỉ',
       description: 'Ghé thăm văn phòng',
-      value: 'TP. Hồ Chí Minh',
+      value: CONTACT_INFO.address,
       color: 'bg-chart-1/10 text-chart-1',
     },
   ]
@@ -214,16 +270,15 @@ export function ContactPage() {
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
-                      <Label htmlFor="name" className="text-sm font-semibold">
-                        Họ và tên
+                      <Label htmlFor="fullName" className="text-sm font-semibold">
+                        Họ và tên *
                       </Label>
                       <Input
-                        id="name"
-                        name="name"
+                        id="fullName"
+                        name="fullName"
                         placeholder="Nhập họ và tên"
-                        value={formData.name}
+                        value={formData.fullName}
                         onChange={handleChange}
-                        required
                         className="mt-2"
                       />
                     </div>
@@ -235,10 +290,9 @@ export function ContactPage() {
                         id="phone"
                         name="phone"
                         type="tel"
-                        placeholder="0912 345 678"
+                        placeholder="0868663667"
                         value={formData.phone}
                         onChange={handleChange}
-                        required
                         className="mt-2"
                       />
                     </div>
@@ -246,7 +300,7 @@ export function ContactPage() {
 
                   <div>
                     <Label htmlFor="email" className="text-sm font-semibold">
-                      Email
+                      Email *
                     </Label>
                     <Input
                       id="email"
@@ -255,14 +309,13 @@ export function ContactPage() {
                       placeholder="your@email.com"
                       value={formData.email}
                       onChange={handleChange}
-                      required
                       className="mt-2"
                     />
                   </div>
 
                   <div>
                     <Label htmlFor="subject" className="text-sm font-semibold">
-                      Chủ đề
+                      Tiêu đề
                     </Label>
                     <Input
                       id="subject"
@@ -270,14 +323,13 @@ export function ContactPage() {
                       placeholder="Tiêu đề tin nhắn"
                       value={formData.subject}
                       onChange={handleChange}
-                      required
                       className="mt-2"
                     />
                   </div>
 
                   <div>
                     <Label htmlFor="message" className="text-sm font-semibold">
-                      Nội dung
+                      Nội dung *
                     </Label>
                     <Textarea
                       id="message"
@@ -286,31 +338,9 @@ export function ContactPage() {
                       rows={5}
                       value={formData.message}
                       onChange={handleChange}
-                      required
                       className="mt-2"
                     />
                   </div>
-
-                  {/* Status Messages */}
-                  {submitStatus === 'success' && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="p-4 bg-chart-2/10 text-chart-2 rounded-lg text-sm font-medium"
-                    >
-                      ✓ Cảm ơn bạn! Chúng tôi sẽ liên hệ lại trong thời gian sớm nhất.
-                    </motion.div>
-                  )}
-
-                  {submitStatus === 'error' && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="p-4 bg-destructive/10 text-destructive rounded-lg text-sm font-medium"
-                    >
-                      ✗ Gửi tin nhắn thất bại. Vui lòng thử lại.
-                    </motion.div>
-                  )}
 
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                     <Button
@@ -337,7 +367,7 @@ export function ContactPage() {
                   <div>
                     <h3 className="font-semibold mb-1">Địa chỉ</h3>
                     <p className="text-sm text-muted-foreground">
-                      123 Đường Nguyễn Huệ, Quận 1, TP. Hồ Chí Minh, Việt Nam
+                      {CONTACT_INFO.address}
                     </p>
                   </div>
                 </div>
@@ -348,8 +378,8 @@ export function ContactPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold mb-1">Điện thoại</h3>
-                    <a href="tel:1900123456" className="text-sm text-primary hover:underline">
-                      1900 123 456
+                    <a href={getContactPhoneHref()} className="text-sm text-primary hover:underline">
+                      {CONTACT_INFO.phone}
                     </a>
                   </div>
                 </div>
@@ -360,8 +390,8 @@ export function ContactPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold mb-1">Email</h3>
-                    <a href="mailto:support@medcare.vn" className="text-sm text-primary hover:underline">
-                      support@medcare.vn
+                    <a href={getContactEmailHref()} className="text-sm text-primary hover:underline">
+                      {CONTACT_INFO.email}
                     </a>
                   </div>
                 </div>

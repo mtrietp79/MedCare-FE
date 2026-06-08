@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, Loader2, Printer, RefreshCw } from 'lucide-r
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getAppointmentStatusLabel, resolvePaymentStatusView } from '@/lib/appointment-status'
+import { getContactSupportLine } from '@/lib/contact-info'
 import { getInvoiceStatusClass, getInvoiceStatusLabel, shouldShowInvoiceConsultationFee } from '@/lib/invoice-contract'
 import { api } from '@/services/api'
 import type {
@@ -473,7 +474,7 @@ export function VNPayPaymentResultPage() {
             <CardHeader className="space-y-4 border-b">
               <div className="text-center">
                 <p className="text-lg font-semibold text-slate-900">Phòng khám MedCare</p>
-                <p className="text-sm text-muted-foreground">Hotline: 1900 09 99 83 | support@medcare.vn</p>
+                <p className="text-sm text-muted-foreground">{getContactSupportLine()}</p>
               </div>
               <CardTitle className="text-center text-2xl uppercase">{resourceConfig.documentTitle}</CardTitle>
               <div className="text-center text-sm text-muted-foreground">

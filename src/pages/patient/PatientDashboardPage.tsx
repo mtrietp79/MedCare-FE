@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ShieldCheck, CalendarDays, User, ArrowRight } from 'lucide-react'
+import {
+  ArrowRight,
+  CalendarDays,
+  Phone,
+  ShieldCheck,
+  User,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  PatientEmptyState,
+  PatientPageHeader,
+  PatientStatusBadge,
+} from '@/components/patient/patient-ui'
 import { api } from '@/services/api'
 import { PatientProfileForm } from './PatientProfilePage'
 import type { Patient, Appointment } from '@/types'
-import { getAppointmentStatusLabel } from '@/lib/appointment-status'
+import { resolveAppointmentStatusView } from '@/lib/appointment-status'
 
 function formatAppointmentDateTime(appointment?: Appointment | null): string {
-  if (!appointment) return 'Chua co lich kham'
+  if (!appointment) return 'Chưa có lịch khám'
 
   const rawDateSource = String(appointment.appointmentDate || appointment.date || '').trim()
   const rawTimeSource = String(appointment.appointmentTime || appointment.time || '').trim()
@@ -31,7 +42,7 @@ function formatAppointmentDateTime(appointment?: Appointment | null): string {
   const dateLabel =
     dateObject && !Number.isNaN(dateObject.getTime()) ? dateObject.toLocaleDateString('vi-VN') : dateSource || ''
 
-  if (!dateLabel && !timeLabel) return 'Chua co lich kham'
+  if (!dateLabel && !timeLabel) return 'Chưa có lịch khám'
   if (!dateLabel) return timeLabel
   if (!timeLabel) return dateLabel
   return `${dateLabel} ${timeLabel}`
@@ -65,126 +76,166 @@ export function PatientDashboardPage() {
 
   if (loading) {
     return (
-      <div className="rounded-3xl border bg-white p-10 text-center">Đang tải hồ sơ...</div>
+      <div className="rounded-2xl border border-border/80 bg-card p-10 text-center text-muted-foreground">
+        Đang tải hồ sơ...
+      </div>
     )
   }
 
   if (error) {
     return (
-      <div className="rounded-3xl border bg-white p-10 text-center text-destructive">Lỗi: {error}</div>
+      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-10 text-center text-destructive">
+        Lỗi: {error}
+      </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border bg-white p-8 shadow-sm">
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">Chào mừng trở lại</p>
-            <h1 className="text-3xl font-semibold">{patient?.fullName || patient?.name || 'Bệnh nhân'}</h1>
-            <p className="text-sm text-muted-foreground mt-2">
-              {patient?.profileCompleted ? 'Hồ sơ của bạn đã hoàn tất.' : 'Hoàn thiện hồ sơ để tiếp tục đặt lịch khám.'}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
+      <PatientPageHeader
+        title={`Chào mừng trở lại, ${patient?.fullName || patient?.name || 'Bệnh nhân'}`}
+        description={
+          patient?.profileCompleted
+            ? 'Hồ sơ của bạn đã hoàn tất. Theo dõi lịch khám và hồ sơ sức khỏe tại đây.'
+            : 'Hoàn thiện hồ sơ để tiếp tục đặt lịch khám.'
+        }
+        actions={
+          <>
             <Button asChild>
               <Link to="/patient/profile">Hồ sơ</Link>
             </Button>
             <Button variant="outline" asChild>
               <Link to="/booking">Đặt lịch</Link>
             </Button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {patient?.profileCompleted === false ? (
-        <div className="rounded-3xl border bg-white p-8 shadow-sm">
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold">Hoàn thiện hồ sơ</h2>
-            <p className="text-sm text-muted-foreground">
-              Vui lòng cập nhật đầy đủ thông tin để hoàn tất hồ sơ và tiếp tục đặt lịch khám.
-            </p>
-          </div>
-          <PatientProfileForm
-            patient={patient}
-            onSuccess={(updatedPatient) => setPatient(updatedPatient)}
-          />
-        </div>
-      ) : null}
-
-      <div className="grid gap-6 lg:grid-cols-3">
         <Card>
-          <CardContent className="space-y-3 p-6">
-            <div className="flex items-center gap-3 text-primary">
-              <ShieldCheck className="w-5 h-5" />
-              <p className="font-medium">Trạng thái hồ sơ</p>
+          <CardContent className="p-6 md:p-8">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold">Hoàn thiện hồ sơ</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Vui lòng cập nhật đầy đủ thông tin để hoàn tất hồ sơ và tiếp tục đặt lịch khám.
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">{patient?.profileCompleted ? 'Hoàn tất' : 'Chưa hoàn tất'}</p>
+            <PatientProfileForm
+              patient={patient}
+              onSuccess={(updatedPatient) => setPatient(updatedPatient)}
+            />
           </CardContent>
         </Card>
-        <Card>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-primary/10">
           <CardContent className="space-y-3 p-6">
-            <div className="flex items-center gap-3 text-primary">
-              <CalendarDays className="w-5 h-5" />
-              <p className="font-medium">Lịch khám gần nhất</p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <p className="font-medium">Trạng thái hồ sơ</p>
             </div>
             <p className="text-sm text-muted-foreground">
+              {patient?.profileCompleted ? 'Hoàn tất' : 'Chưa hoàn tất'}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-primary/10">
+          <CardContent className="space-y-3 p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <CalendarDays className="h-5 w-5" />
+              </div>
+              <p className="font-medium">Lịch khám gần nhất</p>
+            </div>
+            <p className="text-sm font-medium text-foreground">
               {appointments.length > 0 ? formatAppointmentDateTime(appointments[0]) : 'Chưa có lịch khám'}
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-primary/10">
           <CardContent className="space-y-3 p-6">
-            <div className="flex items-center gap-3 text-primary">
-              <User className="w-5 h-5" />
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <User className="h-5 w-5" />
+              </div>
               <p className="font-medium">Thông tin liên hệ</p>
             </div>
-            <p className="text-sm text-muted-foreground">SĐT: {patient?.phone || 'Chưa cập nhật'}</p>
-            <p className="text-sm text-muted-foreground">Email: {patient?.email || 'Chưa cập nhật'}</p>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Phone className="h-3.5 w-3.5" />
+              {patient?.phone || 'Chưa cập nhật'}
+            </p>
+            <p className="text-sm text-muted-foreground">{patient?.email || 'Chưa cập nhật email'}</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="rounded-3xl border bg-white p-8 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-2xl font-semibold">Lịch khám gần đây</h2>
-            <p className="text-sm text-muted-foreground">Theo dõi lịch sử khám và mã vé ngay tại đây.</p>
+      <Card>
+        <CardContent className="p-6 md:p-8">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Lịch khám gần đây</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Theo dõi lịch sử khám và mã vé ngay tại đây.
+              </p>
+            </div>
+            <Button variant="outline" asChild>
+              <Link to="/patient/appointments" className="gap-2">
+                Xem toàn bộ
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
           </div>
-          <Button variant="outline" asChild>
-            <Link to="/patient/appointments">Xem toàn bộ</Link>
-          </Button>
-        </div>
 
-        {appointments.length === 0 ? (
-          <div className="mt-8 rounded-3xl border border-dashed border-slate-200 p-8 text-center text-muted-foreground">
-            Bạn chưa có lịch khám nào. Hãy đặt lịch để chúng tôi phục vụ.
-          </div>
-        ) : (
-          <div className="mt-8 grid gap-4">
-            {appointments.map((appointment) => (
-              <Card key={appointment.id}>
-                <CardContent className="grid gap-3 p-6">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">{appointment.appointmentCode || `#${appointment.id}`}</p>
-                      <p className="font-semibold">{appointment.doctor?.fullName || appointment.doctorName || 'Bác sĩ chưa xác định'}</p>
+          {appointments.length === 0 ? (
+            <PatientEmptyState
+              icon={CalendarDays}
+              message="Bạn chưa có lịch khám nào. Hãy đặt lịch để chúng tôi phục vụ."
+              action={
+                <Button asChild className="mt-2">
+                  <Link to="/booking">Đặt lịch khám</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <div className="grid gap-3">
+              {appointments.map((appointment) => {
+                const statusView = resolveAppointmentStatusView(appointment.status, appointment.statusDisplay)
+                return (
+                  <div
+                    key={appointment.id}
+                    className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 transition-colors hover:border-primary/25 hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {appointment.appointmentCode || `#${appointment.id}`}
+                      </p>
+                      <p className="mt-0.5 font-semibold text-foreground">
+                        {appointment.doctor?.fullName || appointment.doctorName || 'Bác sĩ chưa xác định'}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {typeof appointment.specialty === 'string'
+                          ? appointment.specialty
+                          : appointment.specialty?.name || 'Chuyên khoa'}
+                        {' · '}
+                        {formatAppointmentDateTime(appointment)}
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground">{formatAppointmentDateTime(appointment)}</p>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <PatientStatusBadge label={statusView.label} className={statusView.className} />
+                      <Button variant="outline" size="sm" asChild>
+                        <Link to={`/patient/appointments/${appointment.id}`}>Xem chi tiết</Link>
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>{typeof appointment.specialty === 'string' ? appointment.specialty : appointment.specialty?.name || 'Chuyên khoa'}</span>
-                    <span>{getAppointmentStatusLabel(appointment.status, appointment.statusDisplay)}</span>
-                  </div>
-                  <Button variant="ghost" asChild>
-                    <Link to={`/patient/appointments/${appointment.id}`}>Xem chi tiết</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

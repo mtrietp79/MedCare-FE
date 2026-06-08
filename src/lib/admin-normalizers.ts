@@ -119,15 +119,34 @@ export interface NormalizedSpecialty {
   description: string
   doctorCount: number
   createdAt: string
+  isActive: boolean
 }
 
 export function normalizeSpecialty(raw: any): NormalizedSpecialty {
+  const rawStatus = safeLower(raw?.status)
+  const isActive =
+    typeof raw?.isActive === 'boolean'
+      ? raw.isActive
+      : typeof raw?.active === 'boolean'
+        ? raw.active
+        : rawStatus === 'active' || rawStatus === 'activated'
+          ? true
+          : rawStatus === 'inactive' ||
+              rawStatus === 'deactivated' ||
+              rawStatus === 'deactive' ||
+              rawStatus === 'suspended' ||
+              rawStatus.includes('tam ngung') ||
+              rawStatus.includes('ngung')
+            ? false
+            : true
+
   return {
     id: safeString(raw?.id),
     name: safeString(raw?.name),
     description: safeString(raw?.description),
     doctorCount: safeNumber(raw?.totalDoctors ?? raw?.doctorCount, 0),
     createdAt: safeString(raw?.createdAt),
+    isActive,
   }
 }
 

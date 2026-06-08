@@ -72,7 +72,7 @@ export const mockApi = {
         email: 'patient@example.com',
         dateOfBirth: '1990-01-15',
         gender: 'MALE',
-        address: '123 Đường ABC, Quận 1, TP.HCM',
+        address: 'Khu phố 6, Linh Trung, Thủ Đức, TP.HCM',
         insuranceNumber: 'BH123456789',
         profileCompleted: true,
       })

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Phone, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CONTACT_INFO, getContactPhoneHref } from '@/lib/contact-info'
 
 export function CTASection() {
   return (
@@ -38,9 +39,9 @@ export function CTASection() {
               className="w-full sm:w-auto gap-2 border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
               asChild
             >
-              <a href="tel:1900123456">
+              <a href={getContactPhoneHref()}>
                 <Phone className="w-4 h-4" />
-                1900 123 456
+                {CONTACT_INFO.phone}
               </a>
             </Button>
           </div>

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { useAuth } from '@/context/AuthContext'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { PatientAvatar, PatientPageHeader } from '@/components/patient/patient-ui'
 import { api } from '@/services/api'
 import type { Patient } from '@/types'
 
@@ -99,51 +101,47 @@ export function PatientProfileForm({ patient, onSuccess, onCancel }: PatientProf
   return (
     <form className="grid gap-6" onSubmit={handleSubmit}>
       <div className="grid gap-4 md:grid-cols-2">
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="fullName">Họ và tên *</Label>
           <Input
             id="fullName"
             value={formData.fullName}
             onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-            className="mt-2"
           />
         </div>
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="dateOfBirth">Ngày sinh *</Label>
           <Input
             id="dateOfBirth"
             type="date"
             value={formData.dateOfBirth}
             onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-            className="mt-2"
           />
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="phone">Số điện thoại *</Label>
           <Input
             id="phone"
             value={formData.phone}
             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-            className="mt-2"
           />
         </div>
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
             type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className="mt-2"
           />
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="gender">Giới tính *</Label>
           <Select
             value={formData.gender}
@@ -152,7 +150,7 @@ export function PatientProfileForm({ patient, onSuccess, onCancel }: PatientProf
               gender: value as 'MALE' | 'FEMALE' | 'OTHER',
             })}
           >
-            <SelectTrigger id="gender" className="mt-2 w-full">
+            <SelectTrigger id="gender" className="w-full">
               <SelectValue placeholder="Chọn giới tính" />
             </SelectTrigger>
             <SelectContent>
@@ -164,33 +162,40 @@ export function PatientProfileForm({ patient, onSuccess, onCancel }: PatientProf
             </SelectContent>
           </Select>
         </div>
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="nationalId">CMND/CCCD *</Label>
           <Input
             id="nationalId"
             value={formData.nationalId}
             onChange={(e) => setFormData({ ...formData, nationalId: e.target.value })}
-            className="mt-2"
           />
         </div>
       </div>
 
-      <div>
+      <div className="space-y-2">
         <Label htmlFor="address">Địa chỉ *</Label>
         <Textarea
           id="address"
           value={formData.address}
           onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-          className="mt-2"
+          className="min-h-[100px]"
         />
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {message && <p className="text-sm text-emerald-600">{message}</p>}
+      {error ? (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+      {message ? (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+          {message}
+        </p>
+      ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 border-t border-border/60 pt-4 sm:flex-row sm:items-center">
         <Button type="submit" disabled={saving} className="w-full sm:w-auto">
-          {saving ? 'Đang lưu...' : 'Lưu thông tin'}
+          {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
         </Button>
         {onCancel ? (
           <Button
@@ -231,25 +236,39 @@ export function PatientProfilePage() {
   }, [])
 
   return (
-    <div className="rounded-3xl border bg-white p-8 shadow-sm">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold">Hồ sơ bệnh nhân</h1>
-        <p className="text-sm text-muted-foreground">Hoàn thiện thông tin của bạn để tiếp tục đặt lịch khám.</p>
-      </div>
+    <div className="space-y-6">
+      <PatientPageHeader
+        title="Hồ sơ bệnh nhân"
+        description="Hoàn thiện thông tin của bạn để tiếp tục đặt lịch khám."
+      />
 
-      {loading ? (
-        <div className="text-center py-10 text-muted-foreground">Đang tải dữ liệu hồ sơ...</div>
-      ) : error ? (
-        <div className="text-center py-10 text-destructive">{error}</div>
-      ) : patient ? (
-        <PatientProfileForm
-          patient={patient}
-          onSuccess={() => navigate('/patient')}
-          onCancel={() => navigate('/patient')}
-        />
-      ) : (
-        <div className="text-center py-10 text-muted-foreground">Không tìm thấy hồ sơ.</div>
-      )}
+      <Card>
+        <CardContent className="p-6 md:p-8">
+          {loading ? (
+            <div className="py-10 text-center text-muted-foreground">Đang tải dữ liệu hồ sơ...</div>
+          ) : error ? (
+            <div className="py-10 text-center text-destructive">{error}</div>
+          ) : patient ? (
+            <div className="space-y-8">
+              <div className="flex flex-col items-center gap-4 border-b border-border/60 pb-8 sm:flex-row sm:items-start">
+                <PatientAvatar name={patient.fullName || patient.name} size="xl" />
+                <div className="text-center sm:text-left">
+                  <h2 className="text-xl font-semibold">{patient.fullName || patient.name}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{patient.email || 'Chưa cập nhật email'}</p>
+                  <p className="text-sm text-muted-foreground">{patient.phone || 'Chưa cập nhật SĐT'}</p>
+                </div>
+              </div>
+              <PatientProfileForm
+                patient={patient}
+                onSuccess={() => navigate('/patient')}
+                onCancel={() => navigate('/patient')}
+              />
+            </div>
+          ) : (
+            <div className="py-10 text-center text-muted-foreground">Không tìm thấy hồ sơ.</div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

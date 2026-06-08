@@ -2,11 +2,13 @@ import { motion } from 'framer-motion'
 import {
   ClipboardList,
   DollarSign,
+  Mail,
   MessageSquare,
   LayoutDashboard,
   LogOut,
   Pill,
   Stethoscope,
+  UserRound,
   Users,
 } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -44,6 +46,12 @@ const adminMenuItems = [
     label: 'Quản lý bác sĩ',
   },
   {
+    title: 'Bệnh nhân',
+    href: '/admin/patients',
+    icon: UserRound,
+    label: 'Quản lý bệnh nhân',
+  },
+  {
     title: 'Tài chính',
     href: '/admin/finance',
     icon: DollarSign,
@@ -60,6 +68,12 @@ const adminMenuItems = [
     href: '/admin/website-feedbacks',
     icon: MessageSquare,
     label: 'Quản lý feedback website',
+  },
+  {
+    title: 'Tin nhắn liên hệ',
+    href: '/admin/contact-messages',
+    icon: Mail,
+    label: 'Quản lý tin nhắn liên hệ',
   },
   {
     title: 'Thuốc',

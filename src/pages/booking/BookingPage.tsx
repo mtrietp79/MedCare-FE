@@ -1,22 +1,16 @@
 ﻿import { BookingWizard } from '@/components/booking/booking-wizard'
+import { PatientPageHeader } from '@/components/patient/patient-ui'
 
 export function BookingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background">
-      <div className="container mx-auto px-4 py-8 md:py-12">
-        <div className="mb-12 text-center md:text-left">
-          <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-3">
-            Đặt lịch khám bệnh
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-2xl">
-            Đặt lịch theo bác sĩ/chuyên khoa như thông thường hoặc đi thẳng từ gói dịch vụ đã chọn.
-          </p>
-        </div>
-
+    <div className="min-h-screen bg-muted/30">
+      <div className="container mx-auto space-y-8 px-4 py-8 md:py-12">
+        <PatientPageHeader
+          title="Đặt lịch khám bệnh"
+          description="Đặt lịch theo bác sĩ/chuyên khoa như thông thường hoặc đi thẳng từ gói dịch vụ đã chọn."
+        />
         <BookingWizard />
       </div>
     </div>
   )
 }
-
-

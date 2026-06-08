@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Heart, Phone, Mail, MapPin, Facebook, Youtube } from 'lucide-react'
+import { CONTACT_INFO, getContactEmailHref, getContactPhoneHref } from '@/lib/contact-info'
 
 const footerLinks = {
   services: [
@@ -42,17 +43,17 @@ export function Footer() {
             
             {/* Contact info */}
             <div className="space-y-3">
-              <a href="tel:1900123456" className="flex items-center gap-3 text-background/70 hover:text-background transition-colors">
+              <a href={getContactPhoneHref()} className="flex items-center gap-3 text-background/70 hover:text-background transition-colors">
                 <Phone className="w-4 h-4" />
-                <span>1900 123 456</span>
+                <span>{CONTACT_INFO.phone}</span>
               </a>
-              <a href="mailto:support@medcare.vn" className="flex items-center gap-3 text-background/70 hover:text-background transition-colors">
+              <a href={getContactEmailHref()} className="flex items-center gap-3 text-background/70 hover:text-background transition-colors">
                 <Mail className="w-4 h-4" />
-                <span>support@medcare.vn</span>
+                <span>{CONTACT_INFO.email}</span>
               </a>
               <div className="flex items-start gap-3 text-background/70">
                 <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <span>123 Đường Nguyễn Huệ, Quận 1, TP. Hồ Chí Minh</span>
+                <span>{CONTACT_INFO.address}</span>
               </div>
             </div>
           </div>

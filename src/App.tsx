@@ -63,6 +63,8 @@ import { AdminFinancePage } from '@/pages/admin/AdminFinancePage'
 import { AdminSchedulePage } from '@/pages/admin/AdminSchedulePage'
 import { AdminServicePackagesPage } from '@/pages/admin/AdminServicePackagesPage'
 import { AdminWebsiteFeedbacksPage } from '@/pages/admin/AdminWebsiteFeedbacksPage'
+import { AdminContactMessagesPage } from '@/pages/admin/AdminContactMessagesPage'
+import { AdminPatientsPage } from '@/pages/admin/AdminPatientsPage'
 
 export default function App() {
 	return (
@@ -212,12 +214,14 @@ export default function App() {
 							<Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
 							<Route path="/admin/dashboard" element={<AdminDashboard />} />
 							<Route path="/admin/doctors" element={<AdminDoctorsPage />} />
+							<Route path="/admin/patients" element={<AdminPatientsPage />} />
 							<Route path="/admin/specialties" element={<AdminSpecialtiesPage />} />
 							<Route path="/admin/medicines" element={<AdminMedicinesPage />} />
 							<Route path="/admin/finance" element={<AdminFinancePage />} />
 							<Route path="/admin/service-package-bookings" element={<AdminServicePackagesPage />} />
 							<Route path="/admin/service-packages" element={<AdminServicePackagesPage />} />
 							<Route path="/admin/website-feedbacks" element={<AdminWebsiteFeedbacksPage />} />
+							<Route path="/admin/contact-messages" element={<AdminContactMessagesPage />} />
 							<Route path="/admin/schedules" element={<AdminSchedulePage />} />
 						</Route>
 

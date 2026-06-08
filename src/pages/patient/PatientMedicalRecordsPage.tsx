@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { FileText } from 'lucide-react'
+import {
+  Calendar,
+  Clock,
+  FileText,
+  Stethoscope,
+  UserRound,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
+import {
+  PatientEmptyState,
+  PatientErrorState,
+  PatientInfoRow,
+  PatientLoadingSkeleton,
+  PatientPageHeader,
+} from '@/components/patient/patient-ui'
 import { api, type PatientMedicalRecord } from '@/services/api'
 import { getAppointmentTypeLabel } from '@/lib/appointment-type'
 
@@ -18,7 +30,7 @@ function formatDateTime(dateValue?: string, timeValue?: string) {
   const dateText = formatDate(dateValue)
   const timeText = String(timeValue || '').trim()
   if (!timeText) return dateText
-  if (dateText === '-') return timeText
+  if (dateText === '-') return timeText.slice(0, 5)
   return `${dateText} ${timeText.slice(0, 5)}`
 }
 
@@ -46,56 +58,76 @@ export function PatientMedicalRecordsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold">Hồ sơ bệnh án của tôi</h1>
-        <p className="text-sm text-muted-foreground">
-          Danh sách hồ sơ bệnh án từ các lần khám đã hoàn tất.
-        </p>
-      </div>
+      <PatientPageHeader
+        title="Hồ sơ bệnh án của tôi"
+        description="Danh sách hồ sơ bệnh án từ các lần khám đã hoàn tất."
+      />
 
       {loading ? (
-        <div className="space-y-3 rounded-3xl border bg-white p-6">
-          <Skeleton className="h-16 rounded-xl" />
-          <Skeleton className="h-16 rounded-xl" />
-          <Skeleton className="h-16 rounded-xl" />
-        </div>
+        <PatientLoadingSkeleton rows={3} />
       ) : error ? (
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-center text-red-700">
-          <p>Lỗi: {error}</p>
-          <Button variant="outline" className="mt-3" onClick={() => void loadRecords()}>
-            Thử lại
-          </Button>
-        </div>
+        <PatientErrorState message={`Lỗi: ${error}`} onRetry={() => void loadRecords()} />
       ) : records.length === 0 ? (
-        <div className="rounded-3xl border bg-white p-10 text-center text-muted-foreground">
-          Chưa có hồ sơ bệnh án nào.
-        </div>
+        <PatientEmptyState
+          icon={FileText}
+          message="Chưa có hồ sơ bệnh án nào."
+        />
       ) : (
         <div className="grid gap-4">
           {records.map((record) => (
-            <Card key={record.id}>
-              <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{record.recordCode || `#${record.id}`}</p>
-                  <p className="font-semibold">{record.diagnosis || 'Chưa cập nhật chẩn đoán'}</p>
-                  <p className="text-sm text-muted-foreground">Bác sĩ: {record.doctor?.fullName || record.doctorName || '-'}</p>
-                  <p className="text-sm text-muted-foreground">Loại khám: {getAppointmentTypeLabel({
-                    typeCode: record.typeCode,
-                    appointmentTypeCode: record.appointmentTypeCode,
-                  })}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Ngày khám: {formatDateTime(record.appointmentDate, record.appointmentTime)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Ngày tạo: {formatDate(record.recordCreatedAt || record.createdAt)}
-                  </p>
+            <Card
+              key={record.id}
+              className="group overflow-hidden transition-all hover:border-primary/30 hover:shadow-md"
+            >
+              <CardContent className="p-0">
+                <div className="flex flex-col lg:flex-row lg:items-stretch">
+                  <div className="border-b border-border/60 bg-primary/5 px-6 py-4 lg:w-56 lg:border-b-0 lg:border-r">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Mã bệnh án
+                    </p>
+                    <p className="mt-1 font-mono text-lg font-semibold text-primary">
+                      {record.recordCode || `#${record.id}`}
+                    </p>
+                    <p className="mt-3 line-clamp-2 text-sm font-semibold text-foreground">
+                      {record.diagnosis || 'Chưa cập nhật chẩn đoán'}
+                    </p>
+                  </div>
+
+                  <div className="grid flex-1 gap-4 p-6 sm:grid-cols-2">
+                    <PatientInfoRow
+                      icon={UserRound}
+                      label="Bác sĩ"
+                      value={record.doctor?.fullName || record.doctorName || '-'}
+                    />
+                    <PatientInfoRow
+                      icon={Stethoscope}
+                      label="Loại khám"
+                      value={getAppointmentTypeLabel({
+                        typeCode: record.typeCode,
+                        appointmentTypeCode: record.appointmentTypeCode,
+                      })}
+                    />
+                    <PatientInfoRow
+                      icon={Calendar}
+                      label="Ngày khám"
+                      value={formatDateTime(record.appointmentDate, record.appointmentTime)}
+                    />
+                    <PatientInfoRow
+                      icon={Clock}
+                      label="Ngày tạo"
+                      value={formatDate(record.recordCreatedAt || record.createdAt)}
+                    />
+                  </div>
+
+                  <div className="flex items-center border-t border-border/60 px-6 py-4 lg:w-44 lg:border-l lg:border-t-0">
+                    <Button asChild className="w-full gap-2 shadow-sm" variant="default">
+                      <Link to={`/patient/medical-records/${record.id}`}>
+                        <FileText className="h-4 w-4" />
+                        Xem chi tiết
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
-                <Button asChild variant="outline">
-                  <Link to={`/patient/medical-records/${record.id}`} className="gap-2">
-                    <FileText className="h-4 w-4" />
-                    Xem chi tiết
-                  </Link>
-                </Button>
               </CardContent>
             </Card>
           ))}

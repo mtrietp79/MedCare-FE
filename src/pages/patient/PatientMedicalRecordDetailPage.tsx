@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PatientBackLink, PatientEmptyState, PatientErrorState } from '@/components/patient/patient-ui'
 import { PatientMedicalRecordDetails } from '@/components/patient/PatientMedicalRecordDetails'
 import { api, type PatientMedicalRecord } from '@/services/api'
 
@@ -43,35 +43,28 @@ export function PatientMedicalRecordDetailPage() {
 
   if (error) {
     return (
-      <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-center text-red-700">
-        <p>Lỗi: {error}</p>
-        <Button variant="outline" className="mt-3" onClick={() => void loadRecord()}>
-          Thử lại
-        </Button>
-      </div>
+      <PatientErrorState message={`Lỗi: ${error}`} onRetry={() => void loadRecord()} />
     )
   }
 
   if (!record) {
     return (
       <div className="space-y-4">
-        <Link to="/patient/medical-records" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+        <PatientBackLink to="/patient/medical-records">
           <ArrowLeft className="h-4 w-4" />
           Quay lại danh sách bệnh án
-        </Link>
-        <div className="rounded-3xl border bg-white p-10 text-center text-muted-foreground">
-          Không tìm thấy hồ sơ bệnh án.
-        </div>
+        </PatientBackLink>
+        <PatientEmptyState message="Không tìm thấy hồ sơ bệnh án." />
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      <Link to="/patient/medical-records" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+      <PatientBackLink to="/patient/medical-records">
         <ArrowLeft className="h-4 w-4" />
         Quay lại danh sách bệnh án
-      </Link>
+      </PatientBackLink>
       <PatientMedicalRecordDetails record={record} />
     </div>
   )

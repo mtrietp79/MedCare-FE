@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Loader2, Plus, Search, Edit, Trash2, Power, PowerOff } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
@@ -123,6 +124,8 @@ function getDoctorLastName(fullName: string): string {
 
 export function AdminDoctorsPage() {
   const { toast } = useToast()
+  const [searchParams] = useSearchParams()
+  const initialSpecialtyFilter = searchParams.get('specialtyId') || 'all'
 
   const [doctors, setDoctors] = useState<NormalizedDoctor[]>([])
   const [specialties, setSpecialties] = useState<Array<{ id: string; name: string }>>([])
@@ -133,6 +136,7 @@ export function AdminDoctorsPage() {
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, 300)
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [specialtyFilter, setSpecialtyFilter] = useState(initialSpecialtyFilter)
   const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc' | 'specialty_asc'>('name_asc')
 
   const [selectedDoctor, setSelectedDoctor] = useState<NormalizedDoctor | null>(null)
@@ -177,6 +181,13 @@ export function AdminDoctorsPage() {
   }, [])
 
   useEffect(() => {
+    const specialtyId = searchParams.get('specialtyId')
+    if (specialtyId) {
+      setSpecialtyFilter(specialtyId)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
     return () => {
       if (photoPreview.startsWith('blob:')) {
         URL.revokeObjectURL(photoPreview)
@@ -195,7 +206,8 @@ export function AdminDoctorsPage() {
         || safeLower(doctor.username).includes(keyword)
 
       const hitStatus = statusFilter === 'all' || doctor.status === statusFilter
-      return hitSearch && hitStatus
+      const hitSpecialty = specialtyFilter === 'all' || doctor.specialtyId === specialtyFilter
+      return hitSearch && hitStatus && hitSpecialty
     })
 
     const sortedDoctors = [...result].sort((a, b) => {
@@ -219,7 +231,7 @@ export function AdminDoctorsPage() {
     })
 
     return sortedDoctors
-  }, [doctors, debouncedSearch, statusFilter, sortBy])
+  }, [doctors, debouncedSearch, statusFilter, specialtyFilter, sortBy])
 
   const resetForm = () => {
     if (photoPreview.startsWith('blob:')) {
@@ -766,6 +778,20 @@ export function AdminDoctorsPage() {
                 <SelectItem value="all">Tất cả trạng thái</SelectItem>
                 <SelectItem value="active">Đang hoạt động</SelectItem>
                 <SelectItem value="inactive">Tắt hoạt động</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={specialtyFilter} onValueChange={setSpecialtyFilter}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Chuyên khoa" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tất cả chuyên khoa</SelectItem>
+                {specialties.map((specialty) => (
+                  <SelectItem key={specialty.id} value={specialty.id}>
+                    {specialty.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
 

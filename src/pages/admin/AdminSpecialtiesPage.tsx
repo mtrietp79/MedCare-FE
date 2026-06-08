@@ -1,9 +1,15 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search, Edit, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { AlertTriangle, Plus, Search, Edit, Trash2, Power, PowerOff, Loader2 } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
+import {
+  adminSpecialtyService,
+  type SpecialtyDeleteCheckResult,
+} from '@/services/adminSpecialtyService'
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { normalizeSpecialty, safeLower, type NormalizedSpecialty } from '@/lib/admin-normalizers'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -28,7 +34,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import {
   Select,
@@ -44,13 +49,28 @@ interface SpecialtyForm {
   description: string
 }
 
+type DeleteModalType = 'confirm' | 'blocked-doctors' | 'blocked-related'
+
 const initialForm: SpecialtyForm = {
   name: '',
   description: '',
 }
 
+function SpecialtyStatusBadge({ isActive }: { isActive: boolean }) {
+  return isActive ? (
+    <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+      Hoạt động
+    </Badge>
+  ) : (
+    <Badge className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+      Tạm ngưng
+    </Badge>
+  )
+}
+
 export function AdminSpecialtiesPage() {
   const { toast } = useToast()
+  const navigate = useNavigate()
 
   const [specialties, setSpecialties] = useState<NormalizedSpecialty[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,13 +87,21 @@ export function AdminSpecialtiesPage() {
   const [formData, setFormData] = useState<SpecialtyForm>(initialForm)
   const [formError, setFormError] = useState('')
 
+  const [deleteTarget, setDeleteTarget] = useState<NormalizedSpecialty | null>(null)
+  const [deleteCheckLoading, setDeleteCheckLoading] = useState(false)
+  const [deleteCheckResult, setDeleteCheckResult] = useState<SpecialtyDeleteCheckResult | null>(null)
+  const [deleteModalType, setDeleteModalType] = useState<DeleteModalType | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [statusActionLoadingKey, setStatusActionLoadingKey] = useState('')
+  const [deactivateTarget, setDeactivateTarget] = useState<NormalizedSpecialty | null>(null)
+
   const fetchSpecialties = async () => {
     setLoading(true)
     setError('')
 
     try {
-      const raw = await adminApi.getSpecialties()
-      const normalized = (Array.isArray(raw) ? raw : []).map(normalizeSpecialty)
+      const raw = await adminSpecialtyService.getSpecialties()
+      const normalized = raw.map(normalizeSpecialty)
       setSpecialties(normalized)
     } catch (fetchError: any) {
       setError(fetchError?.message || 'Không thể tải danh sách chuyên khoa.')
@@ -107,6 +135,14 @@ export function AdminSpecialtiesPage() {
     setFormData(initialForm)
     setFormError('')
     setSelectedSpecialty(null)
+  }
+
+  const closeDeleteModal = () => {
+    setDeleteTarget(null)
+    setDeleteCheckResult(null)
+    setDeleteModalType(null)
+    setDeleteCheckLoading(false)
+    setIsDeleting(false)
   }
 
   const validateForm = () => {
@@ -177,18 +213,105 @@ export function AdminSpecialtiesPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDeleteClick = async (specialty: NormalizedSpecialty) => {
+    setDeleteTarget(specialty)
+    setDeleteCheckResult(null)
+    setDeleteModalType(null)
+    setDeleteCheckLoading(true)
+
     try {
-      await adminApi.deleteSpecialty(id)
-      toast({ title: 'Thành công', description: 'Đã xóa chuyên khoa.' })
-      await fetchSpecialties()
-    } catch (deleteError: any) {
+      const result = await adminSpecialtyService.checkDelete(specialty.id)
+      setDeleteCheckResult(result)
+
+      if (result.canDelete) {
+        setDeleteModalType('confirm')
+      } else if (result.doctorCount > 0) {
+        setDeleteModalType('blocked-doctors')
+      } else {
+        setDeleteModalType('blocked-related')
+      }
+    } catch (checkError: unknown) {
+      closeDeleteModal()
       toast({
         title: 'Lỗi',
-        description: deleteError?.message || 'Không thể xóa chuyên khoa.',
+        description: adminSpecialtyService.getErrorMessage(
+          checkError,
+          'Không thể kiểm tra điều kiện xóa chuyên khoa.',
+        ),
         variant: 'destructive',
       })
+    } finally {
+      setDeleteCheckLoading(false)
     }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+
+    setIsDeleting(true)
+    try {
+      await adminSpecialtyService.deleteSpecialty(deleteTarget.id)
+      toast({ title: 'Thành công', description: 'Xóa chuyên khoa thành công' })
+      closeDeleteModal()
+      await fetchSpecialties()
+    } catch (deleteError: unknown) {
+      toast({
+        title: 'Lỗi',
+        description: adminSpecialtyService.getErrorMessage(deleteError, 'Không thể xóa chuyên khoa.'),
+        variant: 'destructive',
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleConfirmDeactivate = async (specialty?: NormalizedSpecialty | null) => {
+    const target = specialty ?? deactivateTarget ?? deleteTarget
+    if (!target) return
+
+    try {
+      setStatusActionLoadingKey(`deactivate-${target.id}`)
+      await adminSpecialtyService.deactivateSpecialty(target.id)
+      toast({ title: 'Thành công', description: 'Tạm ngưng chuyên khoa thành công' })
+      setDeactivateTarget(null)
+      closeDeleteModal()
+      await fetchSpecialties()
+    } catch (actionError: unknown) {
+      toast({
+        title: 'Lỗi',
+        description: adminSpecialtyService.getErrorMessage(actionError, 'Không thể tạm ngưng chuyên khoa.'),
+        variant: 'destructive',
+      })
+    } finally {
+      setStatusActionLoadingKey('')
+    }
+  }
+
+  const handleActivate = async (specialty: NormalizedSpecialty) => {
+    try {
+      setStatusActionLoadingKey(`activate-${specialty.id}`)
+      await adminSpecialtyService.activateSpecialty(specialty.id)
+      toast({ title: 'Thành công', description: 'Kích hoạt chuyên khoa thành công' })
+      await fetchSpecialties()
+    } catch (actionError: unknown) {
+      toast({
+        title: 'Lỗi',
+        description: adminSpecialtyService.getErrorMessage(actionError, 'Không thể kích hoạt chuyên khoa.'),
+        variant: 'destructive',
+      })
+    } finally {
+      setStatusActionLoadingKey('')
+    }
+  }
+
+  const handleViewDoctors = (specialty?: NormalizedSpecialty | null) => {
+    const target = specialty || deleteTarget
+    if (!target) {
+      navigate('/admin/doctors')
+      return
+    }
+    closeDeleteModal()
+    navigate(`/admin/doctors?specialtyId=${target.id}`)
   }
 
   const renderForm = () => (
@@ -213,6 +336,10 @@ export function AdminSpecialtiesPage() {
       {formError && <p className="text-sm text-red-600">{formError}</p>}
     </div>
   )
+
+  const doctorCount = deleteCheckResult?.doctorCount ?? 0
+  const appointmentCount = deleteCheckResult?.appointmentCount ?? 0
+  const medicalRecordCount = deleteCheckResult?.medicalRecordCount ?? 0
 
   return (
     <div className="p-6 space-y-6">
@@ -287,6 +414,7 @@ export function AdminSpecialtiesPage() {
                   <TableHead>Tên chuyên khoa</TableHead>
                   <TableHead>Mô tả</TableHead>
                   <TableHead>Số bác sĩ</TableHead>
+                  <TableHead>Trạng thái</TableHead>
                   <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
@@ -296,29 +424,58 @@ export function AdminSpecialtiesPage() {
                     <TableCell className="font-medium">{specialty.name || '-'}</TableCell>
                     <TableCell className="max-w-[360px] truncate">{specialty.description || '-'}</TableCell>
                     <TableCell>{specialty.doctorCount}</TableCell>
+                    <TableCell>
+                      <SpecialtyStatusBadge isActive={specialty.isActive} />
+                    </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(specialty)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <Trash2 className="h-4 w-4" />
+                      <div className="flex flex-wrap justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(specialty)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        {specialty.isActive ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            title="Tạm ngưng"
+                            disabled={statusActionLoadingKey === `deactivate-${specialty.id}`}
+                            onClick={() => setDeactivateTarget(specialty)}
+                          >
+                            {statusActionLoadingKey === `deactivate-${specialty.id}` ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-amber-600" />
+                            ) : (
+                              <PowerOff className="h-4 w-4 text-amber-600" />
+                            )}
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Xác nhận xóa</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Bạn có chắc muốn xóa chuyên khoa {specialty.name || specialty.id}?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Hủy</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => void handleDelete(specialty.id)}>Xóa</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            title="Kích hoạt lại"
+                            disabled={statusActionLoadingKey === `activate-${specialty.id}`}
+                            onClick={() => void handleActivate(specialty)}
+                          >
+                            {statusActionLoadingKey === `activate-${specialty.id}` ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                            ) : (
+                              <Power className="h-4 w-4 text-emerald-600" />
+                            )}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={deleteCheckLoading && deleteTarget?.id === specialty.id}
+                          onClick={() => void handleDeleteClick(specialty)}
+                        >
+                          {deleteCheckLoading && deleteTarget?.id === specialty.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -328,13 +485,10 @@ export function AdminSpecialtiesPage() {
         </CardContent>
       </Card>
 
-      <Dialog
-        open={isEditDialogOpen}
-        onOpenChange={(open) => {
-          setIsEditDialogOpen(open)
-          if (!open) resetForm()
-        }}
-      >
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open)
+        if (!open) resetForm()
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cập nhật chuyên khoa</DialogTitle>
@@ -348,6 +502,121 @@ export function AdminSpecialtiesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteModalType === 'confirm'} onOpenChange={(open) => !open && closeDeleteModal()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xóa chuyên khoa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn xóa chuyên khoa {deleteTarget?.name} không? Hành động này không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Hủy</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleConfirmDelete()} disabled={isDeleting}>
+              {isDeleting ? 'Đang xóa...' : 'Xóa'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={deleteModalType === 'blocked-doctors' || deleteModalType === 'blocked-related'}
+        onOpenChange={(open) => !open && closeDeleteModal()}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <DialogTitle>Không thể xóa chuyên khoa</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 pt-2 text-sm leading-relaxed text-muted-foreground">
+                {deleteModalType === 'blocked-doctors' ? (
+                  <>
+                    <p>
+                      Chuyên khoa này hiện đang có <strong>{doctorCount}</strong> bác sĩ đang hoạt động.
+                      Bạn không thể xóa chuyên khoa khi vẫn còn bác sĩ thuộc chuyên khoa này.
+                    </p>
+                    <p>
+                      Vui lòng chuyển các bác sĩ sang chuyên khoa khác hoặc tạm ngưng chuyên khoa này.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      Chuyên khoa này hiện đang có bác sĩ hoặc dữ liệu khám bệnh liên quan.
+                      Để đảm bảo dữ liệu hệ thống không bị mất, bạn không thể xóa trực tiếp chuyên khoa này.
+                    </p>
+                    <p>
+                      Bạn có thể chuyển các bác sĩ sang chuyên khoa khác hoặc tạm ngưng chuyên khoa để ẩn khỏi hệ thống đặt lịch.
+                    </p>
+                  </>
+                )}
+
+                {(doctorCount > 0 || appointmentCount > 0 || medicalRecordCount > 0) && (
+                  <div className="rounded-xl border bg-muted/30 p-3 text-foreground">
+                    {doctorCount > 0 ? <p>Số bác sĩ: {doctorCount}</p> : null}
+                    {appointmentCount > 0 ? <p>Số lịch hẹn: {appointmentCount}</p> : null}
+                    {medicalRecordCount > 0 ? <p>Số bệnh án: {medicalRecordCount}</p> : null}
+                  </div>
+                )}
+
+                {deleteCheckResult?.message ? (
+                  <p className="text-xs italic">{deleteCheckResult.message}</p>
+                ) : null}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
+            <Button
+              onClick={() => void handleConfirmDeactivate(deleteTarget)}
+              disabled={statusActionLoadingKey === `deactivate-${deleteTarget?.id}`}
+            >
+              {statusActionLoadingKey === `deactivate-${deleteTarget?.id}` ? 'Đang xử lý...' : 'Tạm ngưng chuyên khoa'}
+            </Button>
+            <Button variant="outline" onClick={() => handleViewDoctors()}>
+              Xem danh sách bác sĩ
+            </Button>
+            <Button variant="ghost" onClick={closeDeleteModal}>
+              Hủy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={Boolean(deactivateTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeactivateTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tạm ngưng chuyên khoa</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 leading-relaxed">
+              <span className="block">
+                Chuyên khoa này sẽ bị ẩn khỏi trang đặt lịch của bệnh nhân, nhưng dữ liệu bác sĩ, lịch hẹn và bệnh án cũ vẫn được giữ nguyên.
+              </span>
+              <span className="block">
+                Bạn có chắc muốn tạm ngưng chuyên khoa này không?
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(statusActionLoadingKey)}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={Boolean(statusActionLoadingKey)}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleConfirmDeactivate()
+              }}
+            >
+              {statusActionLoadingKey === `deactivate-${deactivateTarget?.id}` ? 'Đang xử lý...' : 'Tạm ngưng'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

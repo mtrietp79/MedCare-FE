@@ -25,6 +25,7 @@ interface SoftLogoutOptions {
 interface FetchJsonError extends Error {
   status?: number
   data?: unknown
+  url?: string
 }
 
 const VALID_ROLES = ['ROLE_ADMIN', 'ROLE_DOCTOR', 'ROLE_PATIENT'] as const
@@ -242,6 +243,7 @@ export async function fetchJson<T = any>(url: string, options: RequestInit = {})
       const requestError = new Error(message) as FetchJsonError
       requestError.status = response.status
       requestError.data = data
+      requestError.url = url
       throw requestError
     }
 

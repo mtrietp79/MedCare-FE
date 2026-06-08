@@ -579,11 +579,15 @@ export function BookingWizard() {
           setFormData((prev) => ({ ...prev, time: slot.startTime }))
           setSelectedSlot(slot)
         }}
-        className={`relative z-10 p-4 rounded-lg border-2 text-center transition-all font-medium ${
+        className={`relative z-10 rounded-xl border-2 p-4 text-center font-medium transition-all ${
           selectedSlot?.startTime === slot.startTime
-            ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-            : 'border-border hover:border-primary/50'
-        } ${isBlocked ? 'cursor-not-allowed opacity-50' : ''}`}
+            ? 'border-primary bg-primary/10 ring-2 ring-primary/20 shadow-sm'
+            : 'border-border bg-card hover:border-primary/50 hover:bg-primary/5'
+        } ${
+          isBlocked
+            ? 'cursor-not-allowed border-dashed bg-muted/50 opacity-60 grayscale'
+            : ''
+        }`}
       >
         <div className="text-lg font-bold text-foreground">{formatTimeDisplay(slot.startTime)}</div>
         <div className="text-xs text-muted-foreground mt-1">

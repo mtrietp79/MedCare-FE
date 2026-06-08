@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { CancelAppointmentDialog } from '@/components/booking/cancel-appointment'
+import { PatientBackLink, PatientPageHeader, PatientStatusBadge } from '@/components/patient/patient-ui'
 import { PatientMedicalRecordDetails } from '@/components/patient/PatientMedicalRecordDetails'
 import { api, type PatientMedicalRecord } from '@/services/api'
 import type { Appointment } from '@/types'
@@ -306,40 +307,34 @@ export function PatientAppointmentDetailPage() {
   const canCancel = !isCancelled && !isCompleted
 
   return (
-    <div className="container mx-auto space-y-6 px-4 py-10">
-      <Link to="/patient/appointments" className="inline-flex items-center gap-2 text-sm text-primary hover:underline">
+    <div className="space-y-6">
+      <PatientBackLink to="/patient/appointments">
         <ArrowLeft className="h-4 w-4" /> Quay lại lịch khám
-      </Link>
+      </PatientBackLink>
+
+      <PatientPageHeader
+        title={appointment.appointmentCode || `#${appointment.id}`}
+        description={`Loại khám: ${appointmentTypeLabel} · ${getAppointmentTimeLabel(appointment)}`}
+        actions={
+          <PatientStatusBadge label={statusView.label} className={statusView.className} />
+        }
+      />
 
       <Card>
         <CardContent className="space-y-6 p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Mã đặt lịch</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold">{appointment.appointmentCode || `#${appointment.id}`}</h1>
-                {followUpAppointment ? (
-                  <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
-                    Tái khám
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 text-right">
-              <span className="text-sm text-muted-foreground">Trạng thái</span>
-              <span className={`inline-flex rounded-full border px-3 py-1 text-sm font-medium ${statusView.className}`}>
-                {statusView.label}
-              </span>
-            </div>
-          </div>
+          {followUpAppointment ? (
+            <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-400">
+              Tái khám
+            </span>
+          ) : null}
 
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-3xl border p-5">
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-5">
               <p className="text-sm text-muted-foreground">Loại khám</p>
               <p className="mt-2 font-medium">{appointmentTypeLabel}</p>
               <p className="mt-1 text-sm text-muted-foreground">{serviceLabel}</p>
             </div>
-            <div className="rounded-3xl border p-5">
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-5">
               <p className="text-sm text-muted-foreground">Thời gian khám</p>
               <p className="mt-2 font-medium">{getAppointmentTimeLabel(appointment)}</p>
               <p className="mt-1 text-sm text-muted-foreground">{appointment.patient?.fullName || 'Bệnh nhân'}</p>
@@ -347,39 +342,39 @@ export function PatientAppointmentDetailPage() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-3xl border p-5">
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-5">
               <p className="text-sm text-muted-foreground">Bác sĩ phụ trách</p>
               <p className="mt-2 font-medium">{doctorLabel}</p>
             </div>
-            <div className="rounded-3xl border p-5">
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-5">
               <p className="text-sm text-muted-foreground">Phí khám</p>
               <p className="mt-2 text-lg font-semibold text-primary">
                 {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(appointment.consultationFee || 0)}
               </p>
             </div>
-            <div className="rounded-3xl border p-5">
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-5">
               <p className="text-sm text-muted-foreground">Thanh toán</p>
               <p className="mt-2 font-medium">
                 {getPaymentStatusLabel(appointment.paymentStatus, appointment.paymentStatusDisplay)}
               </p>
             </div>
-            <div className="rounded-3xl border p-5">
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-5">
               <p className="text-sm text-muted-foreground">Chuyên khoa</p>
               <p className="mt-2 text-sm text-muted-foreground">{specialtyLabel}</p>
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-3xl border p-5">
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-5">
               <p className="text-sm text-muted-foreground">Triệu chứng</p>
               <p className="mt-2 text-sm text-muted-foreground">{appointment.symptoms || 'Không có'}</p>
             </div>
-            <div className="rounded-3xl border p-5">
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-5">
               <p className="text-sm text-muted-foreground">Ghi chú</p>
               <p className="mt-2 text-sm text-muted-foreground">{appointment.notes || 'Không có'}</p>
             </div>
             {followUpAppointment ? (
-              <div className="rounded-3xl border p-5 md:col-span-2">
+              <div className="rounded-xl border border-border/80 bg-muted/20 p-5 md:col-span-2">
                 <p className="text-sm text-muted-foreground">Thông tin tái khám</p>
                 <div className="mt-2 space-y-2 text-sm text-muted-foreground">
                   <p>Ghi chú tái khám: {appointment.followUpNote || 'Không có'}</p>

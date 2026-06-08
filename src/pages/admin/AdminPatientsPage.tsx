@@ -1,15 +1,45 @@
-﻿import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search, Edit, Trash2 } from 'lucide-react'
-import { adminApi } from '@/services/adminService'
+﻿import { useCallback, useEffect, useState } from 'react'
+import {
+  Copy,
+  Eye,
+  KeyRound,
+  Lock,
+  RefreshCw,
+  Search,
+  Unlock,
+} from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
-import { normalizePatient, safeLower, type NormalizedPatient } from '@/lib/admin-normalizers'
-import { Button } from '@/components/ui/button'
+import {
+  adminPatientService,
+  type AdminPatientDetail,
+  type AdminPatientListItem,
+  type AdminPatientSort,
+  type AdminPatientStats,
+  type AdminPatientStatusFilter,
+} from '@/services/adminPatientService'
+import { PatientAvatar } from '@/components/patient/patient-ui'
+import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -17,7 +47,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 import {
   AlertDialog,
@@ -28,392 +57,691 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 
-interface PatientForm {
-  fullName: string
-  phone: string
-  email: string
-  gender: 'MALE' | 'FEMALE' | 'OTHER'
-  dateOfBirth: string
-  nationalId: string
-  address: string
+const ITEMS_PER_PAGE = 10
+const DEFAULT_TEMP_PASSWORD = 'Bn@123'
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  const day = String(parsed.getDate()).padStart(2, '0')
+  const month = String(parsed.getMonth() + 1).padStart(2, '0')
+  const year = parsed.getFullYear()
+  const hours = String(parsed.getHours()).padStart(2, '0')
+  const minutes = String(parsed.getMinutes()).padStart(2, '0')
+  return `${day}/${month}/${year} ${hours}:${minutes}`
 }
 
-const initialForm: PatientForm = {
-  fullName: '',
-  phone: '',
-  email: '',
-  gender: 'MALE',
-  dateOfBirth: '',
-  nationalId: '',
-  address: '',
+function formatCurrency(value?: number | null) {
+  if (value === null || value === undefined) return '-'
+  return `${new Intl.NumberFormat('vi-VN').format(value)} VND`
+}
+
+function AccountStatusBadge({ isActive }: { isActive: boolean }) {
+  return isActive ? (
+    <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+      Hoạt động
+    </Badge>
+  ) : (
+    <Badge className="border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-300">
+      Đã khóa
+    </Badge>
+  )
+}
+
+function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="text-sm text-foreground">{value || '-'}</div>
+    </div>
+  )
 }
 
 export function AdminPatientsPage() {
   const { toast } = useToast()
 
-  const [patients, setPatients] = useState<NormalizedPatient[]>([])
+  const [patients, setPatients] = useState<AdminPatientListItem[]>([])
+  const [stats, setStats] = useState<AdminPatientStats>({
+    total: 0,
+    active: 0,
+    locked: 0,
+    newThisMonth: 0,
+  })
   const [loading, setLoading] = useState(true)
+  const [statsLoading, setStatsLoading] = useState(true)
   const [error, setError] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
-
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, 300)
-  const [profileFilter, setProfileFilter] = useState<'all' | 'completed' | 'incomplete'>('all')
+  const [statusFilter, setStatusFilter] = useState<AdminPatientStatusFilter>('all')
+  const [sortOrder, setSortOrder] = useState<AdminPatientSort>('newest')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const [actionLoadingKey, setActionLoadingKey] = useState('')
 
-  const [selectedPatient, setSelectedPatient] = useState<NormalizedPatient | null>(null)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [formData, setFormData] = useState<PatientForm>(initialForm)
-  const [formError, setFormError] = useState('')
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [selectedPatient, setSelectedPatient] = useState<AdminPatientDetail | null>(null)
 
-  const fetchPatients = async () => {
-    setLoading(true)
-    setError('')
+  const [resetOpen, setResetOpen] = useState(false)
+  const [resetTarget, setResetTarget] = useState<AdminPatientListItem | null>(null)
+  const [temporaryPassword, setTemporaryPassword] = useState(DEFAULT_TEMP_PASSWORD)
+  const [resetResultOpen, setResetResultOpen] = useState(false)
+  const [resetResultPassword, setResetResultPassword] = useState('')
 
+  const [lockTarget, setLockTarget] = useState<AdminPatientListItem | null>(null)
+  const [unlockTarget, setUnlockTarget] = useState<AdminPatientListItem | null>(null)
+
+  const loadStats = useCallback(async () => {
     try {
-      const raw = await adminApi.getPatients()
-      setPatients((Array.isArray(raw) ? raw : []).map(normalizePatient))
-    } catch (fetchError: any) {
-      setError(fetchError?.message || 'Không thể tải danh sách bệnh nhân.')
+      setStatsLoading(true)
+      const data = await adminPatientService.getStats()
+      setStats(data)
+    } catch (fetchError: unknown) {
+      toast({
+        title: 'Lỗi',
+        description: adminPatientService.getErrorMessage(fetchError, 'Không thể tải thống kê bệnh nhân.'),
+        variant: 'destructive',
+      })
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [toast])
+
+  const loadPatients = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError('')
+      const { items, total } = await adminPatientService.getPatients({
+        keyword: debouncedSearch,
+        status: statusFilter,
+        sort: sortOrder,
+        page: currentPage - 1,
+        size: ITEMS_PER_PAGE,
+      })
+      setPatients(items)
+      setTotalItems(total)
+    } catch (fetchError: unknown) {
+      adminPatientService.logLoadError(fetchError)
+      const message = adminPatientService.getErrorMessage(
+        fetchError,
+        'Không thể tải danh sách bệnh nhân.',
+      )
+      setError(message)
+
+      toast({
+        title: 'Lỗi',
+        description: message,
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentPage, debouncedSearch, sortOrder, statusFilter, toast])
+
+  const reloadAll = useCallback(async () => {
+    await Promise.all([loadStats(), loadPatients()])
+  }, [loadPatients, loadStats])
 
   useEffect(() => {
-    void fetchPatients()
-  }, [])
+    void loadStats()
+  }, [loadStats])
 
-  const filteredPatients = useMemo(() => {
-    const keyword = safeLower(debouncedSearch)
+  useEffect(() => {
+    void loadPatients()
+  }, [loadPatients])
 
-    return patients
-      .filter((patient) => {
-        const hitSearch = !keyword
-          || safeLower(patient.fullName).includes(keyword)
-          || safeLower(patient.email).includes(keyword)
-          || safeLower(patient.phone).includes(keyword)
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearch, statusFilter, sortOrder])
 
-        const hitFilter = profileFilter === 'all'
-          || (profileFilter === 'completed' && patient.profileCompleted)
-          || (profileFilter === 'incomplete' && !patient.profileCompleted)
+  const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE))
 
-        return hitSearch && hitFilter
-      })
-      .sort((a, b) => a.fullName.localeCompare(b.fullName))
-  }, [patients, debouncedSearch, profileFilter])
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(prev, totalPages))
+  }, [totalPages])
 
-  const resetForm = () => {
-    setFormData(initialForm)
-    setFormError('')
-    setSelectedPatient(null)
-  }
-
-  const validateForm = () => {
-    if (!formData.fullName.trim()) {
-      setFormError('Họ tên bệnh nhân là bắt buộc.')
-      return false
-    }
-
-    if (formData.email.trim() && !/^\S+@\S+\.\S+$/.test(formData.email.trim())) {
-      setFormError('Email không hợp lệ.')
-      return false
-    }
-
-    if (formData.phone.trim() && !/^\d{9,11}$/.test(formData.phone.trim())) {
-      setFormError('Số điện thoại phải từ 9 đến 11 chữ số.')
-      return false
-    }
-
-    if (formData.nationalId.trim() && !/^\d{12}$/.test(formData.nationalId.trim())) {
-      setFormError('CCCD phải gồm đúng 12 chữ số.')
-      return false
-    }
-
-    setFormError('')
-    return true
-  }
-
-  const payloadFromForm = (form: PatientForm) => ({
-    fullName: form.fullName.trim(),
-    phone: form.phone.trim() || null,
-    email: form.email.trim() || null,
-    gender: form.gender,
-    dateOfBirth: form.dateOfBirth || null,
-    nationalId: form.nationalId.trim() || null,
-    address: form.address.trim() || null,
-  })
-
-  const handleCreate = async () => {
-    if (!validateForm()) return
-
-    setIsSubmitting(true)
+  const openDetail = async (patient: AdminPatientListItem) => {
     try {
-      await adminApi.createPatient(payloadFromForm(formData))
-      toast({ title: 'Thành công', description: 'Đã tạo bệnh nhân mới.' })
-      setIsCreateDialogOpen(false)
-      resetForm()
-      await fetchPatients()
-    } catch (createError: any) {
+      setDetailLoading(true)
+      setDetailOpen(true)
+      setSelectedPatient(null)
+      const detail = await adminPatientService.getPatientById(patient.id)
+      setSelectedPatient(detail)
+    } catch (fetchError: unknown) {
+      setDetailOpen(false)
       toast({
         title: 'Lỗi',
-        description: createError?.message || 'Không thể tạo bệnh nhân.',
+        description: adminPatientService.getErrorMessage(fetchError, 'Không thể tải chi tiết bệnh nhân.'),
         variant: 'destructive',
       })
     } finally {
-      setIsSubmitting(false)
+      setDetailLoading(false)
     }
   }
 
-  const openEditDialog = (patient: NormalizedPatient) => {
-    setSelectedPatient(patient)
-    setFormData((prev) => ({
-      ...prev,
-      fullName: patient.fullName,
-      phone: patient.phone,
-      email: patient.email,
-      gender: (patient.gender as PatientForm['gender']) || 'MALE',
-      dateOfBirth: patient.dateOfBirth,
-    }))
-    setFormError('')
-    setIsEditDialogOpen(true)
+  const updatePatientInList = (updated: AdminPatientListItem) => {
+    setPatients((prev) => prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)))
+    if (selectedPatient?.id === updated.id) {
+      setSelectedPatient((prev) => (prev ? { ...prev, ...updated } : prev))
+    }
   }
 
-  const handleUpdate = async () => {
-    if (!selectedPatient) return
-    if (!validateForm()) return
-
-    setIsSubmitting(true)
+  const handleLock = async (patient: AdminPatientListItem) => {
     try {
-      await adminApi.updatePatient(selectedPatient.id, payloadFromForm(formData))
-      toast({ title: 'Thành công', description: 'Đã cập nhật bệnh nhân.' })
-      setIsEditDialogOpen(false)
-      resetForm()
-      await fetchPatients()
-    } catch (updateError: any) {
+      setActionLoadingKey(`lock-${patient.id}`)
+      const updated = await adminPatientService.lockPatient(patient.id)
+      updatePatientInList(updated)
+      await loadStats()
+      toast({ title: 'Thành công', description: 'Khóa tài khoản bệnh nhân thành công' })
+    } catch (actionError: unknown) {
       toast({
         title: 'Lỗi',
-        description: updateError?.message || 'Không thể cập nhật bệnh nhân.',
+        description: adminPatientService.getErrorMessage(actionError, 'Không thể khóa tài khoản bệnh nhân.'),
         variant: 'destructive',
       })
     } finally {
-      setIsSubmitting(false)
+      setActionLoadingKey('')
+      setLockTarget(null)
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleUnlock = async (patient: AdminPatientListItem) => {
     try {
-      await adminApi.deletePatient(id)
-      toast({ title: 'Thành công', description: 'Đã xóa bệnh nhân.' })
-      await fetchPatients()
-    } catch (deleteError: any) {
+      setActionLoadingKey(`unlock-${patient.id}`)
+      const updated = await adminPatientService.unlockPatient(patient.id)
+      updatePatientInList(updated)
+      await loadStats()
+      toast({ title: 'Thành công', description: 'Mở khóa tài khoản bệnh nhân thành công' })
+    } catch (actionError: unknown) {
       toast({
         title: 'Lỗi',
-        description: deleteError?.message || 'Không thể xóa bệnh nhân.',
+        description: adminPatientService.getErrorMessage(actionError, 'Không thể mở khóa tài khoản bệnh nhân.'),
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoadingKey('')
+      setUnlockTarget(null)
+    }
+  }
+
+  const openResetDialog = (patient: AdminPatientListItem) => {
+    setResetTarget(patient)
+    setTemporaryPassword(DEFAULT_TEMP_PASSWORD)
+    setResetOpen(true)
+  }
+
+  const handleResetPassword = async () => {
+    if (!resetTarget) return
+
+    try {
+      setActionLoadingKey(`reset-${resetTarget.id}`)
+      const response = await adminPatientService.resetPassword(resetTarget.id, {
+        temporaryPassword: temporaryPassword.trim() || undefined,
+      })
+
+      setResetOpen(false)
+      setResetResultPassword(response.temporaryPassword || temporaryPassword.trim() || DEFAULT_TEMP_PASSWORD)
+      setResetResultOpen(true)
+
+      toast({
+        title: 'Thành công',
+        description: 'Reset mật khẩu thành công',
+      })
+    } catch (actionError: unknown) {
+      toast({
+        title: 'Lỗi',
+        description: adminPatientService.getErrorMessage(actionError, 'Không thể reset mật khẩu bệnh nhân.'),
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoadingKey('')
+    }
+  }
+
+  const copyTemporaryPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(resetResultPassword)
+      toast({ title: 'Đã copy', description: 'Mật khẩu tạm đã được sao chép.' })
+    } catch {
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể sao chép mật khẩu. Vui lòng copy thủ công.',
         variant: 'destructive',
       })
     }
   }
 
-  const profileBadge = (completed: boolean) => (
-    completed ? <Badge variant="default">Đã hoàn thiện</Badge> : <Badge variant="secondary">Chưa hoàn thiện</Badge>
-  )
-
-  const renderForm = () => (
-    <div className="grid gap-4 py-4">
-      <div className="grid gap-2">
-        <Label htmlFor="patient-fullName">Họ tên</Label>
-        <Input id="patient-fullName" value={formData.fullName} onChange={(e) => setFormData((prev) => ({ ...prev, fullName: e.target.value }))} />
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor="patient-phone">Số điện thoại</Label>
-          <Input id="patient-phone" value={formData.phone} onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))} />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="patient-email">Email</Label>
-          <Input id="patient-email" value={formData.email} onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))} />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="grid gap-2">
-          <Label>Giới tính</Label>
-          <Select value={formData.gender} onValueChange={(value: 'MALE' | 'FEMALE' | 'OTHER') => setFormData((prev) => ({ ...prev, gender: value }))}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="MALE">Nam</SelectItem>
-              <SelectItem value="FEMALE">Nữ</SelectItem>
-              <SelectItem value="OTHER">Khác</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="patient-dob">Ngày sinh</Label>
-          <Input id="patient-dob" type="date" value={formData.dateOfBirth} onChange={(e) => setFormData((prev) => ({ ...prev, dateOfBirth: e.target.value }))} />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor="patient-nationalId">CCCD</Label>
-          <Input id="patient-nationalId" value={formData.nationalId} onChange={(e) => setFormData((prev) => ({ ...prev, nationalId: e.target.value }))} />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="patient-address">Địa chỉ</Label>
-          <Input id="patient-address" value={formData.address} onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))} />
-        </div>
-      </div>
-      {formError && <p className="text-sm text-red-600">{formError}</p>}
-    </div>
-  )
+  const statCards = [
+    { label: 'Tổng bệnh nhân', value: stats.total, className: 'border-primary/20 bg-primary/5' },
+    { label: 'Đang hoạt động', value: stats.active, className: 'border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/20' },
+    { label: 'Đã khóa', value: stats.locked, className: 'border-slate-300 bg-slate-100 dark:border-slate-600 dark:bg-slate-900/30' },
+    { label: 'Bệnh nhân mới tháng này', value: stats.newThisMonth, className: 'border-sky-200 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/20' },
+  ]
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Quản lý bệnh nhân</h1>
-          <p className="text-muted-foreground">Danh sách, CRUD, tìm kiếm và tình trạng hồ sơ</p>
-        </div>
-        <Dialog
-          open={isCreateDialogOpen}
-          onOpenChange={(open) => {
-            setIsCreateDialogOpen(open)
-            if (!open) resetForm()
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Thêm bệnh nhân
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[620px]">
-            <DialogHeader>
-              <DialogTitle>Thêm bệnh nhân mới</DialogTitle>
-              <DialogDescription>Nhập thông tin bệnh nhân theo chuẩn backend.</DialogDescription>
-            </DialogHeader>
-            {renderForm()}
-            <DialogFooter>
-              <Button onClick={handleCreate} disabled={isSubmitting}>
-                {isSubmitting ? 'Đang tạo...' : 'Tạo bệnh nhân'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-semibold tracking-tight">Quản lý bệnh nhân</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Theo dõi và quản lý tài khoản bệnh nhân trong hệ thống
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {statCards.map((card) => (
+          <Card key={card.label} className={card.className}>
+            <CardHeader className="pb-2">
+              <CardDescription>{card.label}</CardDescription>
+              <CardTitle className="text-3xl">{statsLoading ? '...' : card.value}</CardTitle>
+            </CardHeader>
+          </Card>
+        ))}
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Danh sách bệnh nhân</CardTitle>
-          <CardDescription>Tổng cộng {patients.length} bệnh nhân</CardDescription>
+          <CardDescription>Tìm kiếm, lọc và quản lý tài khoản bệnh nhân</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[260px] flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Tìm theo tên/email/sđt" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="pl-8" />
+          <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px_auto]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Tìm theo tên, email, số điện thoại..."
+                className="pl-9"
+              />
             </div>
-            <Select value={profileFilter} onValueChange={(value: 'all' | 'completed' | 'incomplete') => setProfileFilter(value)}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue />
+            <Select
+              value={statusFilter}
+              onValueChange={(value: AdminPatientStatusFilter) => setStatusFilter(value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Trạng thái" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tất cả hồ sơ</SelectItem>
-                <SelectItem value="completed">Đã hoàn thiện hồ sơ</SelectItem>
-                <SelectItem value="incomplete">Chưa hoàn thiện hồ sơ</SelectItem>
+                <SelectItem value="all">Tất cả</SelectItem>
+                <SelectItem value="active">Đang hoạt động</SelectItem>
+                <SelectItem value="locked">Đã khóa</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={sortOrder} onValueChange={(value: AdminPatientSort) => setSortOrder(value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sắp xếp" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">Mới nhất</SelectItem>
+                <SelectItem value="oldest">Cũ nhất</SelectItem>
+                <SelectItem value="name-asc">Tên A-Z</SelectItem>
+                <SelectItem value="name-desc">Tên Z-A</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={() => void reloadAll()} disabled={loading || statsLoading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Tải lại
+            </Button>
           </div>
 
-          {loading && <AdminTableSkeleton rows={8} />}
-          {!loading && error && <AdminErrorState message={error} onRetry={() => void fetchPatients()} />}
-          {!loading && !error && filteredPatients.length === 0 && <AdminEmptyState title="Không có bệnh nhân phù hợp." />}
+          {loading ? (
+            <AdminTableSkeleton rows={8} />
+          ) : error ? (
+            <AdminErrorState message={error} onRetry={() => void reloadAll()} />
+          ) : patients.length === 0 ? (
+            <AdminEmptyState title="Chưa có bệnh nhân nào" />
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Bệnh nhân</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Số điện thoại</TableHead>
+                      <TableHead>Giới tính</TableHead>
+                      <TableHead>Ngày sinh</TableHead>
+                      <TableHead>Số lịch hẹn</TableHead>
+                      <TableHead>Số bệnh án</TableHead>
+                      <TableHead>Trạng thái</TableHead>
+                      <TableHead>Ngày tạo</TableHead>
+                      <TableHead className="text-right">Hành động</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {patients.map((patient) => (
+                      <TableRow key={patient.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <PatientAvatar name={patient.fullName} size="md" />
+                            <span className="font-medium">{patient.fullName || '-'}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{patient.email || '-'}</TableCell>
+                        <TableCell>{patient.phone || '-'}</TableCell>
+                        <TableCell>{patient.genderLabel}</TableCell>
+                        <TableCell>{patient.dateOfBirth}</TableCell>
+                        <TableCell>{patient.appointmentCount}</TableCell>
+                        <TableCell>{patient.medicalRecordCount}</TableCell>
+                        <TableCell>
+                          <AccountStatusBadge isActive={patient.isActive} />
+                        </TableCell>
+                        <TableCell>{formatDateTime(patient.createdAt)}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => void openDetail(patient)}>
+                              <Eye className="mr-1 h-4 w-4" />
+                              Chi tiết
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => openResetDialog(patient)}>
+                              <KeyRound className="mr-1 h-4 w-4" />
+                              Reset MK
+                            </Button>
+                            {patient.isActive ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-amber-700 hover:text-amber-700"
+                                onClick={() => setLockTarget(patient)}
+                              >
+                                <Lock className="mr-1 h-4 w-4" />
+                                Khóa
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-emerald-700 hover:text-emerald-700"
+                                onClick={() => setUnlockTarget(patient)}
+                              >
+                                <Unlock className="mr-1 h-4 w-4" />
+                                Mở khóa
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
-          {!loading && !error && filteredPatients.length > 0 && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Họ tên</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Điện thoại</TableHead>
-                  <TableHead>Giới tính</TableHead>
-                  <TableHead>Trạng thái hồ sơ</TableHead>
-                  <TableHead className="text-right">Hành động</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPatients.map((patient) => (
-                  <TableRow key={patient.id}>
-                    <TableCell className="font-medium">{patient.fullName || '-'}</TableCell>
-                    <TableCell>{patient.email || '-'}</TableCell>
-                    <TableCell>{patient.phone || '-'}</TableCell>
-                    <TableCell>{patient.gender || '-'}</TableCell>
-                    <TableCell>{profileBadge(patient.profileCompleted)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(patient)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Xác nhận xóa</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Bạn có chắc muốn xóa bệnh nhân {patient.fullName || patient.id}?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Hủy</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => void handleDelete(patient.id)}>Xóa</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <p>
+                  Hiển thị {patients.length} / {totalItems} bệnh nhân
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  >
+                    Trước
+                  </Button>
+                  <span>
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  >
+                    Sau
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
 
-      <Dialog
-        open={isEditDialogOpen}
-        onOpenChange={(open) => {
-          setIsEditDialogOpen(open)
-          if (!open) resetForm()
-        }}
-      >
-        <DialogContent className="sm:max-w-[620px]">
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Cập nhật bệnh nhân</DialogTitle>
-            <DialogDescription>Chỉnh sửa hồ sơ bệnh nhân.</DialogDescription>
+            <DialogTitle>Chi tiết bệnh nhân</DialogTitle>
+            <DialogDescription>Thông tin tài khoản và lịch sử khám gần đây (chỉ xem)</DialogDescription>
           </DialogHeader>
-          {renderForm()}
+
+          {detailLoading ? (
+            <AdminTableSkeleton rows={4} />
+          ) : selectedPatient ? (
+            <div className="space-y-6">
+              <div className="flex flex-col gap-4 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center">
+                <PatientAvatar name={selectedPatient.fullName} size="xl" />
+                <div>
+                  <h3 className="text-xl font-semibold">{selectedPatient.fullName}</h3>
+                  <p className="text-sm text-muted-foreground">{selectedPatient.email}</p>
+                  <div className="mt-2">
+                    <AccountStatusBadge isActive={selectedPatient.isActive} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <DetailField label="Số điện thoại" value={selectedPatient.phone} />
+                <DetailField label="Giới tính" value={selectedPatient.genderLabel} />
+                <DetailField label="Ngày sinh" value={selectedPatient.dateOfBirth} />
+                <DetailField label="Địa chỉ" value={selectedPatient.address} />
+                <DetailField label="Ngày tạo tài khoản" value={formatDateTime(selectedPatient.createdAt)} />
+              </div>
+
+              <div>
+                <h4 className="mb-3 font-semibold">Thống kê</h4>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <Card className="shadow-none">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-muted-foreground">Tổng lịch hẹn</p>
+                      <p className="text-2xl font-semibold">{selectedPatient.stats.totalAppointments}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="shadow-none">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-muted-foreground">Lịch đã khám</p>
+                      <p className="text-2xl font-semibold">{selectedPatient.stats.completedAppointments}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="shadow-none">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-muted-foreground">Lịch đã hủy</p>
+                      <p className="text-2xl font-semibold">{selectedPatient.stats.cancelledAppointments}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="shadow-none">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-muted-foreground">Số bệnh án</p>
+                      <p className="text-2xl font-semibold">{selectedPatient.stats.medicalRecordCount}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="shadow-none">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-muted-foreground">Số hóa đơn</p>
+                      <p className="text-2xl font-semibold">{selectedPatient.stats.invoiceCount}</p>
+                    </CardContent>
+                  </Card>
+                  {selectedPatient.stats.totalPaidAmount !== null ? (
+                    <Card className="shadow-none">
+                      <CardContent className="p-4">
+                        <p className="text-xs text-muted-foreground">Tổng tiền đã thanh toán</p>
+                        <p className="text-lg font-semibold text-primary">
+                          {formatCurrency(selectedPatient.stats.totalPaidAmount)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="mb-3 font-semibold">Lịch hẹn gần đây</h4>
+                {selectedPatient.recentAppointments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Chưa có lịch hẹn.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Mã lịch</TableHead>
+                          <TableHead>Bác sĩ</TableHead>
+                          <TableHead>Ngày giờ</TableHead>
+                          <TableHead>Loại khám</TableHead>
+                          <TableHead>Trạng thái</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedPatient.recentAppointments.map((item) => (
+                          <TableRow key={item.id || item.appointmentCode}>
+                            <TableCell>{item.appointmentCode}</TableCell>
+                            <TableCell>{item.doctorName || '-'}</TableCell>
+                            <TableCell>{item.appointmentDateTime}</TableCell>
+                            <TableCell>{item.appointmentTypeLabel}</TableCell>
+                            <TableCell>{item.statusLabel}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 className="mb-3 font-semibold">Bệnh án gần đây</h4>
+                {selectedPatient.recentMedicalRecords.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Chưa có bệnh án.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Mã bệnh án</TableHead>
+                          <TableHead>Bác sĩ</TableHead>
+                          <TableHead>Chẩn đoán</TableHead>
+                          <TableHead>Ngày khám</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedPatient.recentMedicalRecords.map((item) => (
+                          <TableRow key={item.id || item.recordCode}>
+                            <TableCell>{item.recordCode}</TableCell>
+                            <TableCell>{item.doctorName || '-'}</TableCell>
+                            <TableCell>{item.diagnosis}</TableCell>
+                            <TableCell>{item.appointmentDate}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset mật khẩu bệnh nhân</DialogTitle>
+            <DialogDescription>
+              {resetTarget ? `Reset mật khẩu cho ${resetTarget.fullName}` : 'Nhập mật khẩu tạm cho bệnh nhân'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="temporaryPassword">Mật khẩu tạm</Label>
+              <Input
+                id="temporaryPassword"
+                value={temporaryPassword}
+                onChange={(event) => setTemporaryPassword(event.target.value)}
+                placeholder={DEFAULT_TEMP_PASSWORD}
+              />
+              <p className="text-xs text-muted-foreground">
+                Để trống để Backend tự tạo mật khẩu. Gợi ý: {DEFAULT_TEMP_PASSWORD}
+              </p>
+            </div>
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              Bệnh nhân sẽ phải đổi mật khẩu sau khi đăng nhập.
+            </p>
+          </div>
           <DialogFooter>
-            <Button onClick={handleUpdate} disabled={isSubmitting}>
-              {isSubmitting ? 'Đang lưu...' : 'Lưu thay đổi'}
+            <Button variant="outline" onClick={() => setResetOpen(false)}>
+              Hủy
+            </Button>
+            <Button
+              onClick={() => void handleResetPassword()}
+              disabled={!resetTarget || actionLoadingKey === `reset-${resetTarget.id}`}
+            >
+              {resetTarget && actionLoadingKey === `reset-${resetTarget.id}` ? 'Đang reset...' : 'Xác nhận reset'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={resetResultOpen} onOpenChange={setResetResultOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset mật khẩu thành công</DialogTitle>
+            <DialogDescription>
+              Mật khẩu tạm chỉ hiển thị một lần. Hãy sao chép và gửi cho bệnh nhân.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border bg-muted/30 p-4">
+            <p className="text-xs text-muted-foreground">Mật khẩu tạm</p>
+            <p className="mt-1 font-mono text-lg font-semibold">{resetResultPassword}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => void copyTemporaryPassword()} className="gap-2">
+              <Copy className="h-4 w-4" />
+              Copy mật khẩu
+            </Button>
+            <Button onClick={() => setResetResultOpen(false)}>Đóng</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={Boolean(lockTarget)} onOpenChange={(open) => !open && setLockTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Khóa tài khoản bệnh nhân</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn khóa tài khoản bệnh nhân này không?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => lockTarget && void handleLock(lockTarget)}
+              disabled={lockTarget ? actionLoadingKey === `lock-${lockTarget.id}` : false}
+            >
+              Khóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(unlockTarget)} onOpenChange={(open) => !open && setUnlockTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mở khóa tài khoản bệnh nhân</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn mở khóa tài khoản bệnh nhân {unlockTarget?.fullName}?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => unlockTarget && void handleUnlock(unlockTarget)}
+              disabled={unlockTarget ? actionLoadingKey === `unlock-${unlockTarget.id}` : false}
+            >
+              Mở khóa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

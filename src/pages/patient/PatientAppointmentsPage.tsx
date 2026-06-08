@@ -34,6 +34,7 @@ import { api, type PatientInvoice, type PatientMedicalRecord } from '@/services/
 import { doctorFeedbackService } from '@/services/doctorFeedbackService'
 import type { Appointment, ServicePackageBooking } from '@/types'
 import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
+import { normalizePaymentRedirectUrl } from '@/lib/payment-url'
 import { resolveAppointmentStatusView, resolvePaymentStatusView } from '@/lib/appointment-status'
 import {
   canPayInvoiceOnline,
@@ -641,7 +642,7 @@ export function PatientAppointmentsPage() {
     try {
       setInvoicePayingId(invoice.id)
       const redirectUrl = await api.payments.createInvoiceItemPaymentUrl(invoice)
-      window.location.href = redirectUrl
+      window.location.href = normalizePaymentRedirectUrl(redirectUrl)
     } catch (payError: unknown) {
       toast({
         title: 'Lỗi',

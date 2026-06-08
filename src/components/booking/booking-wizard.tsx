@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { PatientProfileForm } from '@/pages/patient/PatientProfilePage'
+import { normalizePaymentRedirectUrl } from '@/lib/payment-url'
 import { api, type ApiRequestError, type AppointmentSlot } from '@/services/api'
 import { useToast } from '@/hooks/use-toast'
 import type { BookingRules, Doctor, MedicalService, Patient } from '@/types'
@@ -518,7 +519,7 @@ export function BookingWizard() {
           throw new Error(bookingResult?.message || 'Không nhận được đường dẫn thanh toán VNPay.')
         }
 
-        window.location.href = bookingResult.paymentUrl
+        window.location.href = normalizePaymentRedirectUrl(bookingResult.paymentUrl)
         return
       }
 
@@ -547,7 +548,7 @@ export function BookingWizard() {
         throw new Error(bookingResult?.message || 'Không nhận được đường dẫn thanh toán VNPay.')
       }
 
-      window.location.href = bookingResult.paymentUrl
+      window.location.href = normalizePaymentRedirectUrl(bookingResult.paymentUrl)
     } catch (submitErrorValue: any) {
       const apiError = submitErrorValue as ApiRequestError
       if (apiError?.code === 'PROFILE_INCOMPLETE') {

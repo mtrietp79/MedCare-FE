@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { CancelAppointmentDialog } from '@/components/booking/cancel-appointment'
 import { PatientBackLink, PatientPageHeader, PatientStatusBadge } from '@/components/patient/patient-ui'
 import { PatientMedicalRecordDetails } from '@/components/patient/PatientMedicalRecordDetails'
+import { normalizePaymentRedirectUrl } from '@/lib/payment-url'
 import { api, type PatientMedicalRecord } from '@/services/api'
 import type { Appointment } from '@/types'
 import { onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
@@ -173,7 +174,7 @@ export function PatientAppointmentDetailPage() {
       setPaymentError(null)
       setPaymentLoading(true)
       const redirectUrl = await api.payments.createAppointmentPaymentUrl(String(appointment.id))
-      window.location.href = redirectUrl
+      window.location.href = normalizePaymentRedirectUrl(redirectUrl)
     } catch (paymentStartError) {
       setPaymentError(
         paymentStartError instanceof Error
@@ -192,7 +193,7 @@ export function PatientAppointmentDetailPage() {
       setPaymentError(null)
       setInvoicePaymentLoading(true)
       const redirectUrl = await api.payments.createInvoicePaymentUrl(invoiceId)
-      window.location.href = redirectUrl
+      window.location.href = normalizePaymentRedirectUrl(redirectUrl)
     } catch (paymentStartError) {
       setPaymentError(
         paymentStartError instanceof Error

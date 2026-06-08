@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getAppointmentStatusLabel, resolvePaymentStatusView } from '@/lib/appointment-status'
 import { getContactSupportLine } from '@/lib/contact-info'
+import { normalizePaymentRedirectUrl } from '@/lib/payment-url'
 import { getInvoiceStatusClass, getInvoiceStatusLabel, shouldShowInvoiceConsultationFee } from '@/lib/invoice-contract'
 import { api } from '@/services/api'
 import type {
@@ -442,7 +443,7 @@ export function VNPayPaymentResultPage() {
             ? await api.payments.createInvoicePaymentUrl(String(resourceId))
             : await api.payments.createAppointmentPaymentUrl(String(resourceId))
 
-      window.location.href = paymentUrl
+      window.location.href = normalizePaymentRedirectUrl(paymentUrl)
     } catch (retryPaymentError) {
       setRetryError(
         retryPaymentError instanceof Error

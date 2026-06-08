@@ -5,6 +5,7 @@ import { api } from '@/services/api'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import { redirectByRole } from '@/services/auth'
+import { normalizePaymentRedirectUrl } from '@/lib/payment-url'
 import type { ServicePackage } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -212,7 +213,7 @@ export function ServicePackageBookingPage() {
       })
 
       if (response?.paymentUrl) {
-        window.location.href = response.paymentUrl
+        window.location.href = normalizePaymentRedirectUrl(response.paymentUrl)
         return
       }
 

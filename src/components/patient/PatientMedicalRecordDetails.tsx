@@ -170,7 +170,6 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
                   <tr className="border-b text-left">
                     <th className="px-2 py-2 font-medium">Tên dịch vụ</th>
                     <th className="px-2 py-2 font-medium">SL</th>
-                    <th className="px-2 py-2 font-medium">Kết quả</th>
                     <th className="px-2 py-2 font-medium">Ghi chú</th>
                     <th className="px-2 py-2 text-right font-medium">Đơn giá</th>
                     <th className="px-2 py-2 text-right font-medium">Thành tiền</th>
@@ -181,7 +180,6 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
                     <tr key={`${item.id || item.serviceId || index}`} className="border-b last:border-0">
                       <td className="px-2 py-2">{textOrDash(item.name)}</td>
                       <td className="px-2 py-2">{item.quantity ?? '-'}</td>
-                      <td className="px-2 py-2">{textOrDash(item.result)}</td>
                       <td className="px-2 py-2">{textOrDash(item.note)}</td>
                       <td className="px-2 py-2 text-right">
                         {item.unitPrice !== undefined ? formatCurrencyVnd(item.unitPrice) : '-'}
@@ -231,7 +229,6 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
             {invoice.paymentDate ? (
               <p><span className="font-medium">Ngày thanh toán:</span> {formatDate(invoice.paymentDate)}</p>
             ) : null}
-            <p><span className="font-medium">Có thể thanh toán online:</span> {invoice.canPayOnline ? 'Có' : 'Không'}</p>
           </CardContent>
         </Card>
       ) : (

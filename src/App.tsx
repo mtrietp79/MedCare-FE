@@ -91,10 +91,7 @@ export default function App() {
               <Route path="/booking-guide" element={<BookingGuidePage />} />
               <Route path="/faq" element={<FaqPage />} />
 							<Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
-						</Route>
-
-						{/* Auth Layout */}
-						<Route element={<AuthLayout />}>
+              <Route path="/terms" element={<TermsPage />} />
 							<Route path="/login" element={<LoginPage />} />
 							<Route path="/register" element={<RegisterPage />} />
 							<Route path="/forgot-password" element={<ForgotPasswordPage />} />

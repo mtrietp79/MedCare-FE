@@ -15,6 +15,11 @@ import type {
   PaymentReceiptPatient,
   ServicePackageReceipt,
 } from '@/types'
+import {
+  formatDateTimeDisplay,
+  formatDateTimeFromParts,
+  pickDisplayOrFormatDateTime,
+} from '@/lib/date-display'
 
 type PaymentResourceType = 'APPOINTMENT' | 'SERVICE_PACKAGE' | 'INVOICE'
 type PaymentResultStatus = 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'UNKNOWN'
@@ -58,39 +63,6 @@ function formatCurrency(amount: number) {
 function formatCurrencyValue(amount?: number | null) {
   if (amount == null) return '-'
   return formatCurrency(amount)
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleDateString('vi-VN')
-}
-
-function formatTime(value?: string | null) {
-  const raw = String(value || '').trim()
-  if (!raw) return '-'
-
-  const match = raw.match(/(\d{1,2}):(\d{2})/)
-  if (!match) return raw
-
-  return `${String(Number(match[1])).padStart(2, '0')}:${match[2]}`
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString('vi-VN')
-}
-
-function formatDateAndTime(dateValue?: string | null, timeValue?: string | null) {
-  const dateText = formatDate(dateValue)
-  const timeText = formatTime(timeValue)
-  if (dateText === '-' && timeText === '-') return '-'
-  if (dateText === '-') return timeText
-  if (timeText === '-') return dateText
-  return `${dateText} ${timeText}`
 }
 
 function getReadablePaymentMethod(value?: string | null) {
@@ -205,7 +177,7 @@ function buildPaymentRows(
     },
     {
       label: 'Thời gian thanh toán',
-      value: formatDateTime(payment?.paidAt),
+      value: pickDisplayOrFormatDateTime(payment?.paidAtDisplay, payment?.paidAt),
     },
     {
       label: 'Mã phản hồi',
@@ -239,7 +211,7 @@ function buildAppointmentViewModel(
       { label: 'Bác sĩ', value: booking.doctorName || '-' },
       { label: 'Chuyên khoa', value: booking.specialtyName || '-' },
       { label: 'Dịch vụ', value: booking.serviceName || '-' },
-      { label: 'Ngày khám', value: formatDateTime(booking.appointmentDate) },
+      { label: 'Ngày khám', value: formatDateTimeFromParts(booking.appointmentDate, booking.appointmentTime, booking.appointmentDateDisplay) },
       {
         label: 'Trạng thái lịch hẹn',
         value: getAppointmentStatusLabel(booking.appointmentStatus, booking.appointmentStatusDisplay),
@@ -273,7 +245,7 @@ function buildServicePackageViewModel(
       { label: 'Tên gói dịch vụ', value: booking.packageName || '-' },
       {
         label: 'Ngày giờ đến cơ sở',
-        value: formatDateAndTime(booking.bookingDate, booking.bookingTime),
+        value: formatDateTimeFromParts(booking.bookingDate, booking.bookingTime, booking.bookingDateDisplay),
       },
       {
         label: 'Tổng giá trị',

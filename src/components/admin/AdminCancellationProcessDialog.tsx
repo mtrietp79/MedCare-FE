@@ -9,6 +9,7 @@ import {
   type CancellationRequestItem,
 } from '@/lib/cancellation-request-contract'
 import { getAppointmentStatusLabel } from '@/lib/appointment-status'
+import { formatDateTimeFromParts, pickDisplayOrFormatDateTime } from '@/lib/date-display'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -35,35 +36,17 @@ function formatCurrency(amount?: number | null): string {
   return `${Number(amount ?? 0).toLocaleString('vi-VN')} VND`
 }
 
-function formatDateTime(value?: string | null): string {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('vi-VN')
-}
-
 function displayText(value?: string | null): string {
   const text = String(value ?? '').trim()
   return text || '-'
 }
 
 function formatAppointmentDateTime(invoice: NormalizedInvoice): string {
-  const rawDateSource = String(invoice.appointmentDate || invoice.appointmentDateTime || '').trim()
-  const rawTimeSource = String(invoice.appointmentTime || '').trim()
-  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/)
-  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
-  const embeddedTime = (datePrefixMatch?.[2] || '').trim()
-  const timeMatch = (rawTimeSource || embeddedTime).match(/^(\d{1,2}):(\d{2})/i)
-  const timeLabel = timeMatch
-    ? `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
-    : ''
-  const dateObject = dateSource ? new Date(dateSource) : null
-  const dateLabel = dateObject && !Number.isNaN(dateObject.getTime()) ? dateObject.toLocaleDateString('vi-VN') : dateSource || '-'
-
-  if (dateLabel === '-' && !timeLabel) return '-'
-  if (dateLabel === '-') return timeLabel
-  if (!timeLabel) return dateLabel
-  return `${dateLabel} ${timeLabel}`
+  return formatDateTimeFromParts(
+    invoice.appointmentDate || invoice.appointmentDateTime,
+    invoice.appointmentTime,
+    invoice.appointmentDateDisplay,
+  )
 }
 
 export function AdminCancellationProcessDialog({
@@ -271,7 +254,7 @@ export function AdminCancellationProcessDialog({
                   <p className="font-semibold">Thông tin yêu cầu hủy</p>
                   <p className="mt-2 text-muted-foreground">Lý do hủy: {displayText(cancelRequest.cancelReason)}</p>
                   <p className="mt-1 text-muted-foreground">Ghi chú bệnh nhân: {displayText(cancelRequest.patientNote)}</p>
-                  <p className="mt-1 text-muted-foreground">Ngày gửi yêu cầu: {formatDateTime(cancelRequest.createdAt)}</p>
+                  <p className="mt-1 text-muted-foreground">Ngày gửi yêu cầu: {pickDisplayOrFormatDateTime(cancelRequest.createdAtDisplay, cancelRequest.createdAt)}</p>
                 </div>
                 <div className="rounded-xl border border-border/70 bg-background p-4">
                   <p className="font-semibold">Thông tin ngân hàng</p>

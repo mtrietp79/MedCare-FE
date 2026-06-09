@@ -22,6 +22,7 @@ import {
   getContactMessageStatusLabel,
   type ContactMessageStatus,
 } from '@/lib/contact-message-status'
+import { formatDateTimeDisplay } from '@/lib/date-display'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -65,18 +66,6 @@ import {
 } from '@/components/ui/alert-dialog'
 
 const ITEMS_PER_PAGE = 10
-
-function formatDateTime(value?: string | null) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  const day = String(parsed.getDate()).padStart(2, '0')
-  const month = String(parsed.getMonth() + 1).padStart(2, '0')
-  const year = parsed.getFullYear()
-  const hours = String(parsed.getHours()).padStart(2, '0')
-  const minutes = String(parsed.getMinutes()).padStart(2, '0')
-  return `${day}/${month}/${year} ${hours}:${minutes}`
-}
 
 function truncateText(value: string, maxLength = 80) {
   const text = String(value || '').trim()
@@ -408,7 +397,7 @@ export function AdminContactMessagesPage() {
                         <TableCell>
                           <StatusBadge message={message} />
                         </TableCell>
-                        <TableCell>{formatDateTime(message.createdAt)}</TableCell>
+                        <TableCell>{formatDateTimeDisplay(message.createdAt)}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap justify-end gap-2">
                             <Button variant="outline" size="sm" onClick={() => openDetail(message)}>
@@ -520,7 +509,7 @@ export function AdminContactMessagesPage() {
                 label="Trạng thái"
                 value={<StatusBadge message={selectedMessage} />}
               />
-              <DetailField label="Ngày gửi" value={formatDateTime(selectedMessage.createdAt)} />
+              <DetailField label="Ngày gửi" value={formatDateTimeDisplay(selectedMessage.createdAt)} />
               <div className="sm:col-span-2">
                 <DetailField label="Nội dung" value={<p className="whitespace-pre-wrap">{selectedMessage.message}</p>} />
               </div>
@@ -544,7 +533,7 @@ export function AdminContactMessagesPage() {
                 <DetailField label="Admin phản hồi" value={selectedMessage.repliedBy} />
               ) : null}
               {selectedMessage.repliedAt ? (
-                <DetailField label="Thời gian phản hồi" value={formatDateTime(selectedMessage.repliedAt)} />
+                <DetailField label="Thời gian phản hồi" value={formatDateTimeDisplay(selectedMessage.repliedAt)} />
               ) : null}
             </div>
           ) : null}

@@ -33,6 +33,13 @@ import {
   getAppointmentStatusLabel,
   resolvePaymentStatusView,
 } from '@/lib/appointment-status'
+import {
+  formatDateAsIso,
+  formatDateDisplay,
+  formatDateTimeFromPartsOrValue,
+  normalizeTimeLabel,
+  parseDateInput,
+} from '@/lib/date-display'
 import { useToast } from '@/hooks/use-toast'
 import { invalidateQueries, onQueryInvalidation, QUERY_KEYS } from '@/lib/query-invalidation'
 
@@ -68,82 +75,10 @@ interface FollowUpValidationErrors {
   followUpTime?: string
 }
 
-function formatDateDdMmYyyy(value?: string | null): string {
-  const source = safeString(value)
-  if (!source) return '-'
-
-  const ymd = source.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (ymd) return `${ymd[3]}-${ymd[2]}-${ymd[1]}`
-
-  const date = new Date(source)
-  if (Number.isNaN(date.getTime())) return '-'
-  const day = String(date.getDate()).padStart(2, '0')
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const year = date.getFullYear()
-  return `${day}-${month}-${year}`
-}
-
-function parseDateInput(value?: string | null): Date | null {
-  const source = safeString(value)
-  if (!source) return null
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(source)) {
-    const [year, month, day] = source.split('-').map(Number)
-    const date = new Date(year, month - 1, day, 0, 0, 0, 0)
-    return Number.isNaN(date.getTime()) ? null : date
-  }
-
-  const parsed = new Date(source)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
 function toDateOnly(value: Date): Date {
   const next = new Date(value)
   next.setHours(0, 0, 0, 0)
   return next
-}
-
-function formatDateAsIso(value: Date): string {
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, '0')
-  const day = String(value.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function formatDateDisplay(value?: string | null): string {
-  return formatDateDdMmYyyy(value)
-}
-
-function normalizeTimeInput(value?: string | null): string {
-  const source = safeString(value).replace(/\./g, ':').replace(/\s+/g, '')
-  if (!source) return ''
-
-  const match = source.match(/^(\d{1,2})(?::?(\d{2}))$/)
-  if (!match) return ''
-
-  const hour = Number(match[1])
-  const minute = Number(match[2])
-  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-    return ''
-  }
-
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-}
-
-function extractTimeLabelFromDateTime(value?: string | null): string {
-  const source = safeString(value)
-  if (!source) return ''
-
-  const parsed = new Date(source)
-  if (!Number.isNaN(parsed.getTime())) {
-    const hour = String(parsed.getHours()).padStart(2, '0')
-    const minute = String(parsed.getMinutes()).padStart(2, '0')
-    return `${hour}:${minute}`
-  }
-
-  const match = source.match(/(\d{1,2}):(\d{2})/)
-  if (!match) return ''
-  return `${String(Number(match[1])).padStart(2, '0')}:${String(Number(match[2])).padStart(2, '0')}`
 }
 
 function getBackendErrorMessage(error: any, fallbackMessage: string): string {
@@ -159,25 +94,6 @@ function getBackendErrorMessage(error: any, fallbackMessage: string): string {
 function formatCurrencyVnd(value?: number): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-'
   return `${new Intl.NumberFormat('vi-VN').format(value)} VND`
-}
-
-function formatDateTimeDisplay(dateTime?: string | null, date?: string | null, time?: string | null): string {
-  const normalizedDate = formatDateDisplay(date)
-  const normalizedTime = normalizeTimeInput(time)
-
-  if (normalizedDate !== '-') {
-    return normalizedTime ? `${normalizedDate}, lúc ${normalizedTime}` : normalizedDate
-  }
-
-  const source = safeString(dateTime)
-  if (!source) return '-'
-
-  const parsed = new Date(source)
-  if (!Number.isNaN(parsed.getTime())) {
-    return `${formatDateDisplay(source)}, lúc ${extractTimeLabelFromDateTime(source)}`
-  }
-
-  return source
 }
 
 function getRecordTypeLabel(record: MedicalRecordDetail): string {
@@ -485,7 +401,7 @@ export function DoctorMedicalRecordsPage() {
     const recordId = safeString(selectedFollowUpRecord?.recordId) || safeString(followUpRecordId)
     if (!recordId) return
     const normalizedDate = parseDateInput(followUpForm.date)
-    const normalizedTime = normalizeTimeInput(followUpForm.time)
+    const normalizedTime = normalizeTimeLabel(followUpForm.time)
     const nextErrors: FollowUpValidationErrors = {}
 
     if (!followUpForm.date || !normalizedDate) {
@@ -620,7 +536,7 @@ export function DoctorMedicalRecordsPage() {
                     <TableCell>
                       {Number(patient.followUpCount ?? 0)} / {Number(patient.newExamCount ?? 0)}
                     </TableCell>
-                    <TableCell>{formatDateDdMmYyyy(patient.latestVisitDate)}</TableCell>
+                    <TableCell>{formatDateDisplay(patient.latestVisitDate)}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => void openPatientDetail(patient.id)}>
                         <Eye className="h-4 w-4" />
@@ -678,7 +594,7 @@ export function DoctorMedicalRecordsPage() {
                 <div><span className="font-semibold">SĐT:</span> {safeString(patientDetail.patient?.phone) || '-'}</div>
                 <div><span className="font-semibold">Email:</span> {safeString(patientDetail.patient?.email) || '-'}</div>
                 <div><span className="font-semibold">Giới tính:</span> {safeString(patientDetail.patient?.gender) || '-'}</div>
-                <div><span className="font-semibold">Ngày sinh:</span> {formatDateDdMmYyyy(patientDetail.patient?.dateOfBirth)}</div>
+                <div><span className="font-semibold">Ngày sinh:</span> {formatDateDisplay(patientDetail.patient?.dateOfBirth)}</div>
                 <div><span className="font-semibold">Địa chỉ:</span> {safeString(patientDetail.patient?.address) || '-'}</div>
               </div>
 
@@ -702,14 +618,14 @@ export function DoctorMedicalRecordsPage() {
                       <CardContent className="space-y-3 p-4">
                         <div className="flex items-center justify-between">
                           <div className="font-semibold text-[#111827]">
-                            Ngày khám: {formatDateDdMmYyyy(record.visitDate)}
+                            Ngày khám: {formatDateDisplay(record.visitDate)}
                           </div>
                           <Badge className="rounded-full border bg-sky-50 text-sky-700 border-sky-200">
                             {getRecordTypeLabel(record)}
                           </Badge>
                         </div>
                         <div className="text-sm text-[#6b7280]">
-                          Ngày tạo hồ sơ: {formatDateDdMmYyyy(record.recordCreatedAt || record.createdAt)}
+                          Ngày tạo hồ sơ: {formatDateDisplay(record.recordCreatedAt || record.createdAt)}
                         </div>
 
                         <div><span className="font-semibold">Triệu chứng:</span> {safeString(record.symptoms) || '-'}</div>
@@ -771,7 +687,7 @@ export function DoctorMedicalRecordsPage() {
                           {followUpAppointment ? (
                             <div className="mt-3 grid gap-2 text-sm text-slate-700 md:grid-cols-2">
                               <div><span className="font-semibold">Mã lịch:</span> {safeString(followUpAppointment.appointmentCode) || safeString(followUpAppointment.appointmentId) || '-'}</div>
-                              <div><span className="font-semibold">Thời gian:</span> {formatDateTimeDisplay(followUpAppointment.appointmentDateTime, followUpAppointment.appointmentDate, followUpAppointment.appointmentTime)}</div>
+                              <div><span className="font-semibold">Thời gian:</span> {formatDateTimeFromPartsOrValue(followUpAppointment.appointmentDate, followUpAppointment.appointmentTime, followUpAppointment.appointmentDateTime, followUpAppointment.appointmentDateDisplay)}</div>
                               <div><span className="font-semibold">Loại khám:</span> {followUpTypeLabel}</div>
                               <div><span className="font-semibold">Lich goc:</span> {safeString(followUpAppointment.parentAppointmentId) || '-'}</div>
                               <div className="flex items-center gap-2">
@@ -947,8 +863,9 @@ export function DoctorMedicalRecordsPage() {
                           {(followUpForm.date || followUpForm.time) && (
                             <div className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
                               <span className="font-medium text-slate-800">Lịch tái khám dự kiến:</span>{' '}
-                              {followUpForm.date ? formatDateDisplay(followUpForm.date) : 'Chưa chọn ngày'}
-                              {normalizeTimeInput(followUpForm.time) ? `, lúc ${normalizeTimeInput(followUpForm.time)}` : ''}
+                              {followUpForm.date
+                                ? formatDateTimeFromPartsOrValue(followUpForm.date, followUpForm.time)
+                                : 'Chưa chọn ngày'}
                             </div>
                           )}
 

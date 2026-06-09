@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { api, type ApiRequestError, type AppointmentSlot } from '@/services/api'
 import type { Appointment } from '@/types'
+import { formatDateDisplay, formatDateAsIso, normalizeTimeLabel } from '@/lib/date-display'
 
 interface RescheduleAppointmentProps {
   appointment: Appointment
@@ -21,14 +22,7 @@ interface RescheduleAppointmentProps {
 }
 
 function getAppointmentDateLabel(appointment: Appointment): string {
-  const rawDateSource = String(appointment.appointmentDate || appointment.date || '').trim()
-  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})/)
-  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
-  if (!dateSource) return '—'
-
-  const dateObject = new Date(dateSource)
-  if (Number.isNaN(dateObject.getTime())) return dateSource
-  return dateObject.toLocaleDateString('vi-VN')
+  return formatDateDisplay(appointment.appointmentDate || appointment.date)
 }
 
 function getAppointmentTimeLabel(appointment: Appointment): string {
@@ -41,10 +35,9 @@ function getAppointmentTimeLabel(appointment: Appointment): string {
     String(appointment.appointmentTimeLabel || '')
       .trim()
       .match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM|SA|CH))?$/i)?.[0] || ''
-  const timeMatch = (rawTimeSource || embeddedTime || labelTimeCandidate).match(/^(\d{1,2}):(\d{2})/i)
-  if (!timeMatch) return '—'
 
-  return `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
+  const timeLabel = normalizeTimeLabel(rawTimeSource || embeddedTime || labelTimeCandidate)
+  return timeLabel || '—'
 }
 
 export function RescheduleAppointmentDialog({

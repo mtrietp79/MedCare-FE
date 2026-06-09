@@ -29,6 +29,7 @@ import { useToast } from '@/hooks/use-toast'
 import { safeString } from '@/lib/admin-normalizers'
 import { cn } from '@/lib/utils'
 import { getAppointmentStatusClass, getAppointmentStatusLabel } from '@/lib/appointment-status'
+import { formatDateDisplay, normalizeTimeLabel } from '@/lib/date-display'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -787,8 +788,8 @@ export function AdminDashboard() {
                           <TableCell className="font-medium">{appointment.patient}</TableCell>
                           <TableCell>{appointment.doctor}</TableCell>
                           <TableCell>{appointment.specialty}</TableCell>
-                          <TableCell>{appointment.date}</TableCell>
-                          <TableCell>{appointment.time}</TableCell>
+                          <TableCell>{formatDateDisplay(appointment.date)}</TableCell>
+                          <TableCell>{normalizeTimeLabel(appointment.time) || '-'}</TableCell>
                           <TableCell>
                             <Badge className={`rounded-full border ${badgeClassName}`}>{badgeLabel}</Badge>
                           </TableCell>

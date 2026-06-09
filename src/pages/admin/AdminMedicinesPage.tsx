@@ -13,6 +13,11 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { safeLower, safeNumber, safeString } from '@/lib/admin-normalizers'
+import {
+  formatDateAsIso,
+  formatDateDisplay,
+  parseDateInput,
+} from '@/lib/date-display'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -119,19 +124,8 @@ function normalizeDateToYmd(value?: string | null): string {
   return `${year}-${month}-${day}`
 }
 
-function formatDateDmy(value?: string | null): string {
-  const ymd = normalizeDateToYmd(value)
-  if (!ymd) return '-'
-
-  const [year, month, day] = ymd.split('-')
-  return `${day}-${month}-${year}`
-}
-
 function formatDateAsYmd(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return formatDateAsIso(date)
 }
 
 function parseYmdToDate(value?: string | null): Date | undefined {
@@ -686,7 +680,7 @@ export function AdminMedicinesPage() {
                 className="h-10 w-full justify-between rounded-xl border-slate-200 bg-white px-3 text-left font-normal hover:bg-white"
               >
                 <span className={formData.expiryDate ? 'text-slate-900' : 'text-slate-400'}>
-                  {formData.expiryDate ? formatDateDmy(formData.expiryDate) : 'dd-mm-yyyy'}
+                  {formData.expiryDate ? formatDateDisplay(formData.expiryDate) : 'dd-MM-yyyy'}
                 </span>
                 <CalendarDays className="h-4 w-4 text-slate-400" />
               </Button>
@@ -1113,7 +1107,7 @@ export function AdminMedicinesPage() {
                 </TableHeader>
                 <TableBody>
                   {paginatedMedicines.map((medicine) => {
-                    const expiryText = formatDateDmy(medicine.expiryDate ?? medicine.expirationDate)
+                    const expiryText = formatDateDisplay(medicine.expiryDate ?? medicine.expirationDate)
                     const quantity = safeNumber(medicine.quantity, 0)
                     const stockStatus = normalizeStockStatus(medicine.stockStatus)
                     const expiryStatus = normalizeExpiryStatus(medicine.expiryStatus)

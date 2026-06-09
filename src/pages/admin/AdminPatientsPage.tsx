@@ -21,6 +21,7 @@ import {
 } from '@/services/adminPatientService'
 import { PatientAvatar } from '@/components/patient/patient-ui'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import { formatDateTimeDisplay } from '@/lib/date-display'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -62,18 +63,6 @@ import {
 
 const ITEMS_PER_PAGE = 10
 const DEFAULT_TEMP_PASSWORD = 'Bn@123'
-
-function formatDateTime(value?: string | null) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  const day = String(parsed.getDate()).padStart(2, '0')
-  const month = String(parsed.getMonth() + 1).padStart(2, '0')
-  const year = parsed.getFullYear()
-  const hours = String(parsed.getHours()).padStart(2, '0')
-  const minutes = String(parsed.getMinutes()).padStart(2, '0')
-  return `${day}/${month}/${year} ${hours}:${minutes}`
-}
 
 function formatCurrency(value?: number | null) {
   if (value === null || value === undefined) return '-'
@@ -450,7 +439,7 @@ export function AdminPatientsPage() {
                         <TableCell className="whitespace-nowrap">
                           <AccountStatusBadge isActive={patient.isActive} />
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{formatDateTime(patient.createdAt)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{formatDateTimeDisplay(patient.createdAt)}</TableCell>
                         <TableCell className="sticky right-0 bg-background/90 dark:bg-slate-950/95 z-10">
                           <div className="flex items-center justify-end gap-1">
                             <Tooltip>
@@ -564,7 +553,7 @@ export function AdminPatientsPage() {
                 <DetailField label="Giới tính" value={selectedPatient.genderLabel} />
                 <DetailField label="Ngày sinh" value={selectedPatient.dateOfBirth} />
                 <DetailField label="Địa chỉ" value={selectedPatient.address} />
-                <DetailField label="Ngày tạo tài khoản" value={formatDateTime(selectedPatient.createdAt)} />
+                <DetailField label="Ngày tạo tài khoản" value={formatDateTimeDisplay(selectedPatient.createdAt)} />
               </div>
 
               <div>

@@ -18,21 +18,7 @@ import {
 } from '@/components/patient/patient-ui'
 import { api, type PatientMedicalRecord } from '@/services/api'
 import { getAppointmentTypeLabel } from '@/lib/appointment-type'
-
-function formatDate(value?: string) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString('vi-VN')
-}
-
-function formatDateTime(dateValue?: string, timeValue?: string) {
-  const dateText = formatDate(dateValue)
-  const timeText = String(timeValue || '').trim()
-  if (!timeText) return dateText
-  if (dateText === '-') return timeText.slice(0, 5)
-  return `${dateText} ${timeText.slice(0, 5)}`
-}
+import { formatDateTimeFromParts, pickDisplayOrFormatDate } from '@/lib/date-display'
 
 export function PatientMedicalRecordsPage() {
   const [records, setRecords] = useState<PatientMedicalRecord[]>([])
@@ -110,12 +96,12 @@ export function PatientMedicalRecordsPage() {
                     <PatientInfoRow
                       icon={Calendar}
                       label="Ngày khám"
-                      value={formatDateTime(record.appointmentDate, record.appointmentTime)}
+                      value={formatDateTimeFromParts(record.appointmentDate, record.appointmentTime, record.appointmentDateDisplay)}
                     />
                     <PatientInfoRow
                       icon={Clock}
                       label="Ngày tạo"
-                      value={formatDate(record.recordCreatedAt || record.createdAt)}
+                      value={pickDisplayOrFormatDate(record.recordCreatedAtDisplay ?? record.createdAtDisplay, record.recordCreatedAt || record.createdAt)}
                     />
                   </div>
 

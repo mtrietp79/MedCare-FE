@@ -108,6 +108,8 @@ export interface PatientMedicalRecordInvoice {
   totalAmount?: number
   canPayOnline?: boolean
   paymentDate?: string
+  paidAtDisplay?: string
+  paymentDateDisplay?: string
 }
 
 export interface PatientMedicalRecordFollowUp {
@@ -116,6 +118,7 @@ export interface PatientMedicalRecordFollowUp {
   appointmentDateTime?: string
   appointmentDate?: string
   appointmentTime?: string
+  appointmentDateDisplay?: string
   type?: string
   typeCode?: string
   appointmentTypeCode?: string
@@ -132,10 +135,12 @@ export interface PatientMedicalRecord {
   recordId?: string
   recordCode?: string
   recordCreatedAt?: string
+  recordCreatedAtDisplay?: string
   appointmentId?: string
   appointmentCode?: string
   appointmentDate?: string
   appointmentTime?: string
+  appointmentDateDisplay?: string
   typeCode?: string
   appointmentTypeCode?: string
   doctorName?: string
@@ -157,6 +162,7 @@ export interface PatientMedicalRecord {
   invoice?: PatientMedicalRecordInvoice | null
   followUp?: PatientMedicalRecordFollowUp
   createdAt?: string
+  createdAtDisplay?: string
   updatedAt?: string
 }
 

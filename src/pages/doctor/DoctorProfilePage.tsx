@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 import { doctorProfileService, type DoctorProfileResponse } from '@/services/doctorProfileService'
 import { safeNumber, safeString } from '@/lib/admin-normalizers'
+import { formatDateDisplay } from '@/lib/date-display'
 import { useToast } from '@/hooks/use-toast'
 
 interface ProfileForm {
@@ -19,21 +20,6 @@ interface ProfileForm {
   address: string
   experienceYears: string
   bio: string
-}
-
-function formatDateDdMmYyyy(value?: string | null): string {
-  const source = safeString(value)
-  if (!source) return '-'
-
-  const ymd = source.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (ymd) return `${ymd[3]}-${ymd[2]}-${ymd[1]}`
-
-  const date = new Date(source)
-  if (Number.isNaN(date.getTime())) return '-'
-  const day = String(date.getDate()).padStart(2, '0')
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const year = date.getFullYear()
-  return `${day}-${month}-${year}`
 }
 
 function getSpecialtyName(profile: DoctorProfileResponse): string {
@@ -266,7 +252,7 @@ export function DoctorProfilePage() {
           <CardContent className="space-y-3 text-sm">
             <div><span className="font-semibold">Email:</span> {safeString(profile.email) || '-'}</div>
             <div><span className="font-semibold">Số điện thoại:</span> {safeString(profile.phone) || '-'}</div>
-            <div><span className="font-semibold">Tham gia:</span> {formatDateDdMmYyyy(profile.createdAt)}</div>
+            <div><span className="font-semibold">Tham gia:</span> {formatDateDisplay(profile.createdAt)}</div>
             <div className="flex items-center gap-2">
               <span className="font-semibold">Điểm đánh giá:</span>
               <Star className="h-4 w-4 text-amber-500" />

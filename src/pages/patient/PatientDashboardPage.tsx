@@ -18,34 +18,12 @@ import { api } from '@/services/api'
 import { PatientProfileForm } from './PatientProfilePage'
 import type { Patient, Appointment } from '@/types'
 import { resolveAppointmentStatusView } from '@/lib/appointment-status'
+import { formatAppointmentDateTimeDisplay } from '@/lib/date-display'
 
 function formatAppointmentDateTime(appointment?: Appointment | null): string {
   if (!appointment) return 'Chưa có lịch khám'
-
-  const rawDateSource = String(appointment.appointmentDate || appointment.date || '').trim()
-  const rawTimeSource = String(appointment.appointmentTime || appointment.time || '').trim()
-
-  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/)
-  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
-  const embeddedTime = (datePrefixMatch?.[2] || '').trim()
-
-  const labelTimeCandidate =
-    String(appointment.appointmentTimeLabel || '')
-      .trim()
-      .match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM|SA|CH))?$/i)?.[0] || ''
-  const timeMatch = (rawTimeSource || embeddedTime || labelTimeCandidate).match(/^(\d{1,2}):(\d{2})/i)
-  const timeLabel = timeMatch
-    ? `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
-    : ''
-
-  const dateObject = dateSource ? new Date(dateSource) : null
-  const dateLabel =
-    dateObject && !Number.isNaN(dateObject.getTime()) ? dateObject.toLocaleDateString('vi-VN') : dateSource || ''
-
-  if (!dateLabel && !timeLabel) return 'Chưa có lịch khám'
-  if (!dateLabel) return timeLabel
-  if (!timeLabel) return dateLabel
-  return `${dateLabel} ${timeLabel}`
+  const formatted = formatAppointmentDateTimeDisplay(appointment)
+  return formatted === '-' ? 'Chưa có lịch khám' : formatted
 }
 
 export function PatientDashboardPage() {

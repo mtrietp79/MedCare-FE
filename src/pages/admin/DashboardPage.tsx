@@ -29,6 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
 import { getAppointmentStatusClass, getAppointmentStatusLabel } from '@/lib/appointment-status'
+import { formatDateTimeFromParts } from '@/lib/date-display'
 
 interface DashboardSummary {
   totalAppointments: number
@@ -127,12 +128,7 @@ function statusBadgeClass(status: string, statusDisplay?: string, statusCode?: s
 }
 
 function formatDateTime(date: string, time: string): string {
-  const dateValue = safeString(date)
-  const timeValue = safeString(time)
-  if (dateValue && dateValue !== '-' && timeValue && timeValue !== '-') return `${dateValue} ${timeValue}`
-  if (dateValue && dateValue !== '-') return dateValue
-  if (timeValue && timeValue !== '-') return timeValue
-  return '-'
+  return formatDateTimeFromParts(date, time)
 }
 
 export function DashboardPage() {

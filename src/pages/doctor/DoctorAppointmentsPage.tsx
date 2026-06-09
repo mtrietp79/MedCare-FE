@@ -48,6 +48,12 @@ import {
   type AppointmentStatusKey,
 } from '@/lib/appointment-status'
 import {
+  formatDateAsIso,
+  formatDateDisplay,
+  normalizeTimeLabel,
+  parseDateInput,
+} from '@/lib/date-display'
+import {
   BillingSummaryPanel,
   MedicineCategorySelect,
   MedicineSelect,
@@ -132,66 +138,14 @@ function createInitialMedicineDraft(): PrescriptionItemForm {
   }
 }
 
-function parseDateInput(value?: string): Date | null {
-  const source = safeString(value)
-  if (!source) return null
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(source)) {
-    const [year, month, day] = source.split('-').map(Number)
-    const date = new Date(year, month - 1, day, 0, 0, 0, 0)
-    return Number.isNaN(date.getTime()) ? null : date
-  }
-
-  const parsed = new Date(source)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
+function getDateLabel(appointment: DoctorAppointment): string {
+  return formatDateDisplay(safeString(appointment.appointmentDate) || safeString(appointment.date))
 }
 
 function toDateOnly(value: Date): Date {
   const next = new Date(value)
   next.setHours(0, 0, 0, 0)
   return next
-}
-
-function formatDateAsIso(value: Date): string {
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, '0')
-  const day = String(value.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function formatDateDisplay(value?: string): string {
-  const parsed = parseDateInput(value)
-  return parsed ? parsed.toLocaleDateString('vi-VN') : ''
-}
-
-function extractTimeLabelFromDateTime(value?: string): string {
-  const source = safeString(value)
-  if (!source) return ''
-
-  const parsed = new Date(source)
-  if (!Number.isNaN(parsed.getTime())) {
-    const hours = String(parsed.getHours()).padStart(2, '0')
-    const minutes = String(parsed.getMinutes()).padStart(2, '0')
-    return `${hours}:${minutes}`
-  }
-
-  const match = source.match(/(\d{1,2}):(\d{2})/)
-  if (!match) return ''
-  return `${String(Number(match[1])).padStart(2, '0')}:${String(Number(match[2])).padStart(2, '0')}`
-}
-
-function formatDateDdMmYyyy(value?: string): string {
-  const source = safeString(value)
-  if (!source) return '-'
-  const ymd = source.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (ymd) return `${ymd[3]}-${ymd[2]}-${ymd[1]}`
-
-  const date = new Date(source)
-  if (Number.isNaN(date.getTime())) return '-'
-  const day = String(date.getDate()).padStart(2, '0')
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const year = date.getFullYear()
-  return `${day}-${month}-${year}`
 }
 
 function normalizeText(value: string): string {
@@ -239,16 +193,13 @@ function isServicePackageBooking(appointment: DoctorAppointment): boolean {
   )
 }
 
-function getDateLabel(appointment: DoctorAppointment): string {
-  return formatDateDdMmYyyy(safeString(appointment.appointmentDate) || safeString(appointment.date))
-}
-
 function getTimeLabel(appointment: DoctorAppointment): string {
   return (
-    safeString(appointment.appointmentTime) ||
-    safeString(appointment.time) ||
-    safeString(appointment.appointmentTimeLabel) ||
-    '--:--'
+    normalizeTimeLabel(
+      safeString(appointment.appointmentTime) ||
+        safeString(appointment.time) ||
+        safeString(appointment.appointmentTimeLabel),
+    ) || '--:--'
   )
 }
 
@@ -1105,7 +1056,7 @@ export function DoctorAppointmentsPage() {
       normalizedCurrentSymptoms.length > 0 &&
       normalizedCurrentSymptoms !== normalizedInitialSymptoms
     const normalizedFollowUpTime = formState.followUpEnabled
-      ? extractTimeLabelFromDateTime(formState.followUpTime) || formState.followUpTime
+      ? normalizeTimeLabel(formState.followUpTime) || formState.followUpTime
       : undefined
 
     const invalidMedicineIndex = formState.medicines.findIndex(

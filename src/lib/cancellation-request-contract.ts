@@ -13,6 +13,7 @@ export interface CancellationRequestItem {
   appointmentDate?: string | null
   appointmentTime?: string | null
   appointmentDateTime?: string | null
+  appointmentDateDisplay?: string | null
   amount?: number | null
   bankName?: string | null
   bankAccountNumber?: string | null
@@ -23,7 +24,9 @@ export interface CancellationRequestItem {
   processedBy?: string | null
   processedByName?: string | null
   processedAt?: string | null
+  processedAtDisplay?: string | null
   createdAt?: string | null
+  createdAtDisplay?: string | null
   updatedAt?: string | null
   status: CancellationRequestStatus
   statusDisplay?: string | null

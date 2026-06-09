@@ -1,6 +1,7 @@
 import { API_BASE_URL, fetchJson } from './auth'
 import { getAppointmentStatusLabel } from '@/lib/appointment-status'
 import { getAppointmentTypeLabel } from '@/lib/appointment-type'
+import { formatDateDisplay, formatDateTimeFromParts } from '@/lib/date-display'
 import {
   buildAdminListQuery,
   extractListFromResponse,
@@ -140,24 +141,6 @@ function resolveIsActive(raw: Record<string, unknown>): boolean {
   return true
 }
 
-function formatDateOnly(value?: string | null): string {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
-  const day = String(parsed.getDate()).padStart(2, '0')
-  const month = String(parsed.getMonth() + 1).padStart(2, '0')
-  const year = parsed.getFullYear()
-  return `${day}/${month}/${year}`
-}
-
-function formatDateTime(value?: string | null, timeValue?: string | null): string {
-  const dateText = formatDateOnly(value)
-  const timeText = safeString(timeValue).slice(0, 5)
-  if (dateText === '-' && !timeText) return '-'
-  if (dateText === '-') return timeText
-  if (!timeText) return dateText
-  return `${dateText} ${timeText}`
-}
 
 function normalizeRecentAppointment(item: unknown): AdminPatientRecentAppointment {
   const record = asRecord(item) || {}
@@ -166,7 +149,7 @@ function normalizeRecentAppointment(item: unknown): AdminPatientRecentAppointmen
     id: safeString(record.id ?? record.appointmentId),
     appointmentCode: safeString(record.appointmentCode ?? record.code) || `#${safeString(record.id)}`,
     doctorName: safeString(record.doctorName ?? doctor?.fullName ?? doctor?.name),
-    appointmentDateTime: formatDateTime(
+    appointmentDateTime: formatDateTimeFromParts(
       safeString(record.appointmentDate ?? record.date ?? record.createdAt),
       safeString(record.appointmentTime ?? record.time),
     ),
@@ -189,7 +172,7 @@ function normalizeRecentMedicalRecord(item: unknown): AdminPatientRecentMedicalR
     recordCode: safeString(record.recordCode ?? record.appointmentCode ?? record.code) || `#${safeString(record.id)}`,
     doctorName: safeString(record.doctorName ?? doctor?.fullName),
     diagnosis: safeString(record.diagnosis ?? record.diagnosisSummary) || 'Chưa cập nhật',
-    appointmentDate: formatDateTime(
+    appointmentDate: formatDateTimeFromParts(
       safeString(record.appointmentDate ?? record.visitDate ?? record.createdAt),
       safeString(record.appointmentTime ?? record.visitTime),
     ),
@@ -207,7 +190,7 @@ function normalizePatientListItem(raw: unknown): AdminPatientListItem {
     phone: safeString(record.phone ?? record.phoneNumber),
     gender,
     genderLabel: formatGenderLabel(gender),
-    dateOfBirth: formatDateOnly(safeString(record.dateOfBirth ?? record.dob)),
+    dateOfBirth: formatDateDisplay(safeString(record.dateOfBirth ?? record.dob)),
     avatarUrl: safeString(record.avatarUrl ?? record.imageUrl ?? record.photoUrl),
     appointmentCount: safeNumber(
       record.appointmentCount ?? record.totalAppointments ?? record.appointmentsCount,

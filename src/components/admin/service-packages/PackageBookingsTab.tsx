@@ -8,6 +8,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { safeLower, safeNumber, safeString } from '@/lib/admin-normalizers'
+import { formatDateTimeFromParts, pickDisplayOrFormatDateTime } from '@/lib/date-display'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -74,16 +75,14 @@ function getStatusBadgeClass(value?: string): string {
   return 'bg-amber-50 text-amber-700 border-amber-200'
 }
 
-function formatDateTime(booking: AdminServicePackageBooking): string {
+function formatBookingDateTime(booking: AdminServicePackageBooking): string {
   const date = safeString(booking.bookingDate)
   const time = safeString(booking.bookingTime)
-  if (date || time) return `${date || '-'} ${time || ''}`.trim()
+  if (date || time) {
+    return formatDateTimeFromParts(date, time, booking.bookingDateDisplay)
+  }
 
-  const createdAt = safeString(booking.createdAt)
-  if (!createdAt) return '-'
-  const parsed = new Date(createdAt)
-  if (Number.isNaN(parsed.getTime())) return createdAt
-  return parsed.toLocaleString('vi-VN')
+  return pickDisplayOrFormatDateTime(booking.createdAtDisplay, booking.createdAt)
 }
 
 export function PackageBookingsTab() {
@@ -289,7 +288,7 @@ export function PackageBookingsTab() {
                         </div>
                       </TableCell>
                       <TableCell>{safeString(booking.packageName) || '-'}</TableCell>
-                      <TableCell>{formatDateTime(booking)}</TableCell>
+                      <TableCell>{formatBookingDateTime(booking)}</TableCell>
                       <TableCell>
                         {new Intl.NumberFormat('vi-VN').format(
                           safeNumber(booking.amount || booking.paidAmount, 0)

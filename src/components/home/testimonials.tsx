@@ -6,16 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { websiteFeedbackService, type WebsiteFeedback } from '@/services/websiteFeedbackService'
-
-function formatDateDDMMYYYY(value?: string | null) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return '-'
-  const day = String(parsed.getDate()).padStart(2, '0')
-  const month = String(parsed.getMonth() + 1).padStart(2, '0')
-  const year = parsed.getFullYear()
-  return `${day}-${month}-${year}`
-}
+import { formatDateDisplay } from '@/lib/date-display'
 
 export function Testimonials() {
   const { toast } = useToast()
@@ -121,7 +112,7 @@ export function Testimonials() {
                       </div>
                     </div>
                     <p className="mb-3 text-sm leading-6 text-slate-700">{feedback.comment || 'Không có nội dung.'}</p>
-                    <p className="text-xs text-muted-foreground">{formatDateDDMMYYYY(feedback.createdAt)}</p>
+                    <p className="text-xs text-muted-foreground">{formatDateDisplay(feedback.createdAt)}</p>
                   </CardContent>
                 </Card>
               ))}

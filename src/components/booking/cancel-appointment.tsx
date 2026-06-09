@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast'
 import { api } from '@/services/api'
 import type { Appointment } from '@/types'
 import { canRequestAppointmentCancellation, getAppointmentCancellationStatusLabel } from '@/lib/appointment-cancellation'
+import { formatAppointmentDateTimeDisplay } from '@/lib/date-display'
 import { isPaymentSettled } from '@/lib/appointment-status'
 
 interface CancelAppointmentProps {
@@ -25,25 +26,8 @@ interface CancelAppointmentProps {
 }
 
 function getAppointmentDateTimeLabel(appointment: Appointment): string {
-  const rawDateSource = String(appointment.appointmentDate || appointment.date || '').trim()
-  const rawTimeSource = String(appointment.appointmentTime || appointment.time || '').trim()
-
-  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/)
-  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
-  const embeddedTime = (datePrefixMatch?.[2] || '').trim()
-
-  const timeMatch = (rawTimeSource || embeddedTime).match(/^(\d{1,2}):(\d{2})/i)
-  const timeLabel = timeMatch
-    ? `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
-    : ''
-
-  const dateObject = dateSource ? new Date(dateSource) : null
-  const dateLabel = dateObject && !Number.isNaN(dateObject.getTime()) ? dateObject.toLocaleDateString('vi-VN') : dateSource || ''
-
-  if (!dateLabel && !timeLabel) return '—'
-  if (!dateLabel) return timeLabel
-  if (!timeLabel) return dateLabel
-  return `${dateLabel} ${timeLabel}`
+  const formatted = formatAppointmentDateTimeDisplay(appointment)
+  return formatted === '-' ? '—' : formatted
 }
 
 function formatCurrency(amount?: number | null): string {

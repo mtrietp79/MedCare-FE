@@ -42,6 +42,7 @@ export interface MedicalRecordDetail {
     appointmentDateTime?: string
     appointmentDate?: string
     appointmentTime?: string
+    appointmentDateDisplay?: string
     type?: string
     typeCode?: string
     appointmentTypeCode?: string

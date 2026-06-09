@@ -209,6 +209,7 @@ export interface AdminServicePackageBooking {
   packageName?: string
   bookingDate?: string
   bookingTime?: string
+  bookingDateDisplay?: string
   amount?: number
   paidAmount?: number
   status?: string
@@ -217,6 +218,7 @@ export interface AdminServicePackageBooking {
   paymentStatusDisplay?: string
   note?: string
   createdAt?: string
+  createdAtDisplay?: string
 }
 
 export interface AdminServicePackageOverview {

@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { PatientProfileForm } from '@/pages/patient/PatientProfilePage'
 import { normalizePaymentRedirectUrl } from '@/lib/payment-url'
+import { formatDateAsIso, formatDateDisplay, normalizeTimeLabel } from '@/lib/date-display'
 import { api, type ApiRequestError, type AppointmentSlot } from '@/services/api'
 import { useToast } from '@/hooks/use-toast'
 import type { BookingRules, Doctor, MedicalService, Patient } from '@/types'
@@ -182,25 +183,7 @@ export function BookingWizard() {
     return next
   }
 
-  const formatDateDisplay = (dateString?: string) => {
-    const date = parseDateString(dateString || '')
-    return date ? date.toLocaleDateString('vi-VN') : ''
-  }
-
-  const formatDateAsIso = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-
-  const formatTimeDisplay = (timeString?: string) => {
-    if (!timeString) return ''
-    const date = parseDateString(timeString)
-    return date
-      ? date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-      : ''
-  }
+  const formatTimeDisplay = (timeString?: string) => normalizeTimeLabel(timeString) || ''
 
   const normalizeDisabledReason = (reason?: string | null) => String(reason || '').trim().toUpperCase()
 
@@ -283,7 +266,7 @@ export function BookingWizard() {
 
   const bookingDateRangeLabel = useMemo(() => {
     const minLabel = formatDateDisplay(minDateString)
-    const maxLabel = maxSelectableDate ? maxSelectableDate.toLocaleDateString('vi-VN') : ''
+    const maxLabel = maxSelectableDate ? formatDateDisplay(maxSelectableDate) : ''
 
     if (minLabel && maxLabel) {
       return `Bạn có thể đặt lịch từ ${minLabel} đến ${maxLabel}.`

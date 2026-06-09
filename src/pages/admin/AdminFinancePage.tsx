@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import { pickDisplayOrFormatDateTime } from '@/lib/date-display'
 import {
   AdminCancellationProcessDialog,
   invoiceHasCancellationRequest,
@@ -82,12 +83,6 @@ function formatCurrency(amount?: number | null): string {
   return `${Number(amount ?? 0).toLocaleString('vi-VN')} VND`
 }
 
-function formatDateTime(value?: string | null): string {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('vi-VN')
-}
 
 function getPatientDisplayName(invoice: NormalizedInvoice): string {
   return invoice.patientFullName || invoice.patientName || '-'
@@ -424,7 +419,7 @@ export function AdminFinancePage() {
                     </TableCell>
                     <TableCell>{formatCurrency(getInvoiceAmount(invoice))}</TableCell>
                     <TableCell>{statusBadge(invoice)}</TableCell>
-                    <TableCell>{invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString('vi-VN') : '-'}</TableCell>
+                    <TableCell>{pickDisplayOrFormatDateTime(invoice.createdAtDisplay, invoice.createdAt)}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="sm" onClick={() => openInvoiceDetail(invoice)} title="Xem chi tiết">
@@ -508,11 +503,11 @@ export function AdminFinancePage() {
               </div>
               <div>
                 <Label>Ngày tạo</Label>
-                <p>{formatDateTime(selectedInvoice.createdAt)}</p>
+                <p>{pickDisplayOrFormatDateTime(selectedInvoice.createdAtDisplay, selectedInvoice.createdAt)}</p>
               </div>
               <div>
                 <Label>Ngày thanh toán</Label>
-                <p>{formatDateTime(selectedInvoice.paymentDate)}</p>
+                <p>{pickDisplayOrFormatDateTime(selectedInvoice.paidAtDisplay ?? selectedInvoice.paymentDateDisplay, selectedInvoice.paymentDate)}</p>
               </div>
             </div>
           )}

@@ -6,16 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { api } from '@/services/api'
 import { doctorFeedbackService, type DoctorFeedbackItem } from '@/services/doctorFeedbackService'
 import type { Doctor } from '@/types'
-
-function formatDateDDMMYYYY(value?: string | null) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return '-'
-  const day = String(parsed.getDate()).padStart(2, '0')
-  const month = String(parsed.getMonth() + 1).padStart(2, '0')
-  const year = parsed.getFullYear()
-  return `${day}-${month}-${year}`
-}
+import { formatDateDisplay } from '@/lib/date-display'
 
 export function DoctorDetailPage() {
   const { id } = useParams()
@@ -170,7 +161,7 @@ export function DoctorDetailPage() {
                       <div className="mb-2 flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-foreground">{feedback.patientName || 'Bệnh nhân'}</p>
-                          <p className="text-xs text-muted-foreground">{formatDateDDMMYYYY(feedback.createdAt)}</p>
+                          <p className="text-xs text-muted-foreground">{formatDateDisplay(feedback.createdAt)}</p>
                         </div>
                         <div className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
                           <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />

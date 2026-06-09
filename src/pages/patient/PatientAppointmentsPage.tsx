@@ -45,6 +45,11 @@ import {
 } from '@/lib/appointment-cancellation'
 import { resolveAppointmentStatusView, resolvePatientAppointmentStatusView, resolvePaymentStatusView } from '@/lib/appointment-status'
 import {
+  formatAppointmentDateTimeDisplay,
+  formatDateTimeFromParts,
+  pickDisplayOrFormatDate,
+} from '@/lib/date-display'
+import {
   canPayInvoiceOnline,
   getAppointmentTypeDisplay,
   getInvoiceAmount,
@@ -117,52 +122,12 @@ function servicePackagePaymentStatusClass(status?: string, paymentStatusDisplay?
   return resolvePaymentStatusView(status, paymentStatusDisplay).className
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString('vi-VN')
-}
-
 function formatAppointmentDateTime(appointment: Appointment): string {
-  const rawDateSource = String(appointment.appointmentDate || appointment.date || '').trim()
-  const rawTimeSource = String(appointment.appointmentTime || appointment.time || '').trim()
-
-  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/)
-  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
-  const embeddedTime = (datePrefixMatch?.[2] || '').trim()
-
-  const labelTimeCandidate =
-    String(appointment.appointmentTimeLabel || '')
-      .trim()
-      .match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM|SA|CH))?$/i)?.[0] || ''
-  const timeMatch = (rawTimeSource || embeddedTime || labelTimeCandidate).match(/^(\d{1,2}):(\d{2})/i)
-  const timeLabel = timeMatch
-    ? `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
-    : ''
-
-  const dateLabel = formatDate(dateSource)
-  if (dateLabel === '-' && !timeLabel) return '-'
-  if (dateLabel === '-') return timeLabel
-  if (!timeLabel) return dateLabel
-  return `${dateLabel} ${timeLabel}`
-}
-
-function formatServiceBookingTime(value?: string | null) {
-  if (!value) return '-'
-  const time = String(value).trim()
-  if (!time) return '-'
-  if (time.length >= 5 && time.includes(':')) return time.slice(0, 5)
-  return time
+  return formatAppointmentDateTimeDisplay(appointment)
 }
 
 function formatServiceBookingDateTime(dateValue?: string | null, timeValue?: string | null) {
-  const dateText = formatDate(dateValue)
-  const timeText = formatServiceBookingTime(timeValue)
-  if (dateText === '-' && timeText === '-') return '-'
-  if (dateText === '-') return timeText
-  if (timeText === '-') return dateText
-  return `${dateText} ${timeText}`
+  return formatDateTimeFromParts(dateValue, timeValue)
 }
 
 function formatCurrencyVnd(value?: number | null) {
@@ -206,22 +171,11 @@ function sumInvoiceItemAmounts(
 }
 
 function formatInvoiceAppointmentDateTime(invoice: PatientInvoice): string {
-  const rawDateSource = String(invoice.appointmentDate || invoice.appointmentDateTime || '').trim()
-  const rawTimeSource = String(invoice.appointmentTime || '').trim()
-
-  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/)
-  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
-  const embeddedTime = (datePrefixMatch?.[2] || '').trim()
-  const timeMatch = (rawTimeSource || embeddedTime).match(/^(\d{1,2}):(\d{2})/i)
-  const timeLabel = timeMatch
-    ? `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
-    : ''
-
-  const dateLabel = formatDate(dateSource)
-  if (dateLabel === '-' && !timeLabel) return '-'
-  if (dateLabel === '-') return timeLabel
-  if (!timeLabel) return dateLabel
-  return `${dateLabel} ${timeLabel}`
+  return formatDateTimeFromParts(
+    invoice.appointmentDate || invoice.appointmentDateTime,
+    invoice.appointmentTime,
+    invoice.appointmentDateDisplay,
+  )
 }
 
 function getAppointmentTypeLabel(appointment: Appointment): string {
@@ -898,7 +852,7 @@ export function PatientAppointmentsPage() {
                             <p className="text-sm text-muted-foreground">{getInvoiceTypeLabel(invoice)}</p>
                             <p className="font-semibold">{getInvoiceReferenceCode(invoice)}</p>
                             <p className="text-xs text-muted-foreground">
-                              Ngày tạo: {formatDate(invoice.createdAt)}
+                              Ngày tạo: {pickDisplayOrFormatDate(invoice.createdAtDisplay, invoice.createdAt)}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               Nguồn: {getInvoiceSourceLabel(invoice)}
@@ -923,7 +877,7 @@ export function PatientAppointmentsPage() {
                             <p>Ngày khám: {formatInvoiceAppointmentDateTime(invoice)}</p>
                           ) : null}
                           <p>Mã bệnh án: {invoice.medicalRecordId || invoice.recordId || '-'}</p>
-                          {invoice.paymentDate ? <p>Ngày thanh toán: {formatDate(invoice.paymentDate)}</p> : null}
+                          {invoice.paymentDate ? <p>Ngày thanh toán: {pickDisplayOrFormatDate(invoice.paidAtDisplay ?? invoice.paymentDateDisplay, invoice.paymentDate)}</p> : null}
                         </div>
 
                         <div className="flex flex-wrap gap-2">
@@ -1182,11 +1136,11 @@ export function PatientAppointmentsPage() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Ngày tạo</p>
-                    <p className="font-medium text-foreground">{formatDate(selectedInvoice.createdAt)}</p>
+                    <p className="font-medium text-foreground">{pickDisplayOrFormatDate(selectedInvoice.createdAtDisplay, selectedInvoice.createdAt)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Ngày thanh toán</p>
-                    <p className="font-medium text-foreground">{formatDate(selectedInvoice.paymentDate)}</p>
+                    <p className="font-medium text-foreground">{pickDisplayOrFormatDate(selectedInvoice.paidAtDisplay ?? selectedInvoice.paymentDateDisplay, selectedInvoice.paymentDate)}</p>
                   </div>
                 </div>
               </div>

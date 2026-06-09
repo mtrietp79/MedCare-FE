@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Clock, Users, Trash2, Edit2, AlertCircle } from 'lucide-react'
 import type { DoctorSchedule } from '@/types'
+import { formatDateDisplay, normalizeTimeLabel } from '@/lib/date-display'
 
 interface ScheduleListProps {
   schedules: DoctorSchedule[]
@@ -29,18 +30,7 @@ export function ScheduleList({ schedules, isLoading = false, onEdit, onDelete }:
     }
   }
 
-  const formatTime = (time: string) => {
-    return time.slice(0, 5)
-  }
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('vi-VN', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-  }
+  const formatTime = (time: string) => normalizeTimeLabel(time) || time.slice(0, 5)
 
   if (isLoading) {
     return (
@@ -84,7 +74,7 @@ export function ScheduleList({ schedules, isLoading = false, onEdit, onDelete }:
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4" />
                   <span>
-                    {formatDate(schedule.date)} ({formatTime(schedule.startTime)} - {formatTime(schedule.endTime)})
+                    {formatDateDisplay(schedule.date)} ({formatTime(schedule.startTime)} - {formatTime(schedule.endTime)})
                   </span>
                 </div>
                 <div className="flex items-center gap-2">

@@ -19,6 +19,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import { formatDateDisplay } from '@/lib/date-display'
 
 interface HttpError extends Error {
   status?: number
@@ -38,15 +39,6 @@ function getErrorMessage(error: unknown): string {
   return 'Không thể tải danh sách feedback website.'
 }
 
-function formatDateDDMMYYYY(value?: string | null) {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return '-'
-  const day = String(parsed.getDate()).padStart(2, '0')
-  const month = String(parsed.getMonth() + 1).padStart(2, '0')
-  const year = parsed.getFullYear()
-  return `${day}-${month}-${year}`
-}
 
 function normalizeVietnameseText(value?: string | null): string {
   return String(value ?? '')
@@ -401,7 +393,7 @@ export function AdminWebsiteFeedbacksPage() {
                           {feedback.comment || '-'}
                         </TableCell>
                         <TableCell className="align-top whitespace-nowrap">
-                          {formatDateDDMMYYYY(feedback.createdAt)}
+                          {formatDateDisplay(feedback.createdAt)}
                         </TableCell>
                         <TableCell className="align-top whitespace-nowrap">{getStatusBadge(feedback)}</TableCell>
                         <TableCell className="align-top whitespace-nowrap">{getHomepageBadge(feedback)}</TableCell>

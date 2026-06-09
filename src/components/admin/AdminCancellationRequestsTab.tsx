@@ -32,6 +32,7 @@ import {
   getCancellationRequestStatusDescription,
   getCancellationRequestStatusKey,
 } from '@/lib/cancellation-request-contract'
+import { formatDateTimeFromParts, pickDisplayOrFormatDateTime } from '@/lib/date-display'
 
 type RequestStatusFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REFUNDED' | 'REJECTED'
 type RequestSort = 'newest' | 'oldest'
@@ -47,32 +48,12 @@ function formatCurrency(amount?: number | null): string {
   return `${Number(amount ?? 0).toLocaleString('vi-VN')} VND`
 }
 
-function formatDateTime(value?: string | null): string {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('vi-VN')
-}
-
 function formatAppointmentDateTime(request: AdminCancellationRequest): string {
-  const rawDateSource = String(request.appointmentDate || request.appointmentDateTime || '').trim()
-  const rawTimeSource = String(request.appointmentTime || '').trim()
-
-  const datePrefixMatch = rawDateSource.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/)
-  const dateSource = (datePrefixMatch?.[1] || rawDateSource).trim()
-  const embeddedTime = (datePrefixMatch?.[2] || '').trim()
-  const timeMatch = (rawTimeSource || embeddedTime).match(/^(\d{1,2}):(\d{2})/i)
-  const timeLabel = timeMatch
-    ? `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2])).padStart(2, '0')}`
-    : ''
-
-  const dateObject = dateSource ? new Date(dateSource) : null
-  const dateLabel = dateObject && !Number.isNaN(dateObject.getTime()) ? dateObject.toLocaleDateString('vi-VN') : dateSource || '-'
-
-  if (dateLabel === '-' && !timeLabel) return '-'
-  if (dateLabel === '-') return timeLabel
-  if (!timeLabel) return dateLabel
-  return `${dateLabel} ${timeLabel}`
+  return formatDateTimeFromParts(
+    request.appointmentDate || request.appointmentDateTime,
+    request.appointmentTime,
+    request.appointmentDateDisplay,
+  )
 }
 
 function getPatientName(request: AdminCancellationRequest): string {
@@ -328,7 +309,7 @@ export function AdminCancellationRequestsTab() {
                           <div className="text-xs text-muted-foreground">{request.bankAccountNumber || '-'}</div>
                         </TableCell>
                         <TableCell>{statusBadge(request)}</TableCell>
-                        <TableCell>{formatDateTime(request.createdAt)}</TableCell>
+                        <TableCell>{pickDisplayOrFormatDateTime(request.createdAtDisplay, request.createdAt)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             <Button variant="ghost" size="sm" onClick={() => openDetail(request)}>
@@ -420,7 +401,7 @@ export function AdminCancellationRequestsTab() {
                   <p className="font-semibold">Thông tin hủy</p>
                   <p className="mt-2 text-muted-foreground">Lý do hủy: {selectedRequest.cancelReason || '-'}</p>
                   <p className="mt-1 text-muted-foreground">Ghi chú bệnh nhân: {selectedRequest.patientNote || '-'}</p>
-                  <p className="mt-1 text-muted-foreground">Ngày gửi: {formatDateTime(selectedRequest.createdAt)}</p>
+                  <p className="mt-1 text-muted-foreground">Ngày gửi: {pickDisplayOrFormatDateTime(selectedRequest.createdAtDisplay, selectedRequest.createdAt)}</p>
                 </div>
                 <div className="rounded-xl border border-border/70 bg-background p-4">
                   <p className="font-semibold">Thông tin ngân hàng</p>
@@ -435,7 +416,7 @@ export function AdminCancellationRequestsTab() {
                 <p className="mt-2 text-muted-foreground">Trạng thái: {getCancellationRequestAdminStatusLabel(selectedRequest.status, selectedRequest.statusDisplay)}</p>
                 <p className="mt-1 text-muted-foreground">Ghi chú admin: {selectedRequest.adminNote || '-'}</p>
                 <p className="mt-1 text-muted-foreground">Người xử lý: {selectedRequest.processedByName || selectedRequest.processedBy || '-'}</p>
-                <p className="mt-1 text-muted-foreground">Thời gian xử lý: {formatDateTime(selectedRequest.processedAt)}</p>
+                <p className="mt-1 text-muted-foreground">Thời gian xử lý: {pickDisplayOrFormatDateTime(selectedRequest.processedAtDisplay, selectedRequest.processedAt)}</p>
               </div>
             </div>
           ) : null}

@@ -257,6 +257,7 @@ export interface PaymentReceiptInfo {
   bankCode?: string
   amount?: number
   paidAt?: string
+  paidAtDisplay?: string
   responseCode?: string
   status?: string
   statusDisplay?: string
@@ -271,6 +272,8 @@ export interface AppointmentReceipt {
     specialtyName?: string
     serviceName?: string
     appointmentDate?: string
+    appointmentTime?: string
+    appointmentDateDisplay?: string
     appointmentStatus?: string
     appointmentStatusDisplay?: string
     paymentStatus?: string
@@ -288,6 +291,7 @@ export interface ServicePackageReceipt {
     packageName?: string
     bookingDate?: string
     bookingTime?: string
+    bookingDateDisplay?: string
     totalAmount?: number
     status?: string
     statusDisplay?: string

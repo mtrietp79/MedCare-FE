@@ -4,34 +4,14 @@ import { isFollowUpAppointmentType } from '@/lib/appointment-type'
 import type { PatientMedicalRecord } from '@/services/api'
 import { getAppointmentStatusClass, getAppointmentStatusLabel } from '@/lib/appointment-status'
 import { shouldShowInvoiceConsultationFee } from '@/lib/invoice-contract'
+import {
+  formatDateTimeFromParts,
+  pickDisplayOrFormatDate,
+} from '@/lib/date-display'
 
 interface PatientMedicalRecordDetailsProps {
   record: PatientMedicalRecord
   className?: string
-}
-
-function formatDate(value?: string): string {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString('vi-VN')
-}
-
-function formatTime(value?: string): string {
-  if (!value) return '-'
-  const raw = String(value).trim()
-  if (!raw) return '-'
-  if (raw.includes(':')) return raw.slice(0, 5)
-  return raw
-}
-
-function formatDateTime(dateValue?: string, timeValue?: string): string {
-  const dateText = formatDate(dateValue)
-  const timeText = formatTime(timeValue)
-  if (dateText === '-' && timeText === '-') return '-'
-  if (dateText === '-') return timeText
-  if (timeText === '-') return dateText
-  return `${dateText} ${timeText}`
 }
 
 function formatCurrencyVnd(value?: number): string {
@@ -95,7 +75,7 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
           </div>
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Ngày giờ khám</p>
-            <p className="text-base font-semibold">{formatDateTime(record.appointmentDate, record.appointmentTime)}</p>
+            <p className="text-base font-semibold">{formatDateTimeFromParts(record.appointmentDate, record.appointmentTime, record.appointmentDateDisplay)}</p>
           </div>
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Bác sĩ khám</p>
@@ -103,7 +83,7 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
           </div>
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Ngày tạo hồ sơ</p>
-            <p className="font-medium">{formatDate(record.recordCreatedAt || record.createdAt)}</p>
+            <p className="font-medium">{pickDisplayOrFormatDate(record.recordCreatedAtDisplay ?? record.createdAtDisplay, record.recordCreatedAt || record.createdAt)}</p>
           </div>
         </CardContent>
       </Card>
@@ -227,7 +207,7 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
               {invoiceBreakdown}
             </p>
             {invoice.paymentDate ? (
-              <p><span className="font-medium">Ngày thanh toán:</span> {formatDate(invoice.paymentDate)}</p>
+              <p><span className="font-medium">Ngày thanh toán:</span> {pickDisplayOrFormatDate(invoice.paidAtDisplay ?? invoice.paymentDateDisplay, invoice.paymentDate)}</p>
             ) : null}
           </CardContent>
         </Card>
@@ -251,7 +231,7 @@ export function PatientMedicalRecordDetails({ record, className }: PatientMedica
             <p><span className="font-medium">Mã lịch:</span> {textOrDash(followUp.appointmentCode || followUp.appointmentId)}</p>
             <p>
               <span className="font-medium">Thời gian:</span>{' '}
-              {formatDateTime(followUp.appointmentDate, followUp.appointmentTime)}
+              {formatDateTimeFromParts(followUp.appointmentDate, followUp.appointmentTime, followUp.appointmentDateDisplay)}
             </p>
           </CardContent>
         </Card>

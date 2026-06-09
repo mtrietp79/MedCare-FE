@@ -49,6 +49,7 @@ export interface InvoiceItem {
   appointmentDate?: string | null
   appointmentTime?: string | null
   appointmentDateTime?: string | null
+  appointmentDateDisplay?: string | null
   appointmentTypeDisplay: string | null
   isReExamination?: boolean | null
   servicePackageBookingId: number | null
@@ -85,7 +86,10 @@ export interface InvoiceItem {
   bookingStatusDisplay: string | null
   canPayOnline: boolean | null
   createdAt: string | null
+  createdAtDisplay?: string | null
   paymentDate: string | null
+  paidAtDisplay?: string | null
+  paymentDateDisplay?: string | null
   uniqueKey?: string | null
   prescriptionItems?: InvoicePrescriptionItem[] | null
   medicalServiceItems?: InvoiceMedicalServiceItem[] | null

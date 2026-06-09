@@ -334,7 +334,7 @@ export function AdminCancellationRequestsTab() {
                             <Button variant="ghost" size="sm" onClick={() => openDetail(request)}>
                               <Eye className="h-4 w-4" />
                             </Button>
-                            {requestStatus === 'PENDING' ? (
+                            {requestStatus === 'pending' ? (
                               <>
                                 <Button variant="ghost" size="sm" onClick={() => openAction(request, 'approve')}>
                                   <CheckCircle2 className="h-4 w-4" />
@@ -344,7 +344,7 @@ export function AdminCancellationRequestsTab() {
                                 </Button>
                               </>
                             ) : null}
-                            {requestStatus === 'APPROVED' ? (
+                            {requestStatus === 'approved' ? (
                               <Button variant="ghost" size="sm" onClick={() => openAction(request, 'refund')}>
                                 <CreditCard className="h-4 w-4" />
                               </Button>

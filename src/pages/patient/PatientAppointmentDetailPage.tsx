@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, CreditCard, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -26,8 +26,9 @@ import {
 import {
   getPaymentStatusKey,
   getPaymentStatusLabel,
+  isAppointmentCancelledOrPendingCancellation,
   isPaymentSettled,
-  resolveAppointmentStatusView,
+  resolvePatientAppointmentStatusView,
 } from '@/lib/appointment-status'
 import { getAppointmentTypeLabel as getPatientAppointmentTypeLabel } from '@/lib/appointment-type'
 
@@ -103,7 +104,6 @@ function isFollowUpAppointment(appointment: Appointment): boolean {
 
 export function PatientAppointmentDetailPage() {
   const { appointmentId } = useParams()
-  const navigate = useNavigate()
   const [appointment, setAppointment] = useState<Appointment | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -119,7 +119,7 @@ export function PatientAppointmentDetailPage() {
     try {
       setLoading(true)
       setError(null)
-      const data = await api.appointments.getById(id)
+      const data = await api.patients.getMyAppointmentById(id)
       setAppointment(data)
     } catch (fetchError) {
       setAppointment(null)
@@ -143,7 +143,7 @@ export function PatientAppointmentDetailPage() {
       try {
         setLoading(true)
         setError(null)
-        const data = await api.appointments.getById(appointmentId)
+        const data = await api.patients.getMyAppointmentById(appointmentId)
         if (!active) return
         setAppointment(data)
       } catch (fetchError) {
@@ -165,10 +165,9 @@ export function PatientAppointmentDetailPage() {
   }, [appointmentId])
 
   const handleCancelSuccess = () => {
-    navigate('/patient/appointments', {
-      replace: true,
-      state: { message: 'Lịch khám đã được hủy thành công.' },
-    })
+    if (appointmentId) {
+      void fetchAppointmentDetail(appointmentId)
+    }
   }
 
   const startVNPayPayment = async () => {
@@ -288,9 +287,12 @@ export function PatientAppointmentDetailPage() {
     return null
   }
 
-  const statusView = resolveAppointmentStatusView(appointment.status, appointment.statusDisplay)
+  const statusView = resolvePatientAppointmentStatusView(appointment)
   const paymentStatusKey = getPaymentStatusKey(appointment.paymentStatus, appointment.paymentStatusDisplay)
-  const isCancelled = statusView.key === 'cancelled'
+  const isCancelled =
+    statusView.key === 'cancelled' ||
+    statusView.key === 'cancel_requested' ||
+    isAppointmentCancelledOrPendingCancellation(appointment)
   const isCompleted = statusView.key === 'completed'
   const isPaymentFinalized = isPaymentSettled(appointment.paymentStatus, appointment.paymentStatusDisplay)
   const followUpAppointment = isFollowUpAppointment(appointment)

@@ -67,6 +67,20 @@ export interface InvoiceItem {
   status: string
   paymentStatus: string | null
   paymentStatusDisplay: string | null
+  appointmentStatus?: string | null
+  appointmentStatusDisplay?: string | null
+  isCancelled?: boolean | null
+  hasCancellationRequest?: boolean | null
+  cancellationRequestId?: string | null
+  cancellationStatus?: string | null
+  cancellationStatusDisplay?: string | null
+  cancellationRequestReason?: string | null
+  cancellationRequestPatientNote?: string | null
+  cancellationRequestAdminNote?: string | null
+  cancellationRequestBankName?: string | null
+  cancellationRequestBankAccountNumber?: string | null
+  cancellationRequestBankAccountHolder?: string | null
+  cancellationRequestCreatedAt?: string | null
   bookingStatus: string | null
   bookingStatusDisplay: string | null
   canPayOnline: boolean | null
@@ -406,6 +420,7 @@ export function normalizeInvoiceItem(raw: unknown): InvoiceItem | null {
   const amount = pickNumber(source.amount, source.totalAmount) ?? totalAmount
   const invoiceCategory = inferInvoiceCategory(sourceType, source)
   const appointmentTypeDisplay = getAppointmentTypeDisplay(source.appointmentTypeDisplay, source.appointmentType)
+  const cancellationRequest = asRecord(source.cancellationRequest ?? source.cancelRequest ?? source.refundRequest)
   const status = pickUppercaseString(source.status, source.paymentStatus) ?? ''
   const appointmentDateTime = pickString(
     source.appointmentDateTime,
@@ -459,6 +474,56 @@ export function normalizeInvoiceItem(raw: unknown): InvoiceItem | null {
     status,
     paymentStatus: pickUppercaseString(source.paymentStatus) ?? null,
     paymentStatusDisplay: pickDisplayLabel(source.paymentStatusDisplay) ?? null,
+    appointmentStatus: pickUppercaseString(source.appointmentStatus, source.bookingStatus) ?? null,
+    appointmentStatusDisplay: pickDisplayLabel(source.appointmentStatusDisplay, source.bookingStatusDisplay) ?? null,
+    isCancelled: pickBoolean(source.isCancelled) ?? null,
+    hasCancellationRequest:
+      pickBoolean(source.hasCancellationRequest) ??
+      Boolean(pickString(cancellationRequest?.id, source.cancellationRequestId, source.cancelRequestId)) ??
+      null,
+    cancellationRequestId: pickString(cancellationRequest?.id, source.cancellationRequestId, source.cancelRequestId) ?? null,
+    cancellationStatus:
+      pickUppercaseString(
+        cancellationRequest?.status,
+        source.cancellationStatus,
+        source.cancellationRequestStatus,
+        source.cancelRequestStatus
+      ) ?? null,
+    cancellationStatusDisplay:
+      pickDisplayLabel(
+        cancellationRequest?.statusDisplay,
+        source.cancellationStatusDisplay,
+        source.cancellationRequestStatusDisplay,
+        source.cancelRequestStatusDisplay
+      ) ?? null,
+    cancellationRequestReason:
+      pickString(
+        cancellationRequest?.cancelReason,
+        cancellationRequest?.reason,
+        source.cancellationRequestReason,
+        source.cancelRequestReason,
+        source.cancelReason
+      ) ?? null,
+    cancellationRequestPatientNote:
+      pickString(cancellationRequest?.patientNote, source.cancellationRequestPatientNote, source.cancelRequestNote, source.patientNote) ??
+      null,
+    cancellationRequestAdminNote:
+      pickString(cancellationRequest?.adminNote, source.cancellationRequestAdminNote, source.adminNote) ?? null,
+    cancellationRequestBankName: pickString(cancellationRequest?.bankName, source.cancellationRequestBankName, source.bankName) ?? null,
+    cancellationRequestBankAccountNumber:
+      pickString(
+        cancellationRequest?.bankAccountNumber,
+        source.cancellationRequestBankAccountNumber,
+        source.bankAccountNumber
+      ) ?? null,
+    cancellationRequestBankAccountHolder:
+      pickString(
+        cancellationRequest?.bankAccountHolder,
+        source.cancellationRequestBankAccountHolder,
+        source.bankAccountHolder
+      ) ?? null,
+    cancellationRequestCreatedAt:
+      pickString(cancellationRequest?.createdAt, source.cancellationRequestCreatedAt, source.requestedAt) ?? null,
     bookingStatus: pickUppercaseString(source.bookingStatus) ?? null,
     bookingStatusDisplay: pickDisplayLabel(source.bookingStatusDisplay) ?? null,
     canPayOnline: pickBoolean(source.canPayOnline) ?? null,
@@ -483,10 +548,130 @@ export function shouldOmitInvoiceQueryValue(rawValue: unknown): boolean {
   return !normalized || normalized === '__all__' || normalized === 'all' || normalized === 'tat ca'
 }
 
+export type InvoiceDisplayStatusKey =
+  | 'paid'
+  | 'unpaid'
+  | 'failed'
+  | 'cancelled'
+  | 'cancel_requested'
+  | 'refunded'
+
+export type InvoiceStatusContext = Pick<
+  InvoiceItem,
+  | 'status'
+  | 'paymentStatus'
+  | 'paymentStatusDisplay'
+  | 'appointmentStatus'
+  | 'appointmentStatusDisplay'
+  | 'isCancelled'
+  | 'hasCancellationRequest'
+  | 'cancellationStatus'
+  | 'cancellationStatusDisplay'
+> & {
+  paymentStatusDisplay?: string | null
+  appointmentStatusDisplay?: string | null
+  cancellationStatusDisplay?: string | null
+}
+
+function normalizeInvoiceStatusCode(value?: string | null): string {
+  return String(value || '').trim().toUpperCase()
+}
+
+export function isInvoiceCancelledOrPendingCancellation(invoice: InvoiceStatusContext): boolean {
+  const appointmentStatus = normalizeInvoiceStatusCode(invoice.appointmentStatus)
+  if (appointmentStatus === 'CANCEL_REQUESTED' || appointmentStatus === 'CANCELLED') return true
+  if (invoice.isCancelled) return true
+  if (invoice.hasCancellationRequest) return true
+
+  const cancellationStatus = normalizeInvoiceStatusCode(invoice.cancellationStatus)
+  if (cancellationStatus === 'PENDING' || cancellationStatus === 'APPROVED') return true
+
+  const paymentStatus = normalizeInvoiceStatusCode(invoice.paymentStatus ?? invoice.status)
+  if (paymentStatus === 'REFUNDED' || paymentStatus === 'CANCELLED') return true
+
+  return false
+}
+
+export function resolveInvoiceDisplayStatus(invoice: InvoiceStatusContext): {
+  key: InvoiceDisplayStatusKey
+  label: string
+  className: string
+} {
+  const appointmentStatus = normalizeInvoiceStatusCode(invoice.appointmentStatus)
+  const cancellationStatus = normalizeInvoiceStatusCode(invoice.cancellationStatus)
+  const paymentStatus = normalizeInvoiceStatusCode(invoice.paymentStatus ?? invoice.status)
+  const cancellationDisplay = pickDisplayLabel(invoice.cancellationStatusDisplay)
+  const appointmentDisplay = pickDisplayLabel(invoice.appointmentStatusDisplay)
+
+  if (appointmentDisplay && (appointmentStatus === 'CANCEL_REQUESTED' || appointmentStatus === 'CANCELLED')) {
+    return {
+      key: appointmentStatus === 'CANCEL_REQUESTED' ? 'cancel_requested' : 'cancelled',
+      label: appointmentDisplay,
+      className:
+        appointmentStatus === 'CANCEL_REQUESTED'
+          ? 'bg-orange-50 text-orange-700 border-orange-200'
+          : 'bg-slate-100 text-slate-700 border-slate-300',
+    }
+  }
+
+  if (cancellationDisplay && (cancellationStatus === 'PENDING' || cancellationStatus === 'APPROVED')) {
+    return {
+      key: 'cancel_requested',
+      label: cancellationDisplay,
+      className: 'bg-orange-50 text-orange-700 border-orange-200',
+    }
+  }
+
+  if (paymentStatus === 'REFUNDED') {
+    return {
+      key: 'refunded',
+      label: pickDisplayLabel(invoice.paymentStatusDisplay) || 'Đã hoàn tiền',
+      className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    }
+  }
+
+  if (
+    appointmentStatus === 'CANCEL_REQUESTED' ||
+    cancellationStatus === 'PENDING' ||
+    (invoice.hasCancellationRequest && cancellationStatus !== 'REJECTED' && cancellationStatus !== 'REFUNDED')
+  ) {
+    return {
+      key: 'cancel_requested',
+      label: 'Đã hủy - chờ xác nhận',
+      className: 'bg-orange-50 text-orange-700 border-orange-200',
+    }
+  }
+
+  if (
+    appointmentStatus === 'CANCELLED' ||
+    invoice.isCancelled ||
+    paymentStatus === 'CANCELLED' ||
+    cancellationStatus === 'APPROVED'
+  ) {
+    return {
+      key: 'cancelled',
+      label: appointmentDisplay || 'Đã hủy',
+      className: 'bg-slate-100 text-slate-700 border-slate-300',
+    }
+  }
+
+  const paymentKey = getInvoiceStatusKey(invoice.status)
+  return {
+    key: paymentKey,
+    label: getInvoiceStatusLabel(invoice.status, invoice.paymentStatusDisplay),
+    className: getInvoiceStatusClass(invoice.status),
+  }
+}
+
+export function getResolvedInvoiceStatusKey(invoice: InvoiceStatusContext): InvoiceDisplayStatusKey {
+  return resolveInvoiceDisplayStatus(invoice).key
+}
+
 export function getInvoiceStatusKey(status?: string | null): 'paid' | 'unpaid' | 'failed' | 'cancelled' {
   const normalized = String(status || '').trim().toUpperCase()
   if (normalized === 'PAID') return 'paid'
   if (normalized === 'FAILED') return 'failed'
+  if (normalized === 'REFUNDED') return 'cancelled'
   if (normalized.includes('CANCEL')) return 'cancelled'
   return 'unpaid'
 }
@@ -619,7 +804,11 @@ export function getInvoiceSourceLabel(invoice: Pick<InvoiceItem, 'sourceType'>):
   return 'Hóa đơn'
 }
 
-export function canPayInvoiceOnline(invoice: Pick<InvoiceItem, 'status' | 'canPayOnline' | 'totalAmount' | 'amount'>): boolean {
+export function canPayInvoiceOnline(
+  invoice: InvoiceStatusContext &
+    Pick<InvoiceItem, 'canPayOnline' | 'totalAmount' | 'amount'>
+): boolean {
+  if (isInvoiceCancelledOrPendingCancellation(invoice)) return false
   const key = getInvoiceStatusKey(invoice.status)
   const totalAmount = Number(invoice.totalAmount ?? invoice.amount ?? 0)
   return Boolean(invoice.canPayOnline) && key === 'unpaid' && totalAmount > 0

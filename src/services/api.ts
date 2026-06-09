@@ -1277,6 +1277,16 @@ export const patientApi = {
     return normalizeAppointmentList(data)
   },
 
+  async getMyAppointmentById(id: string): Promise<Appointment> {
+    const raw = await apiCall<any>(`/patient/appointments/${id}`)
+    const payload = unwrapDataPayload(raw)
+    const normalized = normalizeAppointment(payload)
+    if (!normalized) {
+      throw new Error('Không thể đọc thông tin lịch khám.')
+    }
+    return normalized
+  },
+
   async getMyMedicalRecordById(id: string): Promise<PatientMedicalRecord | null> {
     try {
       const raw = await apiCall<any>(`/medical-records/my/${id}`)

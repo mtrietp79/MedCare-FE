@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Calendar, CreditCard, DollarSign, Eye, TrendingUp } from 'lucide-react'
+import { Calendar, DollarSign, Eye, PencilLine, TrendingUp } from 'lucide-react'
 import { adminApi } from '@/services/adminService'
 import { useToast } from '@/hooks/use-toast'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -9,9 +9,8 @@ import {
   getInvoiceCategoryLabel,
   getInvoiceReferenceCode,
   getInvoiceSourceLabel,
-  getInvoiceStatusClass,
-  getInvoiceStatusKey,
-  getInvoiceStatusLabel,
+  getResolvedInvoiceStatusKey,
+  resolveInvoiceDisplayStatus,
 } from '@/lib/invoice-contract'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,6 +33,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AdminEmptyState, AdminErrorState, AdminTableSkeleton } from '@/components/admin/AdminPageStates'
+import {
+  AdminCancellationProcessDialog,
+  invoiceHasCancellationRequest,
+} from '@/components/admin/AdminCancellationProcessDialog'
 
 interface FinanceSummary {
   totalRevenue: number
@@ -146,7 +149,7 @@ function getRelatedSecondary(invoice: NormalizedInvoice): string | null {
   return null
 }
 
-type InvoiceStatusFilter = 'all' | 'unpaid' | 'paid' | 'failed' | 'cancelled'
+type InvoiceStatusFilter = 'all' | 'unpaid' | 'paid' | 'failed' | 'cancel_requested' | 'cancelled' | 'refunded'
 type InvoiceCategoryFilter = 'all' | 'APPOINTMENT_BOOKING' | 'POST_EXAM' | 'FOLLOW_UP' | 'SERVICE_PACKAGE'
 
 export function AdminFinancePage() {
@@ -164,6 +167,8 @@ export function AdminFinancePage() {
   const [error, setError] = useState('')
   const [selectedInvoice, setSelectedInvoice] = useState<NormalizedInvoice | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
+  const [cancellationInvoice, setCancellationInvoice] = useState<NormalizedInvoice | null>(null)
+  const [isCancellationDialogOpen, setIsCancellationDialogOpen] = useState(false)
 
   const [searchInput, setSearchInput] = useState('')
   const debouncedSearch = useDebouncedValue(searchInput, 300)
@@ -231,7 +236,8 @@ export function AdminFinancePage() {
           invoice.recordId,
         ].some((value) => safeLower(value).includes(keyword))
 
-      const hitStatus = statusFilter === 'all' || getInvoiceStatusKey(invoice.status) === statusFilter
+      const resolvedStatusKey = getResolvedInvoiceStatusKey(invoice)
+      const hitStatus = statusFilter === 'all' || resolvedStatusKey === statusFilter
       const hitCategory = categoryFilter === 'all' || invoice.invoiceCategory === categoryFilter
       return hitSearch && hitStatus && hitCategory
     })
@@ -251,50 +257,23 @@ export function AdminFinancePage() {
     return list
   }, [invoices, debouncedSearch, statusFilter, categoryFilter, sortBy])
 
-  const handlePayInvoice = async (invoice: NormalizedInvoice) => {
-    if (invoice.sourceType !== 'INVOICE') {
-      toast({
-        title: 'Không hỗ trợ',
-        description: 'Chỉ hóa đơn sau khám mới có thể đánh dấu thanh toán thủ công ở màn admin.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    try {
-      await adminApi.payInvoice(String(invoice.id))
-      toast({ title: 'Thành công', description: 'Đã thanh toán hóa đơn.' })
-      await fetchFinanceData()
-    } catch (payError: unknown) {
-      const status = getErrorStatus(payError)
-      const message = getErrorMessage(payError)
-
-      if (status === 403) {
-        toast({
-          title: 'Không có quyền',
-          description: message,
-          variant: 'destructive',
-        })
-        return
-      }
-
-      toast({
-        title: 'Lỗi',
-        description: message,
-        variant: 'destructive',
-      })
-    }
+  const statusBadge = (invoice: NormalizedInvoice) => {
+    const statusView = resolveInvoiceDisplayStatus(invoice)
+    return (
+      <Badge className={`rounded-full border ${statusView.className}`}>
+        {statusView.label}
+      </Badge>
+    )
   }
-
-  const statusBadge = (invoice: NormalizedInvoice) => (
-    <Badge className={`rounded-full border ${getInvoiceStatusClass(invoice.status)}`}>
-      {getInvoiceStatusLabel(invoice.status, invoice.paymentStatusDisplay)}
-    </Badge>
-  )
 
   const openInvoiceDetail = (invoice: NormalizedInvoice) => {
     setSelectedInvoice(invoice)
     setIsDetailDialogOpen(true)
+  }
+
+  const openCancellationDialog = (invoice: NormalizedInvoice) => {
+    setCancellationInvoice(invoice)
+    setIsCancellationDialogOpen(true)
   }
 
   return (
@@ -333,7 +312,7 @@ export function AdminFinancePage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Chờ thanh toán</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(summary.pendingAmount)}</div>
@@ -368,15 +347,17 @@ export function AdminFinancePage() {
               />
             </div>
             <Select value={statusFilter} onValueChange={(value: InvoiceStatusFilter) => setStatusFilter(value)}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[220px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                <SelectItem value="unpaid">Chưa thanh toán</SelectItem>
                 <SelectItem value="paid">Đã thanh toán</SelectItem>
-                <SelectItem value="failed">Thanh toán thất bại</SelectItem>
+                <SelectItem value="unpaid">Chưa thanh toán</SelectItem>
+                <SelectItem value="cancel_requested">Đã hủy - chờ xác nhận</SelectItem>
                 <SelectItem value="cancelled">Đã hủy</SelectItem>
+                <SelectItem value="refunded">Đã hoàn tiền</SelectItem>
+                <SelectItem value="failed">Thanh toán thất bại</SelectItem>
               </SelectContent>
             </Select>
             <Select value={categoryFilter} onValueChange={(value: InvoiceCategoryFilter) => setCategoryFilter(value)}>
@@ -445,14 +426,21 @@ export function AdminFinancePage() {
                     <TableCell>{statusBadge(invoice)}</TableCell>
                     <TableCell>{invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString('vi-VN') : '-'}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => openInvoiceDetail(invoice)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {invoice.sourceType === 'INVOICE' && getInvoiceStatusKey(invoice.status) === 'unpaid' && (
-                        <Button variant="ghost" size="sm" onClick={() => void handlePayInvoice(invoice)}>
-                          <CreditCard className="h-4 w-4" />
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openInvoiceDetail(invoice)} title="Xem chi tiết">
+                          <Eye className="h-4 w-4" />
                         </Button>
-                      )}
+                        {invoiceHasCancellationRequest(invoice) ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openCancellationDialog(invoice)}
+                            title="Xử lý hủy"
+                          >
+                            <PencilLine className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -530,6 +518,13 @@ export function AdminFinancePage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AdminCancellationProcessDialog
+        invoice={cancellationInvoice}
+        open={isCancellationDialogOpen}
+        onOpenChange={setIsCancellationDialogOpen}
+        onCompleted={fetchFinanceData}
+      />
     </div>
   )
 }

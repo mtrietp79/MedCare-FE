@@ -45,6 +45,7 @@ import {
   getAppointmentStatusKey,
   getAppointmentStatusLabel,
   resolvePaymentStatusView,
+  type AppointmentStatusKey,
 } from '@/lib/appointment-status'
 import {
   BillingSummaryPanel,
@@ -205,7 +206,7 @@ function isAllMedicineCategory(value?: string): boolean {
   return !normalized || normalized === MEDICINE_CATEGORY_ALL || normalized === 'all' || normalized === 'tat ca'
 }
 
-function getStatusKey(rawStatus?: string, rawStatusDisplay?: string): 'pending' | 'completed' | 'cancelled' {
+function getStatusKey(rawStatus?: string, rawStatusDisplay?: string): AppointmentStatusKey {
   return getAppointmentStatusKey(rawStatus, rawStatusDisplay)
 }
 

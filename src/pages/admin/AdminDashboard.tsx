@@ -112,7 +112,7 @@ function normalizeSummary(raw: AdminDashboardSummary): NormalizedDashboardSummar
   return {
     patients: pickNumberValue(raw?.activePatients, raw?.totalPatients, raw?.patientCount, raw?.patients) ?? 0,
     doctors: pickNumberValue(raw?.workingDoctors, raw?.totalDoctors, raw?.activeDoctors, raw?.doctorCount, raw?.doctors) ?? 0,
-    revenue: pickNumberValue(raw?.monthlyRevenue, raw?.totalRevenue, raw?.revenue) ?? 0,
+    revenue: pickNumberValue(raw?.totalRevenue, raw?.revenue, raw?.monthlyRevenue) ?? 0,
     appointments: pickNumberValue(raw?.totalAppointments, raw?.appointmentCount, raw?.appointments) ?? 0,
     appointmentGrowth: pickNumberValue(raw?.appointmentGrowthPercent, raw?.appointmentGrowth) ?? 0,
     patientGrowth: pickNumberValue(raw?.patientGrowthPercent, raw?.patientGrowth) ?? 0,
@@ -530,11 +530,11 @@ export function AdminDashboard() {
         icon: Stethoscope,
       },
       {
-        label: 'Doanh thu',
+        label: 'Tổng doanh thu',
         value: formatCurrency(summaryState.data.revenue),
         growthLabel: formatPercent(summaryState.data.revenueGrowth),
         growthTone: getGrowthTone(summaryState.data.revenueGrowth),
-        helper: 'Theo tháng hiện tại',
+        helper: 'Từ tất cả hóa đơn đã thanh toán',
         icon: TrendingUp,
       },
       {

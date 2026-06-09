@@ -174,7 +174,7 @@ export function getCancellationRequestPatientStatusLabel(
   if (key === 'approved') return 'Đã duyệt hủy'
   if (key === 'refunded') return 'Đã xử lý hoàn tiền'
   if (key === 'rejected') return 'Từ chối hủy'
-  return 'Chờ duyệt hủy'
+  return 'Đã hủy - chờ xác nhận'
 }
 
 export function getCancellationRequestStatusClass(

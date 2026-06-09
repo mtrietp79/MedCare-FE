@@ -205,6 +205,13 @@ export interface Appointment {
   cancellationRequestId?: string
   cancellationRequestStatus?: string
   cancellationRequestStatusDisplay?: string
+  cancelRequestId?: string
+  cancelRequestStatus?: string
+  cancelRequestStatusDisplay?: string
+  cancellationStatus?: string
+  cancellationStatusDisplay?: string
+  refundStatus?: string
+  refundStatusDisplay?: string
   cancellationRequestReason?: string
   cancellationRequestPatientNote?: string
   cancellationRequestAdminNote?: string

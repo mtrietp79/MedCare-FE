@@ -43,7 +43,7 @@ import {
   getAppointmentCancellationStatusLabel,
   getAppointmentCancellationStatusMessage,
 } from '@/lib/appointment-cancellation'
-import { resolveAppointmentStatusView, resolvePaymentStatusView } from '@/lib/appointment-status'
+import { resolveAppointmentStatusView, resolvePatientAppointmentStatusView, resolvePaymentStatusView } from '@/lib/appointment-status'
 import {
   canPayInvoiceOnline,
   getAppointmentTypeDisplay,
@@ -52,8 +52,8 @@ import {
   getInvoiceReferenceCode,
   getInvoiceSourceLabel,
   getInvoiceTypeLabel,
-  getInvoiceStatusClass,
-  getInvoiceStatusLabel,
+  getResolvedInvoiceStatusKey,
+  resolveInvoiceDisplayStatus,
 } from '@/lib/invoice-contract'
 
 type ServicePackageStatusKey = 'PENDING_PAYMENT' | 'PAID' | 'RECEIVED' | 'COMPLETED' | 'CANCELLED'
@@ -302,7 +302,7 @@ function isCompletedAppointment(appointment: Appointment): boolean {
   return resolveAppointmentStatusView(appointment.status, appointment.statusDisplay).key === 'completed'
 }
 
-type InvoiceStatusFilter = 'all' | 'UNPAID' | 'PAID' | 'FAILED' | 'CANCELLED'
+type InvoiceStatusFilter = 'all' | 'UNPAID' | 'PAID' | 'FAILED' | 'CANCELLED' | 'CANCEL_REQUESTED' | 'REFUNDED'
 type InvoiceCategoryFilter = 'all' | 'APPOINTMENT_BOOKING' | 'POST_EXAM' | 'FOLLOW_UP' | 'SERVICE_PACKAGE'
 
 export function PatientAppointmentsPage() {
@@ -440,12 +440,22 @@ export function PatientAppointmentsPage() {
           invoice.recordId,
         ].some((value) => String(value ?? '').toLowerCase().includes(keyword))
 
-      const normalizedStatus = String(invoice.status || '').trim().toUpperCase()
+      const resolvedStatusKey = getResolvedInvoiceStatusKey(invoice)
       const hitStatus =
         invoiceStatus === 'all' ||
         (invoiceStatus === 'UNPAID'
-          ? ['UNPAID', 'PENDING', 'PENDING_PAYMENT', 'WAITING_PAYMENT'].includes(normalizedStatus)
-          : normalizedStatus === invoiceStatus)
+          ? resolvedStatusKey === 'unpaid'
+          : invoiceStatus === 'PAID'
+            ? resolvedStatusKey === 'paid'
+            : invoiceStatus === 'FAILED'
+              ? resolvedStatusKey === 'failed'
+              : invoiceStatus === 'CANCELLED'
+                ? resolvedStatusKey === 'cancelled'
+                : invoiceStatus === 'CANCEL_REQUESTED'
+                  ? resolvedStatusKey === 'cancel_requested'
+                  : invoiceStatus === 'REFUNDED'
+                    ? resolvedStatusKey === 'refunded'
+                    : false)
 
       const hitCategory = invoiceCategory === 'all' || getInvoiceFilterCategory(invoice) === invoiceCategory
       return hitKeyword && hitStatus && hitCategory
@@ -680,7 +690,7 @@ export function PatientAppointmentsPage() {
             ) : (
               <div className="grid gap-4">
                 {appointments.map((appointment, index) => {
-                  const statusView = resolveAppointmentStatusView(appointment.status, appointment.statusDisplay)
+                  const statusView = resolvePatientAppointmentStatusView(appointment)
                   const appointmentTypeLabel = getAppointmentTypeLabel(appointment)
                   const isFollowUpAppointment = appointmentTypeLabel === 'Tái khám' || Boolean(appointment.parentAppointmentId)
                   const cancellationStatusLabel = getAppointmentCancellationStatusLabel(appointment)
@@ -842,6 +852,8 @@ export function PatientAppointmentsPage() {
                       <SelectItem value="PAID">Đã thanh toán</SelectItem>
                       <SelectItem value="FAILED">Thanh toán thất bại</SelectItem>
                       <SelectItem value="CANCELLED">Đã hủy</SelectItem>
+                      <SelectItem value="CANCEL_REQUESTED">Đã hủy - chờ xác nhận</SelectItem>
+                      <SelectItem value="REFUNDED">Đã hoàn tiền</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={invoiceCategory} onValueChange={(value: InvoiceCategoryFilter) => setInvoiceCategory(value)}>
@@ -874,7 +886,9 @@ export function PatientAppointmentsPage() {
                   <PatientEmptyState message="Chưa có hóa đơn phù hợp." />
                 ) : (
                   <div className="space-y-3">
-                    {visibleInvoices.map((invoice, index) => (
+                    {visibleInvoices.map((invoice, index) => {
+                      const invoiceStatusView = resolveInvoiceDisplayStatus(invoice)
+                      return (
                       <div
                         key={invoice.uniqueKey ?? `${invoice.sourceType}-${invoice.id}-${index}`}
                         className="rounded-xl border border-border/80 bg-muted/20 p-4 transition-colors hover:border-primary/25 hover:bg-muted/40"
@@ -891,8 +905,8 @@ export function PatientAppointmentsPage() {
                             </p>
                           </div>
                           <PatientStatusBadge
-                            label={getInvoiceStatusLabel(invoice.status, invoice.paymentStatusDisplay)}
-                            className={getInvoiceStatusClass(invoice.status)}
+                            label={invoiceStatusView.label}
+                            className={invoiceStatusView.className}
                           />
                         </div>
 
@@ -935,7 +949,8 @@ export function PatientAppointmentsPage() {
                           )}
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -1136,8 +1151,8 @@ export function PatientAppointmentsPage() {
                 <p className="mt-2 text-sm text-muted-foreground">{getInvoiceTypeLabel(selectedInvoice)}</p>
               </div>
               <PatientStatusBadge
-                label={getInvoiceStatusLabel(selectedInvoice.status, selectedInvoice.paymentStatusDisplay)}
-                className={getInvoiceStatusClass(selectedInvoice.status)}
+                label={resolveInvoiceDisplayStatus(selectedInvoice).label}
+                className={resolveInvoiceDisplayStatus(selectedInvoice).className}
               />
             </div>
 

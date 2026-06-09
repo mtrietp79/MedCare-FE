@@ -1490,6 +1490,14 @@ export const adminApi = {
     return normalizeCancellationRequestStats(data)
   },
 
+  getCancellationRequestById: async (id: string): Promise<AdminCancellationRequest | null> => {
+    const token = getStoredToken()
+    const data = await fetchJson<any>(`${API_BASE_URL}/admin/finance/cancellation-requests/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    return normalizeCancellationRequestItem(data)
+  },
+
   approveCancellationRequest: async (id: string, data?: { adminNote?: string }): Promise<AdminCancellationRequest | null> => {
     const token = getStoredToken()
     const response = await fetchJson<any>(`${API_BASE_URL}/admin/finance/cancellation-requests/${id}/approve`, {
